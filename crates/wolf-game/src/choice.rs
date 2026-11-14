@@ -150,7 +150,7 @@ fn size(options: &[String], font_px: f32) -> (f32, f32) {
         .iter()
         .map(|option| text_width_at(option_label(option).as_ref(), font_px))
         .fold(0.0_f32, f32::max);
-    let width = widest + TEXT_INSET * 2.0;
+    let width = widest + TEXT_INSET * 2.0 + 4.0;
     let rows = options.len().max(1) as f32;
     (
         width.round(),
@@ -331,7 +331,7 @@ fn option_label(option: &str) -> Cow<'_, str> {
             // cannot draw that codepoint, so it showed as a tofu box at the price.
             // Strip it only at the display layer; choice keys and branch values
             // stay byte-for-byte untouched.
-            Cow::Owned(other.replace('\u{FFFD}', " "))
+            Cow::Owned(other.replace('\u{FFFD}', ""))
         }
         other => Cow::Borrowed(other),
     }

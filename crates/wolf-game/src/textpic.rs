@@ -640,6 +640,11 @@ impl<'a, 'b> Builder<'a, 'b> {
                 let args = args.clone();
                 self.code(kind, &args);
             }
+            TextToken::Image(path) | TextToken::ImageNearest(path) => {
+                if let Some(ch) = crate::message::inline_box_glyph(path) {
+                    self.buf.push(ch);
+                }
+            }
             // Ruby, icons, sounds, speed, spacing, absolute positioning: none of them move
             // the glyphs of the runs themselves, and this game barely uses them.
             _ => {}
@@ -853,6 +858,11 @@ impl<'a, 'b> Builder<'a, 'b> {
                         let inner = tokenize(arg);
                         let text = self.display(&inner);
                         out.push_str(&text);
+                    }
+                }
+                TextToken::Image(path) | TextToken::ImageNearest(path) => {
+                    if let Some(ch) = crate::message::inline_box_glyph(path) {
+                        out.push(ch);
                     }
                 }
                 _ => {}
@@ -1512,5 +1522,18 @@ mod tests {
         assert!(approx(runs[1].y, 538.0));
         assert!(approx(runs[2].x, 238.0));
         assert!(approx(runs[2].y, 564.0));
+    }
+
+    #[test]
+    fn inline_box_images_survive_as_box_glyphs_in_text_picture() {
+        let runs = layout(
+            r"\c[9]\img[Picture\box01.png]\img[Picture\box02.png]",
+            0.0,
+            0.0,
+            0,
+            &bare(),
+        );
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, "□■");
     }
 }

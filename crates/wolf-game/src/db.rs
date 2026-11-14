@@ -504,6 +504,39 @@ impl Databases {
         self.sys.as_ref()?.text(0, row, 0)
     }
 
+    /// The background scenery file name for the given map id (SysDatabase type 0, col 4 -> type 13, col 0).
+    pub fn map_scenery(&self, id: i32) -> Option<&str> {
+        let row = usize::try_from(id).ok()?;
+        let scenery_id = self.sys.as_ref()?.num(0, row, 4)?;
+        if scenery_id < 0 {
+            return None;
+        }
+        let scenery_row = usize::try_from(scenery_id).ok()?;
+        let file = self.sys.as_ref()?.text(13, scenery_row, 0)?;
+        if file.is_empty() {
+            None
+        } else {
+            Some(file)
+        }
+    }
+
+    /// The background scenery file name for a map path (e.g. `MapData/SampleMapA.mps`).
+    pub fn map_scenery_by_path(&self, map_path: &str) -> Option<&str> {
+        let sys = self.sys.as_ref()?;
+        for r in 0..sys.row_count(0) {
+            if sys.text(0, r, 0) == Some(map_path) {
+                let scenery_id = sys.num(0, r, 4)?;
+                if scenery_id < 0 {
+                    return None;
+                }
+                let scenery_row = usize::try_from(scenery_id).ok()?;
+                let file = sys.text(13, scenery_row, 0)?;
+                return if file.is_empty() { None } else { Some(file) };
+            }
+        }
+        None
+    }
+
     /// A SystemDB audio-list entry as `(file name, volume %)`.
     ///
     /// Opcode 140 sound-type 0 addresses a row in one of the three fixed lists:

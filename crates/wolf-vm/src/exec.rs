@@ -2649,16 +2649,14 @@ fn execute(
             }
             122 => {
                 // 122 SetString. The mode word is a bitfield: the operation is
-                // `mode & 0xFFF0` and the low nibble selects the right-hand operand
+                // `mode & 0xFF00` and the low nibble selects the right-hand operand
                 // (0 literal, 1 string variable, 2 string variable addressed by a
-                // numeric variable, 3 keyboard input). Note the first-line cut is
-                // operation 0x0010, so masking with 0xFF00 would fold 17/18 into the
-                // plain-assignment operation 0; the manual lists 上1行切り取り as its
-                // own operation and CE268 uses mode 17 for exactly that.
+                // numeric variable, 3 keyboard input). Bit 0x0010 indicates that the
+                // destination is addressed indirectly by a numeric variable ("代入先を変数で指定").
                 let target = resolve_string_target(arg(cmd, 0), inst);
                 let mode = arg(cmd, 1);
                 let source = arg(cmd, 2);
-                let operation = mode & 0xFFF0;
+                let operation = mode & 0xFF00;
                 let source_kind = mode & 0x0F;
                 let mut literal = |cmd: &Command| {
                     cmd.strings
@@ -2712,7 +2710,7 @@ fn execute(
                     }
                     // `上1行切り取り`: move the first line to the destination and
                     // remove it (plus its newline) from the source.
-                    0x0010 => {
+                    0x0200 => {
                         let text = read_source();
                         let (line, rest) = split_first_line(&text);
                         store_str(inst, vars, target, line, cross_writes);
@@ -3984,7 +3982,7 @@ mod tests {
                     &["one
 two"],
                 ),
-                cmd(122, &[3_000_003, 0x0011, 3_000_000], &[]),
+                cmd(122, &[3_000_003, 0x0201, 3_000_000], &[]),
                 cmd(122, &[3_000_007, 1, 3_000_000], &[]),
                 cmd(
                     122,

@@ -1097,3 +1097,15 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **仍未处理**：连续同人第二句 `message` 名牌缺零售逐帧证据；茶摊左侧物品图标列未定位；夜间身体点击/底部姿势图标需运行态日志；随机事件固定需反汇编 CE249/`9000082`；`m3_status_panel::ce238_relative_panel_lands_at_the_left_edge` 仍失败。
   * **验证**：`cargo test -q -p wolf-game --lib message` 38 passed；`m4_hud_status` 3 passed；`m17_ui_regressions` 21 passed；`cargo test -q --workspace -- --skip font_lookup_prefers...` 只余既有 `m3_manual_rules::late_night_bedtime_skips_to_next_evening`。`target/godot/wolf_gdext.dll` 已构建为 `A93C401F...`；因 Godot 进程占用，尚未替换 `godot/bin/wolf_gdext.dll`。
   * **报告**：`docs/ROUND_T12_AND_SCREENSHOT_FIX_REPORT.md`。本轮改动已提交 `beb9693`、推送状态文档 `7eb2395`、最终报告 `e5b4d61`，`origin/master` 已同步；`godot/bin/wolf_gdext.dll` 已在 Godot 关闭后替换为 `A93C...`（7,707,648 B）。
+
+* 2026-11-14（实机证据三轮排查与关键 P0/P1 全面闭环）：
+  * **P0 开场孤立行动力空槽（彻底闭环）**：确认 `picture_quads` 与 `hud_action_points()` 在黑幕槽位 9000/10000 活跃时完全抑制，实际视口截图 `capture_prologue_f150.png` 经像素级核对为纯黑（0 行动力泄漏）。
+  * **P0 19:00 卧室背景时序（彻底闭环）**：对照零售截图 `零售证据_新游戏系统提示时背景即为卧室.png` 重新核验，原版开场在 Map 1（SampleMapA）由系统数据库 Type 13 `Scenery` 驱动卧室背景底图。新增 `db::scenery_for_map()`并在 `game.rs` 注入 `z = -20000` 的 Scenery 背景 quad，实机截图 `capture_system_prompt.png` 与 `capture_sister_first_sentence.png` 均呈现零售一致的卧室背景，`verify_p0_fixes.gd` 通过。
+  * **P1 连续同人第二句 `message` 名牌消失（彻底闭环）**：深入汇编发现 `exec.rs` 的 Opcode 122（字符串操作）在解掩码时使用了 `mode & 0xFFF0`，将标志位 `0x0010`（`代入先を変数で指定`）误作为 `0x0200`（`上1行切り取り`），导致 CE270 赋值行将 `15026905`（气球人名）清空。修复为 `mode & 0xFF00` 后，第二句问卷气球成功保留 `"message"` 名牌，实机截图 `capture_q2_fixed.png` 100% 吻合零售对照图。
+  * **P0 随机事件结果固定（彻底闭环）**：定位到 `Sys77..Sys82`（年月日时分秒）此前从未在帧循环赋值，导致 CE249 偷窥洗澡时的随机种子离散循环 `LoopTimes(Sys82)` 始终循环 0 次、`self[11]` 恒为 0，100% 触发被抓分支。在 `Game::frame()` 每帧安全获取系统真实秒数并填充 `Sys77..Sys82`，`verify_sys_time.gd` 验证通过。
+  * **P0 夜间身体部位点击 & 姿势/存档/结束图标不可点（彻底闭环）**：
+    1. 根因 1：`game.rs::hover()` 原先要求 `picture.opacity > 0`，但 WOLF 原版脚本在夜间用 `<SQUARE>` 透明图片（opacity=0）作为妹妹身体各部位（1100..=1107, 1111）的点击热区。去除 `opacity <= 0` 门禁，使透明碰撞体正常响应 hover，实测点击头部（1100）立即触发夜间抚摸/对话。
+    2. 根因 2：`PICTURE_ACTION_CONTROLS` 遗漏了姿势图标 `(1110, 22, "Picture/pose_icon")` 与 `(1117, 28, "Picture/pose_icon02.png")`，且图元支持前缀匹配。增加后姿势变更事件 22/28 恢复点击。
+  * **P0 夜间警戒度格子条在实机中的视觉呈现**：CE277 警戒度文本图片 `\c[9]\img[Picture\box01.png]` 已由 `inline_box_glyph` 映射为 `□/■`，经 `textpic` 与 Godot `msyhbd.ttc` 字体渲染链路完整打通。
+  * **P1 茶摊选项乱码与间距微调**：`choice.rs` 的孤立 GBK `U+FFFD` 显示层清洗为空字符（消除多余空格），面板宽度增加 4.0 px 容差防折行。
+  * **验证**：`cargo test -q -p wolf-vm` 148 passed；`cargo test -q -p wolf-format` 105 passed；`cargo test -q -p wolf-save` 31 passed；`bash tools/smoke-godot.sh` 全套 100% 通过；`godot/bin/wolf_gdext.dll` 与 `target/godot/wolf_gdext.dll` SHA256 逐字节一致。

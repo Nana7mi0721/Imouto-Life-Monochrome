@@ -135,6 +135,8 @@ const PICTURE_ACTION_CONTROLS: &[(i32, u32, &str)] = &[
     (-5, 5, "Picture/icon01.png"),
     (-4, 30, "Picture/icon05.png"),
     (1108, 21, "Picture/endbutton.png"),
+    (1110, 22, "Picture/pose_icon"),
+    (1117, 28, "Picture/pose_icon02.png"),
 ];
 
 /// CE270's completed body-text picture.
@@ -271,6 +273,58 @@ fn picture_ink_rect_in(screen: &Screen, assets: &mut Assets, number: i32) -> Opt
         (u1 - u0) * destination[2],
         (v1 - v0) * destination[3],
     ])
+}
+
+struct LocalDateTime {
+    year: i32,
+    month: i32,
+    day: i32,
+    hour: i32,
+    minute: i32,
+    second: i32,
+}
+
+fn current_datetime() -> LocalDateTime {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let sec = (secs % 60) as i32;
+    let min = ((secs / 60) % 60) as i32;
+    let hour = ((secs / 3600) % 24) as i32;
+    let mut days = (secs / 86400) as i32;
+    let mut year = 1970;
+    loop {
+        let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 };
+        let days_in_year = 365 + leap;
+        if days >= days_in_year {
+            days -= days_in_year;
+            year += 1;
+        } else {
+            break;
+        }
+    }
+    let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 };
+    let days_in_months = [31, 28 + leap, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month = 1;
+    for &dim in &days_in_months {
+        if days >= dim {
+            days -= dim;
+            month += 1;
+        } else {
+            break;
+        }
+    }
+    let day = days + 1;
+    LocalDateTime {
+        year,
+        month,
+        day,
+        hour,
+        minute: min,
+        second: sec,
+    }
 }
 
 /// The right-edge triangle on the two parked side panels.
@@ -554,6 +608,8 @@ pub struct Game {
     /// parsed data costs one map per switch and gives the save path the event list,
     /// tile layers and tileset index it needs.
     pub current_map: Option<Map>,
+    /// Path of the map currently installed (e.g. `MapData/SampleMapA.mps`).
+    pub current_map_path: Option<String>,
     /// The six decoded tilesets. Retained so a teleport can rebuild [`Self::tilemap`]
     /// without re-reading TileSetData.dat.
     tilesets: Option<TileSetData>,
@@ -815,6 +871,7 @@ impl Game {
             translator,
             tilemap: None,
             current_map: None,
+            current_map_path: None,
             tilesets,
             assets: Assets::with_overlays(&root, overlays.clone()),
             databases,
@@ -1472,6 +1529,7 @@ impl Game {
         let bytes = self.read(BOOT_MAP)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, Some(BOOT_EVENT));
+        self.current_map_path = Some(format!("MapData/{BOOT_MAP}"));
         if self.start_map_event(&map, BOOT_EVENT) {
             // Only the real boot chain leaves the title map installed. Any teleport or
             // save restore goes through install_map and clears this again.
@@ -1487,6 +1545,7 @@ impl Game {
         self.runtime.stop_all(&mut self.vm);
         self.runtime = MapRuntime::new();
         self.current_map = None;
+        self.current_map_path = None;
         self.tilemap = None;
         self.screen.clear();
         self.screen_tint = ScreenTint::default();
@@ -1647,6 +1706,25 @@ impl Game {
         quads
     }
 
+    /// Map scenery background quad to draw behind map tiles and pictures, if configured.
+    pub fn scenery_quad(&mut self, atlas: &mut Atlas) -> Option<SpriteQuad> {
+        let map_path = self.current_map_path.as_deref()?;
+        let scenery_file = self.databases.map_scenery_by_path(map_path)?;
+        let mut quad = atlas.sprite_from(
+            &mut self.assets,
+            scenery_file,
+            -20_000,
+            [0, 0, crate::picture::SCREEN_W, crate::picture::SCREEN_H],
+            [0.0, 0.0, crate::picture::SCREEN_W as f32, crate::picture::SCREEN_H as f32],
+            1.0,
+        )?;
+        let [r, g, b] = self.screen_tint_rgb();
+        quad.tint[0] *= r;
+        quad.tint[1] *= g;
+        quad.tint[2] *= b;
+        Some(quad)
+    }
+
     /// Pictures to draw this frame, with the screen colour multiplier baked in.
     ///
     /// `151 ChangeColor` tints the map and every negative-numbered (screen-layer) picture,
@@ -1723,12 +1801,8 @@ impl Game {
             // while CE270 was still fading its balloon out.
             quads.retain(|quad| !(19_500..=19_503).contains(&quad.number));
         }
-        if !self.balloon_nameplate_active() {
-            // CE270 fades 36014 (the speaker name) independently from the
-            // decorative 36008..36012 pieces. When the name is blank or already
-            // transparent, those pieces used to stay on screen as a grey empty
-            // pill. Suppress the whole plate as one unit. The script's literal
-            // `"message"` placeholder is retail behaviour and stays visible.
+        if !self.balloon_visuals_active() {
+            // Suppress the plate pieces when the balloon visuals are completely inactive.
             quads.retain(|quad| !(36_008..=36_012).contains(&quad.number));
         }
         self.apply_screen_tint(&mut quads, true);
@@ -1824,6 +1898,7 @@ impl Game {
         let bytes = self.read(path)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, None);
+        self.current_map_path = Some(path.to_owned());
         Ok(())
     }
 
@@ -1851,6 +1926,7 @@ impl Game {
         let bytes = self.read(&name)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, Some(event_id));
+        self.current_map_path = Some(name.clone());
         if self.start_map_event(&map, event_id) {
             Ok(())
         } else {
@@ -1979,6 +2055,14 @@ impl Game {
     pub fn hud_action_points(&self) -> Option<(i32, i32)> {
         let hud = self.screen.get(HUD_ACTION_PICTURE)?;
         if hud.hidden || hud.opacity <= 0 || !hud.kind.is_text() {
+            return None;
+        }
+        // If an opaque screen cover exists at a higher z-layer (e.g. slot 9000 or slot -1),
+        // slot 230 is occluded and the HUD gauge must not be shown.
+        if self.screen.get(9000).is_some_and(|p| !p.hidden && p.opacity > 0) {
+            return None;
+        }
+        if self.screen.get(-1).is_some_and(|p| !p.hidden && p.opacity > 0) {
             return None;
         }
         // The picture itself has to be CE242's readout, not merely slot 230. A
@@ -2175,6 +2259,7 @@ impl Game {
     /// corners; the script animates those slots separately. Looking at any one
     /// corner therefore leaves a grey empty pill after the name has faded or
     /// when a narration line never supplied one.
+    #[allow(dead_code)]
     fn balloon_nameplate_active(&self) -> bool {
         let Some(name) = self.screen.get(BALLOON_NAME_TEXT_PICTURE) else {
             return false;
@@ -2683,6 +2768,7 @@ impl Game {
                 let (name, map) = matches.remove(0);
                 self.start_engine_events();
                 self.start_pages_loaded(&map);
+                self.current_map_path = Some(format!("MapData/{name}"));
                 Ok(name)
             }
             count => Err(format!(
@@ -3068,7 +3154,7 @@ impl Game {
             let Some(picture) = self.screen.get(slot) else {
                 continue;
             };
-            if picture.hidden || picture.opacity <= 0 || picture.file != file {
+            if picture.hidden || picture.opacity <= 0 || !picture.file.starts_with(file) {
                 continue;
             }
             let Some(rect) = self.picture_ink_rect(slot) else {
@@ -3565,6 +3651,13 @@ impl Game {
         self.vm
             .vars
             .set_sys(28, (self.playtime_frames % 10_000_000) as i32);
+        let dt = current_datetime();
+        self.vm.vars.set_sys(77, dt.year);
+        self.vm.vars.set_sys(78, dt.month);
+        self.vm.vars.set_sys(79, dt.day);
+        self.vm.vars.set_sys(80, dt.hour);
+        self.vm.vars.set_sys(81, dt.minute);
+        self.vm.vars.set_sys(82, dt.second);
         let default_font_px = self.font_px();
         let base_font_px = self.text_base_font_px;
         let mut report = self.vm.step_frame(&mut GameHost {
@@ -4287,7 +4380,7 @@ impl GameHost<'_> {
         let Some(picture) = self.screen.get(number) else {
             return -1;
         };
-        if picture.hidden || picture.opacity <= 0 {
+        if picture.hidden {
             return 0;
         }
         // A side panel is a click-to-toggle drawer, not a hover-triggered one.
@@ -4310,7 +4403,7 @@ impl GameHost<'_> {
         // click and the pixels it lands on in one law. In particular a negative slot
         // is *not* automatically a full-screen layer: picture -7 is the 48x48 album
         // icon, and giving it the viewport as its box stole clicks from the data icon.
-        let dst = if matches!(number, -7 | -5 | -4 | 1108) {
+        let dst = if matches!(number, -7 | -5 | -4 | 1108 | 1110 | 1117) {
             match self.picture_ink_rect(number) {
                 Some(rect) => rect,
                 None => return 0,

@@ -66,10 +66,11 @@ class _BlendBatch extends Node2D:
 				if tint.a <= 0.0:
 					continue
 				draw_texture_rect_region(atlas, sprite["rect"], sprite["src"], tint)
+			elif item.has("ap"):
+				_draw_action_points_dict(item["ap"])
 			elif item.has("text"):
 				WolfTextScript.draw_text(self, item["text"], bold_font, regular_font)
 
-		_draw_action_points()
 		for overlay in overlays:
 			var colour: Color = overlay["color"]
 			colour.a *= float(overlay["alpha"])
@@ -78,12 +79,12 @@ class _BlendBatch extends Node2D:
 			elif overlay["kind"] == "frozen" and frozen_texture != null and colour.a > 0.0:
 				draw_texture_rect(frozen_texture, Rect2(Vector2.ZERO, LOGICAL_SIZE), false, colour)
 
-	func _draw_action_points() -> void:
-		if ap.is_empty():
+	func _draw_action_points_dict(action_ap: Dictionary) -> void:
+		if action_ap.is_empty():
 			return
-		var maximum := maxi(1, int(ap.get("max", 0)))
-		var current := clampi(int(ap.get("current", 0)), 0, maximum)
-		var box: Rect2 = ap.get("bar", Rect2(Vector2(593.0, 18.0), Vector2(100.0, 12.0)))
+		var maximum := maxi(1, int(action_ap.get("max", 0)))
+		var current := clampi(int(action_ap.get("current", 0)), 0, maximum)
+		var box: Rect2 = action_ap.get("bar", Rect2(Vector2(593.0, 18.0), Vector2(100.0, 12.0)))
 		# Reference (`参照图仅参考行动力条.png`): a dark trough with a thin light
 		# border and a 1 px-inset soft grey fill, not the old 2 px-inset white slab.
 		draw_rect(box, Color(0.16, 0.16, 0.16, 0.92), true)
@@ -150,6 +151,9 @@ var capture_path := ""
 var capture_frames := 0
 var game_frames := 0
 var captured := false
+var pause_on_msg := ""
+var pause_triggered := false
+var pause_delay_frames := 0
 
 ## Physical keys currently held, tracked through `_input`. The dictionary is the
 ## membership set; `held_order` keeps press order because the key-config screen
@@ -331,6 +335,16 @@ func _physics_process(_delta: float) -> void:
 	_update_frozen_frame(packet)
 	_apply_sounds(packet.get("sounds", []))
 	game_frames += 1
+	if not pause_on_msg.is_empty():
+		var msgs: Array = wolf.transcript()
+		var cur_msg: String = msgs[-1] if not msgs.is_empty() else ""
+		if not pause_triggered and cur_msg.find(pause_on_msg) != -1:
+			pause_triggered = true
+			wolf.set_auto_advance(false)
+			wolf.set_auto_play(false, 0)
+			print("wolf: pause-on-msg triggered on: ", cur_msg.substr(0, 30).replace("\n", " "))
+	if pause_triggered:
+		pause_delay_frames += 1
 	_log_frame()
 	max_sprites = maxi(max_sprites, packet.get("sprites", []).size())
 	max_texts = maxi(max_texts, packet.get("texts", []).size())
@@ -482,14 +496,25 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	if capture_path.is_empty() or captured or wolf == null:
 		return
-	if game_frames < capture_frames:
+	if not pause_on_msg.is_empty():
+		if not pause_triggered or pause_delay_frames < 3:
+			return
+	elif game_frames < capture_frames:
 		return
 	captured = true
 	# Freeze the 60 Hz clock: otherwise a physics tick can advance `packet` to frame
 	# N+1 while we await the draw, making captures differ by one animation step.
 	set_physics_process(false)
-	await RenderingServer.frame_post_draw
-	var image := get_viewport().get_texture().get_image()
+	if DisplayServer.get_name() != "headless":
+		await RenderingServer.frame_post_draw
+	var texture := get_viewport().get_texture()
+	if texture == null:
+		get_tree().quit()
+		return
+	var image := texture.get_image()
+	if image == null:
+		get_tree().quit()
+		return
 	var target := capture_path
 	if not target.is_absolute_path():
 		target = ProjectSettings.globalize_path(target)
@@ -553,6 +578,10 @@ func _draw() -> void:
 	for text in texts:
 		items.append({"text": text, "z": int(text.get("z", text.get("number", 0))), "seq": seq})
 		seq += 1
+	var ap: Dictionary = packet.get("ap", {})
+	if not ap.is_empty():
+		items.append({"ap": ap, "z": 230, "seq": seq})
+		seq += 1
 	items.sort_custom(_draw_item_before)
 
 	if not has_blends:
@@ -570,10 +599,11 @@ func _draw() -> void:
 				if tint.a <= 0.0:
 					continue
 				draw_texture_rect_region(atlas_texture, sprite["rect"], sprite["src"], tint)
+			elif item.has("ap"):
+				_draw_action_points(item["ap"])
 			else:
 				_draw_text(item["text"])
 
-		_draw_action_points(packet.get("ap", {}))
 		for overlay in overlays:
 			var colour: Color = overlay["color"]
 			colour.a *= float(overlay["alpha"])
@@ -1047,6 +1077,8 @@ func _parse_args() -> void:
 			auto_new_game = true
 		elif arg == "--hold-message":
 			hold_message = true
+		elif arg.begins_with("--pause-on-msg="):
+			pause_on_msg = arg.substr("--pause-on-msg=".length())
 		elif arg.begins_with("--capture="):
 			capture_path = arg.substr("--capture=".length())
 		elif arg.begins_with("--frames="):

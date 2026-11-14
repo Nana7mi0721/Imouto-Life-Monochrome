@@ -436,7 +436,7 @@ enum Item {
 /// The files are deliberately tiny single-colour squares (`box01` white, `box02`
 /// black) and are used only by CE277's `\img[...]` run. Keeping the mapping here
 /// leaves the font/picture renderers untouched for every other inline image.
-fn inline_box_glyph(path: &str) -> Option<char> {
+pub(crate) fn inline_box_glyph(path: &str) -> Option<char> {
     let name = path
         .rsplit(['\\', '/'])
         .next()

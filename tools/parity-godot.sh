@@ -28,7 +28,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source tools/env.sh >/dev/null 2>&1
 
-GODOT="${GODOT_BIN:-/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64_console.exe}"
+GODOT="${GODOT_BIN:-/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64.exe}"
 CLI="${WOLF_CLI:-$PWD/target/debug/wolf-cli.exe}"
 DATA_ROOT="${WOLF_DATA_ROOT:-$PWD/work/Data}"
 OUT="$PWD/work/out/parity"
