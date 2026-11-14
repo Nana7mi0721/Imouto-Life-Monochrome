@@ -432,22 +432,6 @@ enum Item {
 }
 
 /// Map the two shipped alertness-meter tiles onto box-drawing glyphs.
-///
-/// The files are deliberately tiny single-colour squares (`box01` white, `box02`
-/// black) and are used only by CE277's `\img[...]` run. Keeping the mapping here
-/// leaves the font/picture renderers untouched for every other inline image.
-pub(crate) fn inline_box_glyph(path: &str) -> Option<char> {
-    let name = path
-        .rsplit(['\\', '/'])
-        .next()
-        .unwrap_or(path)
-        .to_ascii_lowercase();
-    match name.as_str() {
-        "box01.png" => Some('□'),
-        "box02.png" => Some('■'),
-        _ => None,
-    }
-}
 
 /// Feed plain text into the item stream: a real LF is a break, everything else is a glyph.
 fn push_plain(items: &mut Vec<Item>, text: &str, style: Style) {
@@ -485,17 +469,9 @@ fn styled_items(text: &str, base_font_px: f32, colours: &dyn Colours) -> Vec<Ite
             TextToken::Text(text) => push_plain(&mut items, text, style),
             TextToken::Backslash => push_plain(&mut items, "\\", style),
             TextToken::Newline => items.push(Item::Break),
-            TextToken::Image(path) | TextToken::ImageNearest(path) => {
-                // CE277 paints the night alertness meter as a row of `box01`/`box02`
-                // inline images. The glyph pass has no image channel, so dropping the
-                // token erased the whole meter (the black-grid progress bar the
-                // player sees in the retail build). The two box files are 19x20
-                // single-colour squares; map them onto the matching box glyphs and
-                // let the normal text layout place them in the row. Any other
-                // inline image keeps the old drop behaviour rather than guessing.
-                if let Some(ch) = inline_box_glyph(path) {
-                    push_plain(&mut items, &ch.to_string(), style);
-                }
+            TextToken::Image(_) | TextToken::ImageNearest(_) => {
+                // Inline images are rendered as texture quads in the atlas sprite pass,
+                // not as font glyphs in the message text pass.
             }
             TextToken::Align(align) => items.push(Item::Align(*align)),
             TextToken::Color(index) => {
@@ -1026,17 +1002,15 @@ mod tests {
     }
 
     #[test]
-    fn the_alertness_meter_box_images_survive_as_box_glyphs() {
+    fn inline_images_are_omitted_from_the_text_pass() {
         // CE277 draws the meter as `\c[9]\img[Picture\box01.png]...`; the token
-        // used to be dropped, leaving the night progress bar blank.
+        // is rendered by the atlas sprite pass rather than emitting font glyphs.
         let styled = styled_with(
             r"\c[9]\img[Picture\box01.png]\img[Picture\box02.png]",
             &vars(),
             0,
         );
-        assert_eq!(styled.rows[0].text, "□■");
-        assert_eq!(styled.total, 2);
-        assert_eq!(styled.runs.len(), 1);
+        assert!(styled.rows.is_empty() || styled.rows[0].text.is_empty());
     }
 
     #[test]

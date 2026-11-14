@@ -1120,3 +1120,13 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     1. 根因：`handle_action_key_input` 与 `auto_retract_side_panel` 在检查 CE14/95/131/132 阻断时未过滤 `COMMON_SELF_BASE`，而夜间并行运行的 Map Event 14（`マウス追従`）ID 亦为 14，导致每一帧均被误判为 CE14 激活，阻断了全屏所有点击。
     2. 增加 `COMMON_SELF_BASE` 过滤，并在 `handle_action_key_input` 中为 `5 | 21 | 22 | 28 | 30 | 35` 补齐 `action_key_event_ignoring_conditions` 回退；夜间存档（ev5）、姿势（ev22/28）、结束（ev21）图标均可流畅点击。
   * **验证**：新增 `godot/tests/verify_ui_and_interaction_fixes.gd` 全检通过；`bash tools/smoke-godot.sh` 全套 100% 通过；`godot/bin/wolf_gdext.dll`（SHA256: `C3786196...`）已重新编译并同步安装。
+
+* 2026-11-15（用户反馈 5 项实机缺陷二次定位与彻底修复）：
+  * **名牌残留右半边（彻底解决）**：CE270 行 1993/2689 执行 `150 Move 36008..36012` 淡出时携带 head bit 24（`0x0100_0000`）及 `span = 36012`；此前 `exec.rs` 未为 Move 指令解码 `span`，且 `picture.rs` 仅移动单槽 36008，导致右半圆角（36010）留在屏幕上保持透明度 255。现于 `exec.rs` 解码 Move/Erase/Hide 的 `span`，并在 `picture.rs` 的 `PictureAction::Move` 实现范围批量移动（`lo..=hi`），名牌全部组件同步淡出至 0 透明度，右半圆角残留彻底消失。
+  * **警戒度等黑色实心格子对齐与叠影（彻底解决）**：根因为 `message.rs` 和 `textpic.rs` 中的 `inline_box_glyph` 将 `\img[box01.png/box02.png]` 转为 unicode 字符 `□/■`，与 `atlas.rs` 渲染的 19x20 PNG 精确贴图 quads 发生字符/贴图双重叠加与字宽不匹配（25px/21px vs 19px 贴图）。彻底移除 `inline_box_glyph`，文本层不对 `\img` 生成字符，仅由 `atlas.rs` 绘制原汁原味 19x20 像素贴图，黑白格子完全对齐、无任何多余或错位方块。
+  * **妹妹对话框加高 136px & 头像完整容纳（彻底解决）**：依据零售图（`ptr_sc/卧室_点击妹妹_首句话.png`）和原版游戏逻辑，当妹妹说话伴随半身像（36002）时，对话框高度统一定位并加高至 136px（`BALLOON_FACE_FRAME_MIN_HEIGHT = 136`，y=428..564）；头像底边统一定位在 `BALLOON_FACE_BOTTOM_Y = 563.0`（发顶在 y>=444，距名牌底边 434 留出 10px 清晰空隙），既不会下探出屏幕底部，也不会被名牌遮挡，完美符合原版实机视觉效果。
+  * **选项选中框完全包裹选项文字（彻底解决）**：`choice.rs` 修正游标方框计算规则，游标框高度由 25px 调整为 `(pitch + 1.0).max(font_px + 4.0)`（28px，行距 27px），顶部 Y 坐标设为 `row[1] - 2.0`；在选项文字上下各留出 2px 呼吸间距，彻底消除下边缘对“交流/泡茶”等文字底笔划的切断，整行文字完整居中容纳。
+  * **恶作剧界面光标图标生效与“结束”“姿势”“存档”可点击（彻底解决）**：
+    1. 针对鼠标图标：在 `GameView.gd` 每帧监测，当 Picture 2999（手掌/注视/谈话等恶作剧光标）存在且可见时，自动设置 `Input.mouse_mode = Input.MOUSE_MODE_HIDDEN` 隐藏 Windows 原生箭头光标，使游戏专用光标清晰独立显示；在光标销毁或窗口失焦时恢复 `MOUSE_MODE_VISIBLE`。
+    2. 针对姿势与动作按钮：在 `PICTURE_ACTION_CONTROLS` 补充 `(1109, 22, "Picture/pose_iconarea.png")`，在 `picture_action_event_at` 规范化 Windows 反斜杠路径（`replace('\\', '/')`），在 `Game::hover()` 补充 1109；并在无苏醒（`v18 > 15, v125 == 0`）与正常互动状态下经 Godot headless 实机验证，点击结束（1108）触发事件 21 并弹出确认选项 `["是", "否"]`，点击姿势（1110）触发事件 22 并弹出换姿势选项 `["是 ", "否 "]`，点击存档（-5）稳定唤起存档界面（CE14）。
+  * **验证**：`godot/tests/verify_ui_and_interaction_fixes.gd` 全检通过；`bash tools/smoke-godot.sh` 全套冒烟通过；`godot/bin/wolf_gdext.dll`（最新构建）同步更新。

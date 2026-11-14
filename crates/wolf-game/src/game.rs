@@ -135,6 +135,7 @@ const PICTURE_ACTION_CONTROLS: &[(i32, u32, &str)] = &[
     (-5, 5, "Picture/icon01.png"),
     (-4, 30, "Picture/icon05.png"),
     (1108, 21, "Picture/endbutton.png"),
+    (1109, 22, "Picture/pose_iconarea.png"),
     (1110, 22, "Picture/pose_icon"),
     (1117, 28, "Picture/pose_icon02.png"),
 ];
@@ -160,7 +161,6 @@ const BALLOON_NAME_TEXT_Y_OFFSET: f32 = 7.0;
 const BALLOON_FRAME_PICTURE: i32 = 36000;
 
 /// CE270's speaker face picture inside the balloon.
-#[allow(dead_code)]
 const BALLOON_FACE_PICTURE: i32 = 36_002;
 
 /// Native `101` message frame and face slots.
@@ -171,6 +171,21 @@ const NATIVE_MESSAGE_PICTURES: &[i32] = &[19_500, 19_501, 19_502, 19_503];
 
 /// Data 26 row 0 `[固定モード]サイズH`, the minimum balloon body height.
 const BALLOON_FRAME_MIN_HEIGHT: i32 = 60;
+
+/// Retail balloon frame height when a speaker face avatar is present.
+///
+/// In retail WOLF RPG, when a face avatar (picture 36002) is shown, the dialogue balloon
+/// expands to accommodate the bust portrait, extending from y ≈ 428 to y ≈ 564 (height 136 px).
+/// Without this, the balloon stays at 60 px, causing the avatar to either clip through
+/// the bottom of the screen or overlap the nameplate at the top.
+const BALLOON_FACE_FRAME_MIN_HEIGHT: i32 = 136;
+
+/// Avatar bottom edge inside the expanded balloon frame.
+///
+/// In retail WOLF RPG (ptr_sc/卧室_点击妹妹_首句话.png), the sister avatar's bottom sits at y = 563,
+/// leaving a 13 px margin above the 576 px screen bottom, with her hair tip at y = 444
+/// (10 px below the nameplate).
+const BALLOON_FACE_BOTTOM_Y: f32 = 563.0;
 
 /// Data 26 row 0 `余白[px]`: top and bottom breathing room inside the balloon.
 const BALLOON_FRAME_PADDING: f32 = 10.0;
@@ -1779,6 +1794,17 @@ impl Game {
                 }
             }
         }
+        if balloon_owns_message && self.balloon_has_face() {
+            // Anchor the face avatar cleanly inside the expanded balloon frame.
+            // In retail dialogue (ptr_sc/卧室_点击妹妹_首句话.png), the sister's bust
+            // sits at y = 444..563, with her bottom at y = 563 (13 px above the 576 canvas
+            // edge) and her head 10 px below the nameplate (bottom at 434).
+            for quad in &mut quads {
+                if quad.number == BALLOON_FACE_PICTURE {
+                    quad.rect[1] = BALLOON_FACE_BOTTOM_Y - quad.rect[3];
+                }
+            }
+        }
         if balloon_owns_message {
             // CE270 picture mode owns the whole message presentation. The native
             // 101 frame and faces are still live in slots 19500..19503 for input
@@ -2300,15 +2326,27 @@ impl Game {
         Some(frame.destination_with_origin(frame.x, y, width as f32, height as f32))
     }
 
+    /// True only while the speaker-face picture is visible and has graphic art.
+    fn balloon_has_face(&self) -> bool {
+        self.screen
+            .get(BALLOON_FACE_PICTURE)
+            .is_some_and(|face| !face.hidden && face.opacity > 0 && !face.file.is_empty())
+    }
+
     fn balloon_frame_target_height(&self) -> Option<i32> {
         let body = self.screen.get(BALLOON_BODY_TEXT_PICTURE)?;
         if body.hidden || body.opacity <= 0 || body.text.is_empty() {
             return None;
         }
+        let min_height = if self.balloon_has_face() {
+            BALLOON_FACE_FRAME_MIN_HEIGHT
+        } else {
+            BALLOON_FRAME_MIN_HEIGHT
+        };
         let body_height = body.text_size.map_or(0.0, |(_, height)| height as f32);
         Some(
             (body_height + BALLOON_FRAME_PADDING)
-                .max(BALLOON_FRAME_MIN_HEIGHT as f32)
+                .max(min_height as f32)
                 .ceil() as i32,
         )
     }
@@ -3143,7 +3181,8 @@ impl Game {
             let Some(picture) = self.screen.get(slot) else {
                 continue;
             };
-            if picture.hidden || picture.opacity <= 0 || !picture.file.starts_with(file) {
+            let norm_file = picture.file.replace('\\', "/");
+            if picture.hidden || picture.opacity <= 0 || !norm_file.starts_with(file) {
                 continue;
             }
             let Some(rect) = self.picture_ink_rect(slot) else {
@@ -4392,7 +4431,7 @@ impl GameHost<'_> {
         // click and the pixels it lands on in one law. In particular a negative slot
         // is *not* automatically a full-screen layer: picture -7 is the 48x48 album
         // icon, and giving it the viewport as its box stole clicks from the data icon.
-        let dst = if matches!(number, -7 | -5 | -4 | 1108 | 1110 | 1117) {
+        let dst = if matches!(number, -7 | -5 | -4 | 1108 | 1109 | 1110 | 1117) {
             match self.picture_ink_rect(number) {
                 Some(rect) => rect,
                 None => return 0,
@@ -6893,6 +6932,7 @@ mod tests {
             keep_shift: false,
             relative: false,
             owner_event: Some(270),
+            span: None,
         };
         let (width, height) = {
             let mut host = host(&mut game);

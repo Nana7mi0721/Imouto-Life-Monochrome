@@ -334,6 +334,7 @@ func _physics_process(_delta: float) -> void:
 		print("wolf: freeze at game frame ", game_frames)
 	_update_frozen_frame(packet)
 	_apply_sounds(packet.get("sounds", []))
+	_update_mouse_cursor(packet.get("sprites", []))
 	game_frames += 1
 	if not pause_on_msg.is_empty():
 		var msgs: Array = wolf.transcript()
@@ -472,12 +473,29 @@ func _notification(what: int) -> void:
 		mouse_latch_pos = Vector2i(-1, -1)
 		wheel_notches = 0
 		focus_gained = false
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_save_settings_on_exit()
 
 
 func _exit_tree() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_save_settings_on_exit()
+
+
+func _update_mouse_cursor(sprites: Array) -> void:
+	var has_custom_cursor := false
+	for sprite in sprites:
+		if sprite.get("number", -1) == 2999 and sprite.get("alpha", 0.0) > 0.0:
+			has_custom_cursor = true
+			break
+	if has_custom_cursor:
+		if Input.mouse_mode != Input.MOUSE_MODE_HIDDEN:
+			Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+	else:
+		if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
 func _save_settings_on_exit() -> void:

@@ -159,15 +159,24 @@ fn balloon_face_stays_anchored_when_the_frame_grows() {
     }
     let (_, one_line_frame, one_line_face) =
         one_line.expect("event 1 never exposed the balloon face");
-    // CE270's script offset puts the one-line face bottom at y = 604, below the
-    // 576 px canvas. In retail WOLF RPG, pictures are not clamped to the screen edge;
-    // clamping lifted the face by 28 px and caused the nameplate to cover the sister's
-    // hair/head. Retail clips the chin at the canvas bottom, keeping her head cleanly
-    // 12 px below the nameplate.
+    // In retail WOLF RPG (ptr_sc/卧室_点击妹妹_首句话.png), when the sister speaks
+    // with face avatar (36002), the dialogue balloon expands to 136 px (from y=428 to y=564).
+    // The face avatar sits cleanly inside at y = 444..563 (bottom at 563.0, 13 px above the
+    // 576 canvas bottom), keeping her head 10 px below the nameplate (bottom at 434.0).
+    assert_eq!(
+        one_line_frame[3],
+        136.0,
+        "the balloon frame expands to 136 px when a face avatar is present: {one_line_frame:?}"
+    );
     assert_eq!(
         one_line_face[1] + one_line_face[3],
-        604.0,
-        "the face bottom sits at unclamped script position 604.0"
+        563.0,
+        "the face bottom sits at 563.0 inside the expanded balloon"
+    );
+    assert!(
+        one_line_face[1] >= 440.0,
+        "the head sits cleanly below the nameplate bottom at 434: {}",
+        one_line_face[1]
     );
 
     let message = game

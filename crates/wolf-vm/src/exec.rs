@@ -282,6 +282,8 @@ pub struct PictureCmd {
     pub relative: bool,
     /// Owning common event id when created by a common event.
     pub owner_event: Option<u32>,
+    /// Range/batch target picture slot (end of range, inclusive) when head bit 24 is set.
+    pub span: Option<i32>,
 }
 
 /// The `cmd` nibble of a `150 Picture` instruction.
@@ -3876,6 +3878,16 @@ fn decode_picture(
     } else {
         None
     };
+    let span = if head & 0x0100_0000 != 0 {
+        match action {
+            PictureAction::Move => args.get(12).copied(),
+            PictureAction::Erase => args.get(3).copied(),
+            PictureAction::Hide => args.first().copied(),
+            _ => None,
+        }
+    } else {
+        None
+    };
     PictureCmd {
         number,
         kind,
@@ -3889,6 +3901,7 @@ fn decode_picture(
         keep_shift,
         relative,
         owner_event,
+        span,
     }
 }
 

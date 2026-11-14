@@ -1250,6 +1250,7 @@ mod tests {
             scale_mode: 0,
             anchor: 0,
             owner_event: None,
+            span: None,
         });
         let mut atlas = Atlas::with_size(8, 8);
         let mut assets = Assets::new("no-such-root");
@@ -1278,6 +1279,7 @@ mod tests {
             scale_mode: 0,
             anchor: 0,
             owner_event: None,
+            span: None,
         });
         let mut atlas = Atlas::with_size(64, 64);
         // Pre-pack the skin so the atlas never touches the filesystem: add_asset
@@ -1387,6 +1389,7 @@ mod tests {
             scale_mode: 0,
             anchor: 0,
             owner_event: None,
+            span: None,
         }
     }
 
@@ -1469,6 +1472,7 @@ mod tests {
             scale_mode: 0,
             anchor: 0,
             owner_event: None,
+            span: None,
         });
         let mut atlas = Atlas::with_size(64, 64);
         let skin = atlas

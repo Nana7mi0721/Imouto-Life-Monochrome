@@ -640,11 +640,6 @@ impl<'a, 'b> Builder<'a, 'b> {
                 let args = args.clone();
                 self.code(kind, &args);
             }
-            TextToken::Image(path) | TextToken::ImageNearest(path) => {
-                if let Some(ch) = crate::message::inline_box_glyph(path) {
-                    self.buf.push(ch);
-                }
-            }
             // Ruby, icons, sounds, speed, spacing, absolute positioning: none of them move
             // the glyphs of the runs themselves, and this game barely uses them.
             _ => {}
@@ -858,11 +853,6 @@ impl<'a, 'b> Builder<'a, 'b> {
                         let inner = tokenize(arg);
                         let text = self.display(&inner);
                         out.push_str(&text);
-                    }
-                }
-                TextToken::Image(path) | TextToken::ImageNearest(path) => {
-                    if let Some(ch) = crate::message::inline_box_glyph(path) {
-                        out.push(ch);
                     }
                 }
                 _ => {}

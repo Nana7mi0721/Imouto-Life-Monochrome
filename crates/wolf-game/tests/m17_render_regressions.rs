@@ -154,6 +154,7 @@ fn draw_with_ce63_tail(number: i32, args: Vec<i32>) -> PictureCmd {
         keep_shift: false,
         relative: false,
         owner_event: Some(63),
+        span: None,
     }
 }
 

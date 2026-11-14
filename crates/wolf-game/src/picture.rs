@@ -1192,7 +1192,9 @@ impl Screen {
                 //
                 // The two endpoints are not ordered - Map003.mps:ev1 pc24 passes -1 then
                 // -2 - so the range is between them, not below and above the first.
-                let span = cmd.args.get(ERASE_SPAN).copied().unwrap_or(cmd.number);
+                let span = cmd
+                    .span
+                    .unwrap_or_else(|| cmd.args.get(ERASE_SPAN).copied().unwrap_or(cmd.number));
                 let (lo, hi) = (cmd.number.min(span), cmd.number.max(span));
                 if fade > 0 {
                     for picture in self
@@ -1203,7 +1205,7 @@ impl Screen {
                         start_erase_fade(picture, fade);
                     }
                 } else {
-                    if cmd.args.get(ERASE_SPAN).is_some() {
+                    if cmd.span.is_some() || cmd.args.get(ERASE_SPAN).is_some() {
                         self.pictures
                             .retain(|number, _| *number < lo || *number > hi);
                     } else {
@@ -1218,7 +1220,9 @@ impl Screen {
                 // Opcode 150 type 3 supports hiding a range of picture slots, passed as
                 // `150 [0x0100_0003, lo, hi]`. CE270 uses this (`150 [0x0100_0003, 36009, 36012]`)
                 // to hide the decorative corners (36009..36012) when closing the nameplate.
-                let span = cmd.args.first().copied().unwrap_or(cmd.number);
+                let span = cmd
+                    .span
+                    .unwrap_or_else(|| cmd.args.first().copied().unwrap_or(cmd.number));
                 let (lo, hi) = (cmd.number.min(span), cmd.number.max(span));
                 for picture in self.pictures.range_mut(lo..=hi).map(|(_, p)| p) {
                     picture.hidden = true;
@@ -1263,53 +1267,68 @@ impl Screen {
                 self.pictures.insert(cmd.number, picture);
             }
             PictureAction::Move => {
-                let picture = self.pictures.entry(cmd.number).or_insert_with(|| {
-                    let mut fresh = Picture::new(cmd.number);
-                    fresh.kind = PictureKind::from_code(cmd.kind);
-                    fresh.owner_event = cmd.owner_event;
-                    fresh
-                });
-                if picture.owner_event.is_none() {
-                    picture.owner_event = cmd.owner_event;
-                }
-                // A Move that carries a file name is how the script swaps the image in place.
-                if !cmd.file.is_empty() {
-                    picture.file.clone_from(&cmd.file);
-                }
-                if !cmd.text.is_empty() {
-                    picture.text.clone_from(&cmd.text);
-                    picture.text_size = None;
-                }
-                picture.erase_after_slide = false;
-                // An anchor of 0 on a Move means UNCHANGED, not top-left. Common event 63
-                // proves it: it draws its message window centred at (512, 672) - parked
-                // below the screen - then slides it to (512, 480) and back, and the retail
-                // frame is visible, which only works if the moves keep the centre anchor.
-                // Reads taken literally put the 960x168 window at x = 512..1472. The 56
-                // moves that really do re-anchor carry the 0x1000 flag explicitly.
-                if cmd.anchor != ANCHOR_TOP_LEFT {
-                    picture.anchor = cmd.anchor;
-                }
-                // A slide starts from where the picture is DRAWN right now - its own fields, not
-                // the destination a previous move has not reached yet, and certainly not the
-                // -1000000 sentinels: those mean "leave this field alone", and the origin of an
-                // unchanged field is its current value, which interpolates to itself.
-                let origin = Pose::of(picture);
-                let args = picture_args(cmd, origin.x, origin.y);
-                merge_args(picture, &args, cmd.scale_mode);
-                // With a usable duration the merged fields are only the TARGET: rewind them to
-                // where the picture already is and let `advance` walk there. Without one the
-                // merged fields are final, i.e. the teleport every duration-less move expects.
-                match Transition::from_command(cmd, origin, Pose::of(picture)) {
-                    Some(transition) => {
-                        picture.x = transition.from.x;
-                        picture.y = transition.from.y;
-                        picture.scale = transition.from.scale;
-                        picture.scale_y = transition.from.scale_y;
-                        picture.opacity = transition.from.opacity;
-                        picture.transition = Some(transition);
+                let span = cmd.span.unwrap_or(cmd.number);
+                let (lo, hi) = (cmd.number.min(span), cmd.number.max(span));
+                let numbers: Vec<i32> = if lo == hi {
+                    vec![cmd.number]
+                } else {
+                    let mut list = Vec::new();
+                    for n in lo..=hi {
+                        if n == cmd.number || self.pictures.contains_key(&n) {
+                            list.push(n);
+                        }
                     }
-                    None => picture.transition = None,
+                    list
+                };
+                for num in numbers {
+                    let picture = self.pictures.entry(num).or_insert_with(|| {
+                        let mut fresh = Picture::new(num);
+                        fresh.kind = PictureKind::from_code(cmd.kind);
+                        fresh.owner_event = cmd.owner_event;
+                        fresh
+                    });
+                    if picture.owner_event.is_none() {
+                        picture.owner_event = cmd.owner_event;
+                    }
+                    // A Move that carries a file name is how the script swaps the image in place.
+                    if !cmd.file.is_empty() {
+                        picture.file.clone_from(&cmd.file);
+                    }
+                    if !cmd.text.is_empty() {
+                        picture.text.clone_from(&cmd.text);
+                        picture.text_size = None;
+                    }
+                    picture.erase_after_slide = false;
+                    // An anchor of 0 on a Move means UNCHANGED, not top-left. Common event 63
+                    // proves it: it draws its message window centred at (512, 672) - parked
+                    // below the screen - then slides it to (512, 480) and back, and the retail
+                    // frame is visible, which only works if the moves keep the centre anchor.
+                    // Reads taken literally put the 960x168 window at x = 512..1472. The 56
+                    // moves that really do re-anchor carry the 0x1000 flag explicitly.
+                    if cmd.anchor != ANCHOR_TOP_LEFT {
+                        picture.anchor = cmd.anchor;
+                    }
+                    // A slide starts from where the picture is DRAWN right now - its own fields, not
+                    // the destination a previous move has not reached yet, and certainly not the
+                    // -1000000 sentinels: those mean "leave this field alone", and the origin of an
+                    // unchanged field is its current value, which interpolates to itself.
+                    let origin = Pose::of(picture);
+                    let args = picture_args(cmd, origin.x, origin.y);
+                    merge_args(picture, &args, cmd.scale_mode);
+                    // With a usable duration the merged fields are only the TARGET: rewind them to
+                    // where the picture already is and let `advance` walk there. Without one the
+                    // merged fields are final, i.e. the teleport every duration-less move expects.
+                    match Transition::from_command(cmd, origin, Pose::of(picture)) {
+                        Some(transition) => {
+                            picture.x = transition.from.x;
+                            picture.y = transition.from.y;
+                            picture.scale = transition.from.scale;
+                            picture.scale_y = transition.from.scale_y;
+                            picture.opacity = transition.from.opacity;
+                            picture.transition = Some(transition);
+                        }
+                        None => picture.transition = None,
+                    }
                 }
             }
         }
@@ -1964,6 +1983,7 @@ mod tests {
             scale_mode: 0,
             anchor: ANCHOR_TOP_LEFT,
             owner_event: None,
+            span: None,
         }
     }
 
@@ -3471,6 +3491,7 @@ mod effect_tests {
             scale_mode: 0,
             anchor: ANCHOR_TOP_LEFT,
             owner_event: None,
+            span: None,
         });
         let picture = screen.get(90).expect("picture");
         assert_eq!(picture.split, (6, 2));

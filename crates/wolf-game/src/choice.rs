@@ -173,16 +173,16 @@ fn build(options: &[String], cursor: usize, x: f32, y: f32, font_px: f32) -> Cho
         ]);
     }
     // The cursor is not the text row: it is the engine's own box, drawn 6 px inside the
-    // window frame. Sized to enclose the font ink cleanly with 1 px margin inside the
-    // pitch ((pitch - 2.0).max(font_px) = 25 px at pitch 27), avoiding clipping the bottom
-    // strokes of text options.
+    // window frame. Sized to enclose the font ink cleanly with 2 px margins top and bottom
+    // ((pitch + 1.0).max(font_px + 4.0) = 28 px at pitch 27), completely enclosing
+    // text options without clipping descenders or ascenders.
     let row = lines
         .get(cursor)
         .copied()
         .or_else(|| lines.first().copied());
-    let cursor_h = (pitch - 2.0).max(font_px);
+    let cursor_h = (pitch + 1.0).max(font_px + 4.0);
     let cursor_rect = match row {
-        Some(row) => [rect[0] + ROW_TOP, row[1] + 1.0, rect[2] - ROW_TOP * 2.0, cursor_h],
+        Some(row) => [rect[0] + ROW_TOP, row[1] - 2.0, rect[2] - ROW_TOP * 2.0, cursor_h],
         None => [rect[0], rect[1], rect[2], pitch],
     };
     ChoiceLayout {
@@ -461,11 +461,11 @@ mod tests {
         assert!((layout.rect[1] + layout.rect[3] / 2.0 - 288.0).abs() <= 1.0);
         assert_eq!(layout.lines.len(), 3);
         assert!(layout.lines[1][1] > layout.lines[0][1]);
-        // The cursor box sits on the first row, 6 px inside the frame, with 1 px margin
-        // and 25 px tall at pitch 27 to enclose text ink without clipping.
-        assert_eq!(layout.cursor[1], layout.lines[0][1] + 1.0);
+        // The cursor box sits on the first row, 6 px inside the frame, with 2 px margin
+        // and 28 px tall at pitch 27 to enclose text ink without clipping.
+        assert_eq!(layout.cursor[1], layout.lines[0][1] - 2.0);
         assert_eq!(layout.cursor[0], layout.rect[0] + ROW_TOP);
-        assert_eq!(layout.cursor[3], 25.0);
+        assert_eq!(layout.cursor[3], 28.0);
     }
 
     #[test]
@@ -481,9 +481,9 @@ mod tests {
     #[test]
     fn the_cursor_follows_the_selected_row() {
         let panel = layout(&options(3), 2);
-        assert_eq!(panel.cursor[1], panel.lines[2][1] + 1.0);
+        assert_eq!(panel.cursor[1], panel.lines[2][1] - 2.0);
         // Out-of-range cursors clamp to a real row instead of panicking.
-        assert_eq!(layout(&options(3), 99).cursor[1], panel.lines[0][1] + 1.0);
+        assert_eq!(layout(&options(3), 99).cursor[1], panel.lines[0][1] - 2.0);
     }
 
     #[test]
