@@ -773,6 +773,52 @@ impl Atlas {
                 blend: quad.blend,
             });
         }
+        for picture in screen.iter() {
+            if excluded.contains(&picture.number) || picture.hidden || !picture.kind.is_text() {
+                continue;
+            }
+            if !picture.text.contains(r"\img") {
+                continue;
+            }
+            let (dx, dy) = picture.effect_offset();
+            let mut pen_x = picture.x as f32 + dx;
+            let mut pen_y = picture.y as f32 + dy;
+            let start_x = pen_x;
+            for token in wolf_format::messagetext::tokenize(&picture.text) {
+                match token {
+                    wolf_format::messagetext::TextToken::Newline => {
+                        pen_x = start_x;
+                        pen_y += 20.0;
+                    }
+                    wolf_format::messagetext::TextToken::Image(ref path)
+                    | wolf_format::messagetext::TextToken::ImageNearest(ref path) => {
+                        let norm = path.replace('\\', "/");
+                        let Some(size) = assets.texture_size(&norm) else {
+                            continue;
+                        };
+                        let Some(rect) =
+                            self.add_asset_region(assets, &norm, [0, 0, size.0, size.1])
+                        else {
+                            continue;
+                        };
+                        let uv = rect.uv(self.width, self.height);
+                        let dst = [pen_x, pen_y, size.0 as f32, size.1 as f32];
+                        if crate::picture::on_screen(dst) {
+                            out.push(SpriteQuad {
+                                number: picture.number,
+                                rect: snap(dst),
+                                uv,
+                                alpha: picture.alpha(),
+                                tint: tone_tint(picture),
+                                blend: picture.blend,
+                            });
+                        }
+                        pen_x += size.0 as f32;
+                    }
+                    _ => {}
+                }
+            }
+        }
         out.sort_by_key(|quad| quad.number);
         out
     }

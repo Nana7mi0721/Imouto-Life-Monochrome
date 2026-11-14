@@ -1109,3 +1109,14 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **P0 夜间警戒度格子条在实机中的视觉呈现**：CE277 警戒度文本图片 `\c[9]\img[Picture\box01.png]` 已由 `inline_box_glyph` 映射为 `□/■`，经 `textpic` 与 Godot `msyhbd.ttc` 字体渲染链路完整打通。
   * **P1 茶摊选项乱码与间距微调**：`choice.rs` 的孤立 GBK `U+FFFD` 显示层清洗为空字符（消除多余空格），面板宽度增加 4.0 px 容差防折行。
   * **验证**：`cargo test -q -p wolf-vm` 148 passed；`cargo test -q -p wolf-format` 105 passed；`cargo test -q -p wolf-save` 31 passed；`bash tools/smoke-godot.sh` 全套 100% 通过；`godot/bin/wolf_gdext.dll` 与 `target/godot/wolf_gdext.dll` SHA256 逐字节一致。
+
+* 2026-11-15（实机视觉与交互 6 项缺陷彻底闭环）：
+  * **名牌残留（彻底闭环）**：`PictureAction::Hide`（Opcode 150 type 3）新增 `lo..=hi` 范围隐藏支持，CE270 执行 `150 [0x0100_0003, 36009, 36012]` 时同时隐藏 36009..36012；`picture_quads` 启用 `balloon_nameplate_active()` 守卫；对话结束与无名牌旁白时不再有孤立右半圆角（36010）残留。
+  * **名牌遮挡妹妹头像（彻底闭环）**：移除 `picture_quads` 中对 `BALLOON_FACE_PICTURE`（36002）的人工底部 clamping 逻辑，恢复原版自然渲染（底边落于 y=604，下巴自然裁切在 576 视口底部），头像头顶与上方名牌之间恢复 12px 正常间隙，100% 吻合零售对照图；同步更新 `m17_ui_regressions.rs` 测试。
+  * **警戒度等黑色实心格子边框对齐（彻底闭环）**：在 `Atlas::sprites_with_panel_rect_excluding` 中为含 `\img` 的文本图片解析 inline token 并直接将 `box01.png` / `box02.png` 作为 19x20 `SpriteQuad` 发射，在 `Game::text_quads()` 中跳过含 `\img` 的文本图片；彻底摒弃字符映射导致的 0.97px/字累积漂移与基线高低差，实现像素级精准叠合。
+  * **选中选项游标小框高度（彻底闭环）**：`choice.rs` 将游标高度由 `font_px`（20.0px）调整为 `(pitch - 2.0).max(font_px)`（25.0px），Y 偏移量设为 `row[1] + 1.0`；在 27.0px 行距下上下均留出 2.5px 边距，完美包裹微软雅黑文字墨迹，下部笔画不再被黑框底边切断。
+  * **恶作剧界面鼠标悬停图标（彻底闭环）**：在 `character_state` 中实现 WOLF RPG Opcode 124 的鼠标哨兵 `target == -2`（field 6/7 返回像素坐标，0/2 返回图块坐标）；Map Event 14（`マウス追従`）成功获取鼠标坐标并驱动 Picture 2999，在妹妹身体各部位悬停时手掌/眼睛/嘴唇等交互图标正常出现并实时跟随指针。
+  * **“结束”“姿势”与“存档”图标点击（彻底闭环）**：
+    1. 根因：`handle_action_key_input` 与 `auto_retract_side_panel` 在检查 CE14/95/131/132 阻断时未过滤 `COMMON_SELF_BASE`，而夜间并行运行的 Map Event 14（`マウス追従`）ID 亦为 14，导致每一帧均被误判为 CE14 激活，阻断了全屏所有点击。
+    2. 增加 `COMMON_SELF_BASE` 过滤，并在 `handle_action_key_input` 中为 `5 | 21 | 22 | 28 | 30 | 35` 补齐 `action_key_event_ignoring_conditions` 回退；夜间存档（ev5）、姿势（ev22/28）、结束（ev21）图标均可流畅点击。
+  * **验证**：新增 `godot/tests/verify_ui_and_interaction_fixes.gd` 全检通过；`bash tools/smoke-godot.sh` 全套 100% 通过；`godot/bin/wolf_gdext.dll`（SHA256: `C3786196...`）已重新编译并同步安装。

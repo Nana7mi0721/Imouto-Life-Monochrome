@@ -160,13 +160,14 @@ fn balloon_face_stays_anchored_when_the_frame_grows() {
     let (_, one_line_frame, one_line_face) =
         one_line.expect("event 1 never exposed the balloon face");
     // CE270's script offset puts the one-line face bottom at y = 604, below the
-    // 576 px canvas; the renderer clamps it so the whole portrait stays visible
-    // (report 1.5), instead of the old behaviour that clipped 28 px and asserted
-    // the overflow as correct.
+    // 576 px canvas. In retail WOLF RPG, pictures are not clamped to the screen edge;
+    // clamping lifted the face by 28 px and caused the nameplate to cover the sister's
+    // hair/head. Retail clips the chin at the canvas bottom, keeping her head cleanly
+    // 12 px below the nameplate.
     assert_eq!(
         one_line_face[1] + one_line_face[3],
-        wolf_game::picture::SCREEN_H as f32,
-        "the face must be clamped to the bottom edge, not overflow the canvas"
+        604.0,
+        "the face bottom sits at unclamped script position 604.0"
     );
 
     let message = game

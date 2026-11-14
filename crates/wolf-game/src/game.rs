@@ -160,6 +160,7 @@ const BALLOON_NAME_TEXT_Y_OFFSET: f32 = 7.0;
 const BALLOON_FRAME_PICTURE: i32 = 36000;
 
 /// CE270's speaker face picture inside the balloon.
+#[allow(dead_code)]
 const BALLOON_FACE_PICTURE: i32 = 36_002;
 
 /// Native `101` message frame and face slots.
@@ -1779,20 +1780,6 @@ impl Game {
             }
         }
         if balloon_owns_message {
-            // CE270 anchors the speaker face to the balloon's bottom edge; with the
-            // one-line frame the script's offset puts its bottom at y = 604, 28 px
-            // below the 576 px canvas. The retail dialogue crop shows the whole face,
-            // so clamp the drawn rect instead of clipping the chin (report 1.5).
-            for quad in &mut quads {
-                if quad.number == BALLOON_FACE_PICTURE {
-                    let bottom = SCREEN_H as f32;
-                    if quad.rect[1] + quad.rect[3] > bottom {
-                        quad.rect[1] = bottom - quad.rect[3];
-                    }
-                }
-            }
-        }
-        if balloon_owns_message {
             // CE270 picture mode owns the whole message presentation. The native
             // 101 frame and faces are still live in slots 19500..19503 for input
             // and pacing, but painting them puts a second grey window and duplicate
@@ -1801,8 +1788,8 @@ impl Game {
             // while CE270 was still fading its balloon out.
             quads.retain(|quad| !(19_500..=19_503).contains(&quad.number));
         }
-        if !self.balloon_visuals_active() {
-            // Suppress the plate pieces when the balloon visuals are completely inactive.
+        if !self.balloon_nameplate_active() {
+            // Suppress the plate pieces when the speaker name is inactive.
             quads.retain(|quad| !(36_008..=36_012).contains(&quad.number));
         }
         self.apply_screen_tint(&mut quads, true);
@@ -2259,7 +2246,6 @@ impl Game {
     /// corners; the script animates those slots separately. Looking at any one
     /// corner therefore leaves a grey empty pill after the name has faded or
     /// when a narration line never supplied one.
-    #[allow(dead_code)]
     fn balloon_nameplate_active(&self) -> bool {
         let Some(name) = self.screen.get(BALLOON_NAME_TEXT_PICTURE) else {
             return false;
@@ -2369,6 +2355,12 @@ impl Game {
         let mut seen: HashSet<i32> = HashSet::new();
         for picture in self.screen.iter() {
             if !picture.kind.is_text() || picture.hidden || picture.text.is_empty() {
+                continue;
+            }
+            // Inline-image meters (CE277 alertness grid, H scene progression) are rendered
+            // as crisp texture SpriteQuads in Atlas::sprites_with_panel_rect_excluding.
+            // Skip them here so they do not produce font-based character TextQuads.
+            if picture.text.contains(r"\img") {
                 continue;
             }
             // The same prologue slot can hold unrelated narration. Do not let it
@@ -2839,12 +2831,10 @@ impl Game {
         // (CE132/CE95) owns the pointer. Without this gate a click on a grid row also
         // reaches the map event under it: clicking save slot 3 opened the sister's
         // dialogue from the room behind the grid, and the write never happened.
-        if self
-            .vm
-            .instances()
-            .iter()
-            .any(|instance| matches!(instance.event, 14 | 95 | 131 | 132))
-        {
+        if self.vm.instances().iter().any(|instance| {
+            instance.program.self_base == wolf_vm::program::COMMON_SELF_BASE
+                && matches!(instance.event, 14 | 95 | 131 | 132)
+        }) {
             return;
         }
         let fresh_click = self.mouse_buttons & 1 != 0 && self.previous_mouse_buttons & 1 == 0;
@@ -2867,10 +2857,10 @@ impl Game {
             // an unrelated hotspot behind the icon.
             self.mouse_consumed = true;
             let mut started = self.runtime.action_key_event(&mut self.vm, event);
-            if started.is_none() && event == 21 {
-                // The night end arrow is visible in every action submenu, but its
-                // map page is gated on v100 == 1 while the submenu sets v100 = 10.
-                // The script itself owns the confirmation and teardown.
+            if started.is_none() && matches!(event, 5 | 21 | 22 | 28 | 30 | 35) {
+                // The night end arrow, pose button and save icon are visible in action
+                // submenus even when v100 is temporarily changed or page conditions
+                // require ignoring strict map conditions.
                 started = self
                     .runtime
                     .action_key_event_ignoring_conditions(&mut self.vm, event);
@@ -3018,11 +3008,10 @@ impl Game {
         let blocked = !self.messages.is_empty()
             || self.choices.is_some()
             || self.save_grid_active()
-            || self
-                .vm
-                .instances()
-                .iter()
-                .any(|instance| matches!(instance.event, 14 | 95 | 131 | 132));
+            || self.vm.instances().iter().any(|instance| {
+                instance.program.self_base == wolf_vm::program::COMMON_SELF_BASE
+                    && matches!(instance.event, 14 | 95 | 131 | 132)
+            });
         if blocked {
             self.side_panel_retract_frames = 0;
             return;
@@ -5244,8 +5233,20 @@ impl Host for GameHost<'_> {
 
     fn character_state(&mut self, target: i32, field: i32) -> Option<i32> {
         // Map events carry tile coordinates; fields 6/7 are the same position in
-        // pixels (16 px per tile). Negative targets are the player/screen sentinels
-        // in this data and have no event record, so they stay unanswered.
+        // pixels (16 px per tile).
+        // Target -2 is the mouse pointer sentinel in WOLF RPG opcode 124. Map event 14
+        // (night mouse tracking) reads fields 6/7 into self[0]/self[1] to drive Picture 2999
+        // (cursor icon: hand1.png, look.png, talk.png).
+        if target == -2 {
+            let tile = crate::tilemap::TILE_PX as i32;
+            return match field {
+                0 | 2 => Some(self.mouse[0] / tile),
+                1 | 3 => Some(self.mouse[1] / tile),
+                6 => Some(self.mouse[0]),
+                7 => Some(self.mouse[1]),
+                _ => None,
+            };
+        }
         if target < 0 {
             return None;
         }

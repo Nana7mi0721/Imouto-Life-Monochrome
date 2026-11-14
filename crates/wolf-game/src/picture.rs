@@ -1214,7 +1214,13 @@ impl Screen {
             PictureAction::Hide => {
                 // Hide is not erase and not a redraw: the slot keeps its skin name, box and
                 // position so the next draw restores exactly the same window.
-                if let Some(picture) = self.pictures.get_mut(&cmd.number) {
+                //
+                // Opcode 150 type 3 supports hiding a range of picture slots, passed as
+                // `150 [0x0100_0003, lo, hi]`. CE270 uses this (`150 [0x0100_0003, 36009, 36012]`)
+                // to hide the decorative corners (36009..36012) when closing the nameplate.
+                let span = cmd.args.first().copied().unwrap_or(cmd.number);
+                let (lo, hi) = (cmd.number.min(span), cmd.number.max(span));
+                for picture in self.pictures.range_mut(lo..=hi).map(|(_, p)| p) {
                     picture.hidden = true;
                 }
             }

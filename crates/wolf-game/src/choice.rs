@@ -173,15 +173,16 @@ fn build(options: &[String], cursor: usize, x: f32, y: f32, font_px: f32) -> Cho
         ]);
     }
     // The cursor is not the text row: it is the engine's own box, drawn 6 px inside the
-    // window frame and as tall as the font (not as tall as the row pitch). The retail
-    // screenshots measure exactly that: bar 6 px in from the border, 20 px tall, with
-    // the text 8 px in and 27 px apart.
+    // window frame. Sized to enclose the font ink cleanly with 1 px margin inside the
+    // pitch ((pitch - 2.0).max(font_px) = 25 px at pitch 27), avoiding clipping the bottom
+    // strokes of text options.
     let row = lines
         .get(cursor)
         .copied()
         .or_else(|| lines.first().copied());
+    let cursor_h = (pitch - 2.0).max(font_px);
     let cursor_rect = match row {
-        Some(row) => [rect[0] + ROW_TOP, row[1], rect[2] - ROW_TOP * 2.0, font_px],
+        Some(row) => [rect[0] + ROW_TOP, row[1] + 1.0, rect[2] - ROW_TOP * 2.0, cursor_h],
         None => [rect[0], rect[1], rect[2], pitch],
     };
     ChoiceLayout {
@@ -460,11 +461,11 @@ mod tests {
         assert!((layout.rect[1] + layout.rect[3] / 2.0 - 288.0).abs() <= 1.0);
         assert_eq!(layout.lines.len(), 3);
         assert!(layout.lines[1][1] > layout.lines[0][1]);
-        // The cursor box sits on the first row, 6 px inside the frame, as tall as the
-        // font: the retail screenshots measure 6 px in and 20 px tall at Sys8 = 20.
-        assert_eq!(layout.cursor[1], layout.lines[0][1]);
+        // The cursor box sits on the first row, 6 px inside the frame, with 1 px margin
+        // and 25 px tall at pitch 27 to enclose text ink without clipping.
+        assert_eq!(layout.cursor[1], layout.lines[0][1] + 1.0);
         assert_eq!(layout.cursor[0], layout.rect[0] + ROW_TOP);
-        assert_eq!(layout.cursor[3], TEXT_PX);
+        assert_eq!(layout.cursor[3], 25.0);
     }
 
     #[test]
@@ -480,9 +481,9 @@ mod tests {
     #[test]
     fn the_cursor_follows_the_selected_row() {
         let panel = layout(&options(3), 2);
-        assert_eq!(panel.cursor[1], panel.lines[2][1]);
+        assert_eq!(panel.cursor[1], panel.lines[2][1] + 1.0);
         // Out-of-range cursors clamp to a real row instead of panicking.
-        assert_eq!(layout(&options(3), 99).cursor[1], panel.lines[0][1]);
+        assert_eq!(layout(&options(3), 99).cursor[1], panel.lines[0][1] + 1.0);
     }
 
     #[test]
