@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
@@ -47,6 +47,21 @@ pub const TITLE_EVENT: u32 = 42;
 
 /// The map the original boots into (SysDatabase type 0, row 0).
 pub const BOOT_MAP: &str = "MapData/TitleMap.mps";
+
+/// The path of a map inside the data folder, as the map settings table spells it.
+///
+/// SysDatabase type 0 keys the scenery background by the path *with* its
+/// extension - the shipped rows read `MapData/SampleMapA.mps`, `MapData/Map003.mps`
+/// and so on - and `Databases::map_path` hands the same spelling to a `130`
+/// teleport. A host path without the suffix therefore never matches, and the
+/// room loses its background layer.
+fn map_data_path(name: &str) -> String {
+    if name.ends_with(".mps") {
+        format!("MapData/{name}")
+    } else {
+        format!("MapData/{name}.mps")
+    }
+}
 
 /// The autorun event on [`BOOT_MAP`] that plays the splashes and reaches the title.
 pub const BOOT_EVENT: u32 = 2;
@@ -174,18 +189,36 @@ const BALLOON_FRAME_MIN_HEIGHT: i32 = 60;
 
 /// Retail balloon frame height when a speaker face avatar is present.
 ///
-/// In retail WOLF RPG, when a face avatar (picture 36002) is shown, the dialogue balloon
-/// expands to accommodate the bust portrait, extending from y ≈ 428 to y ≈ 564 (height 136 px).
-/// Without this, the balloon stays at 60 px, causing the avatar to either clip through
-/// the bottom of the screen or overlap the nameplate at the top.
-const BALLOON_FACE_FRAME_MIN_HEIGHT: i32 = 136;
+/// Measured off `ptr_sc/卧室_点击妹妹_首句话.png`, a 1536x907 window
+/// shot of the 1024x576 viewport at 1.5x whose content starts at physical y = 43.
+///
+/// The retail balloon is a soft-edged rounded rectangle: its top gradient starts
+/// at physical y = 732 and its bottom edge ends at physical y = 892, i.e. logical
+/// y 459.3 .. 566.0 - a height of 106.7 px. The frame's BOTTOM edge is script
+/// owned (CE270 anchors the 580x60 window, so the host may only change the
+/// height and must keep the bottom at logical y = 566), which is why the height
+/// constant is the single number that carries the retail measurement:
+/// 566 - 459.3 = 106.7, rounded to 107.
+///
+/// The previous value 136 (added in 9a817e4) put the top edge at logical 430,
+/// 29 px above the retail balloon, and left an empty band between the balloon
+/// and the avatar's head.
+const BALLOON_FACE_FRAME_MIN_HEIGHT: i32 = 107;
 
 /// Avatar bottom edge inside the expanded balloon frame.
 ///
-/// In retail WOLF RPG (ptr_sc/卧室_点击妹妹_首句话.png), the sister avatar's bottom sits at y = 563,
-/// leaving a 13 px margin above the 576 px screen bottom, with her hair tip at y = 444
-/// (10 px below the nameplate).
-const BALLOON_FACE_BOTTOM_Y: f32 = 563.0;
+/// The retail avatar is `Picture/face02.png` (180x180) drawn at 50 %, i.e. 90x90
+/// logical pixels. Fitting that artwork over the retail screenshot - the thin
+/// ahoge curl and the white line art of the hair, torso and shoulder against
+/// the screenshot's own pixels - puts the picture's top-left corner at logical
+/// (228, 469) and its bottom edge at logical 559.
+///
+/// The artwork's own alpha box is (22, 0, 168, 172) of 180, so the ink bottom
+/// lands at logical 555 and the ahoge - the topmost alpha row - at 469. The
+/// previous value 563 (added in 9a817e4) put the avatar four pixels too low and
+/// the ahoge at 473, which opened the empty band between the balloon's top
+/// edge and the avatar's head.
+const BALLOON_FACE_BOTTOM_Y: f32 = 558.0;
 
 /// Data 26 row 0 `余白[px]`: top and bottom breathing room inside the balloon.
 const BALLOON_FRAME_PADDING: f32 = 10.0;
@@ -205,6 +238,24 @@ const HUD_ACTION_PICTURE: i32 = 230;
 const HUD_ACTION_LABEL_X: f32 = 545.0;
 const HUD_ACTION_VALUE_X: f32 = 750.0;
 const HUD_ACTION_BAR: [f32; 4] = [593.0, 18.0, 100.0, 12.0];
+
+/// Height of the retail top bar band, in logical pixels.
+///
+/// The retail black screen is `cg/blackscreen.jpg` (1024x540) drawn into slot
+/// -1 at (0, 36): SampleMapA.mps Ev0 pc=22 issues
+/// `150 [0x300, -1, 0, 1, 1, 1, 255, 0, 36, 100, 0]`, so the cover starts
+/// exactly below the 36 px top bar and leaves that band showing whatever was
+/// there. A cover therefore only hides the gauge when it really paints over
+/// that band; the old "slot -1 is alive" test hid it for the whole
+/// transition and swallowed the top bar along with the gauge.
+const HUD_TOP_BAND_HEIGHT: f32 = 36.0;
+
+/// Picture slots that can carry a cover over the top bar.
+///
+/// Slot -1 is the retail black screen of SampleMapA.mps and slot 9000 is the
+/// same artwork over the whole canvas (Map003.mps Ev0). Both are checked
+/// geometrically, never by "is the slot alive".
+const HUD_COVER_SLOTS: &[i32] = &[-1, 9000];
 
 /// Split CE242's `行动力60/65` into a label run and a value run.
 ///
@@ -291,7 +342,9 @@ fn picture_ink_rect_in(screen: &Screen, assets: &mut Assets, number: i32) -> Opt
     ])
 }
 
-struct LocalDateTime {
+/// A local wall-clock reading.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LocalDateTime {
     year: i32,
     month: i32,
     day: i32,
@@ -300,7 +353,124 @@ struct LocalDateTime {
     second: i32,
 }
 
-fn current_datetime() -> LocalDateTime {
+impl LocalDateTime {
+    /// A fixed reading, for a deterministic regression run.
+    #[must_use]
+    pub const fn fixed(
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        second: i32,
+    ) -> Self {
+        Self {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+        }
+    }
+
+    /// The year.
+    #[must_use]
+    pub const fn year(self) -> i32 {
+        self.year
+    }
+
+    /// The month, 1 to 12.
+    #[must_use]
+    pub const fn month(self) -> i32 {
+        self.month
+    }
+
+    /// The day of the month, 1 to 31.
+    #[must_use]
+    pub const fn day(self) -> i32 {
+        self.day
+    }
+
+    /// The hour, 0 to 23.
+    #[must_use]
+    pub const fn hour(self) -> i32 {
+        self.hour
+    }
+
+    /// The minute, 0 to 59.
+    #[must_use]
+    pub const fn minute(self) -> i32 {
+        self.minute
+    }
+
+    /// The second, 0 to 59.
+    #[must_use]
+    pub const fn second(self) -> i32 {
+        self.second
+    }
+}
+
+/// Where the game reads the wall clock from.
+///
+/// The retail engine asks Windows for the local time, so the host has to agree
+/// with it: the game's day counter (`Sys79`) turns over at *local* midnight,
+/// and a UTC clock is a day behind between local midnight and 08:00 in UTC+8.
+/// That difference is what makes `CE251/256/257/258` and map event 24 read a
+/// different date in the small hours.
+///
+/// A test can pin the clock instead, so a baseline that depends on the day or
+/// the hour does not drift with the wall clock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Clock {
+    /// The system clock, read in the local time zone.
+    System,
+    /// A fixed local timestamp.
+    Fixed(LocalDateTime),
+}
+
+impl Clock {
+    /// The current local date and time.
+    #[must_use]
+    pub fn now(self) -> LocalDateTime {
+        match self {
+            Self::System => local_datetime(),
+            Self::Fixed(stamp) => stamp,
+        }
+    }
+}
+
+/// The local wall clock, the way the retail engine reads it.
+///
+/// `wolf-game` forbids unsafe code, so the `GetLocalTime` call the retail
+/// engine makes lives in the host binary, which installs it here.
+fn local_datetime() -> LocalDateTime {
+    LOCAL_CLOCK
+        .get()
+        .map_or_else(utc_datetime, |reader| reader())
+}
+
+/// The process-wide local-clock reader the host installs.
+///
+/// The retail engine reads the wall clock through `GetLocalTime`, which hands
+/// back the *local* time. `wolf-game` forbids unsafe code, so the host binary
+/// owns that call and registers the reader here.
+static LOCAL_CLOCK: OnceLock<fn() -> LocalDateTime> = OnceLock::new();
+
+/// Installs the process-wide local-clock reader.
+///
+/// The host calls this once at start-up with a reader that returns the local
+/// wall clock. Without it the game falls back to UTC, which is a day behind
+/// between local midnight and 08:00 in UTC+8 - and that is what makes the
+/// game read the wrong day in the small hours.
+pub fn install_local_clock(reader: fn() -> LocalDateTime) -> Result<(), &'static str> {
+    LOCAL_CLOCK
+        .set(reader)
+        .map_err(|_| "the local clock reader is already installed")
+}
+
+/// The UTC reading, used as the local fallback.
+fn utc_datetime() -> LocalDateTime {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -312,7 +482,11 @@ fn current_datetime() -> LocalDateTime {
     let mut days = (secs / 86400) as i32;
     let mut year = 1970;
     loop {
-        let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 };
+        let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+            1
+        } else {
+            0
+        };
         let days_in_year = 365 + leap;
         if days >= days_in_year {
             days -= days_in_year;
@@ -321,7 +495,11 @@ fn current_datetime() -> LocalDateTime {
             break;
         }
     }
-    let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 };
+    let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+        1
+    } else {
+        0
+    };
     let days_in_months = [31, 28 + leap, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     let mut month = 1;
     for &dim in &days_in_months {
@@ -718,6 +896,11 @@ pub struct Game {
     pub auto_events: AutoEvents,
     /// Frames of play time; the save stores this in SavePart2.vars3_21[0].
     pub playtime_frames: u32,
+    /// Where the wall clock comes from.
+    ///
+    /// The retail engine reads the local time, and a regression baseline must not
+    /// depend on when it runs, so the source is a value the host can pin.
+    pub clock: Clock,
     /// Mouse position in logical pixels, [-1, -1] when the pointer is outside.
     pub mouse: [i32; 2],
     /// Mouse buttons held this frame: bit 0 left, bit 1 right, bit 2 middle.
@@ -917,6 +1100,7 @@ impl Game {
             last_action_event: None,
             auto_events,
             playtime_frames: 0,
+            clock: Clock::System,
             mouse: [-1, -1],
             mouse_buttons: 0,
             side_panel_retract_frames: 0,
@@ -1285,6 +1469,14 @@ impl Game {
         self.playtime_frames = frames;
     }
 
+    /// Pins the wall clock, so a regression run does not depend on the date.
+    ///
+    /// `Clock::System` is the default and is what the game plays on; a test
+    /// that asserts on the day or the hour fixes it instead.
+    pub fn set_clock(&mut self, clock: Clock) {
+        self.clock = clock;
+    }
+
     /// Writes the live game state to a save file.
     ///
     /// The map snapshot and object tables come from the base_save field (the save this
@@ -1545,7 +1737,8 @@ impl Game {
         let bytes = self.read(BOOT_MAP)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, Some(BOOT_EVENT));
-        self.current_map_path = Some(format!("MapData/{BOOT_MAP}"));
+        // `BOOT_MAP` already spells the path the map settings table uses.
+        self.current_map_path = Some(BOOT_MAP.to_owned());
         if self.start_map_event(&map, BOOT_EVENT) {
             // Only the real boot chain leaves the title map installed. Any teleport or
             // save restore goes through install_map and clears this again.
@@ -1731,7 +1924,12 @@ impl Game {
             scenery_file,
             -20_000,
             [0, 0, crate::picture::SCREEN_W, crate::picture::SCREEN_H],
-            [0.0, 0.0, crate::picture::SCREEN_W as f32, crate::picture::SCREEN_H as f32],
+            [
+                0.0,
+                0.0,
+                crate::picture::SCREEN_W as f32,
+                crate::picture::SCREEN_H as f32,
+            ],
             1.0,
         )?;
         let [r, g, b] = self.screen_tint_rgb();
@@ -1750,7 +1948,15 @@ impl Game {
     pub fn picture_quads(&mut self, atlas: &mut Atlas) -> Vec<SpriteQuad> {
         let balloon_frame = self.balloon_frame_render_rect();
         let balloon_owns_message = self.balloon_owns_message();
-        let excluded = if balloon_owns_message {
+        // CE270's picture mode owns the whole message presentation, so the
+        // native 101 frame and faces never reach the screen. This must NOT
+        // depend on the transient `balloon_visuals_active()` gate: common
+        // event 63 erases the native slots a frame or three AFTER the balloon
+        // takes over, and in that gap the stale 19502 face still sat in the
+        // bottom-right corner at 170 % (quad [718, 347, 306, 229]).
+        let balloon_mode =
+            self.balloon_picture_mode_enabled() || self.balloon_picture_text_is_visible();
+        let excluded = if balloon_mode {
             NATIVE_MESSAGE_PICTURES
         } else {
             &[]
@@ -1797,22 +2003,26 @@ impl Game {
         if balloon_owns_message && self.balloon_has_face() {
             // Anchor the face avatar cleanly inside the expanded balloon frame.
             // In retail dialogue (ptr_sc/卧室_点击妹妹_首句话.png), the sister's bust
-            // sits at y = 444..563, with her bottom at y = 563 (13 px above the 576 canvas
-            // edge) and her head 10 px below the nameplate (bottom at 434).
+            // picture sits at logical y = 468..558, with its bottom 8 px above the
+            // balloon's bottom edge (566) and its hair tip 9 px below the balloon's
+            // top edge (459). See `BALLOON_FACE_BOTTOM_Y`.
             for quad in &mut quads {
                 if quad.number == BALLOON_FACE_PICTURE {
                     quad.rect[1] = BALLOON_FACE_BOTTOM_Y - quad.rect[3];
                 }
             }
         }
-        if balloon_owns_message {
+        if balloon_mode {
             // CE270 picture mode owns the whole message presentation. The native
             // 101 frame and faces are still live in slots 19500..19503 for input
             // and pacing, but painting them puts a second grey window and duplicate
             // faces behind the balloon. 19502 is the large right-side face that
             // leaked through whenever the message slot had already been cleared
-            // while CE270 was still fading its balloon out.
-            quads.retain(|quad| !(19_500..=19_503).contains(&quad.number));
+            // while CE270 was still fading its balloon out: the native slots are
+            // erased a frame or three after the balloon takes over, and the old
+            // `balloon_visuals_active()` gate had already dropped the balloon's
+            // ownership in that gap.
+            quads.retain(|quad| !NATIVE_MESSAGE_PICTURES.contains(&quad.number));
         }
         if !self.balloon_nameplate_active() {
             // Suppress the plate pieces when the speaker name is inactive.
@@ -2070,12 +2280,12 @@ impl Game {
         if hud.hidden || hud.opacity <= 0 || !hud.kind.is_text() {
             return None;
         }
-        // If an opaque screen cover exists at a higher z-layer (e.g. slot 9000 or slot -1),
-        // slot 230 is occluded and the HUD gauge must not be shown.
-        if self.screen.get(9000).is_some_and(|p| !p.hidden && p.opacity > 0) {
-            return None;
-        }
-        if self.screen.get(-1).is_some_and(|p| !p.hidden && p.opacity > 0) {
+        // A cover only hides the gauge when it really paints over the band the
+        // gauge lives in. The retail black screen is drawn at y = 36, i.e.
+        // BELOW the top bar, so it leaves the bar - and the gauge with it -
+        // visible for the whole transition. The old blanket "slot -1 is
+        // alive" test swallowed the top bar during every black screen.
+        if self.hud_top_band_covered() {
             return None;
         }
         // The picture itself has to be CE242's readout, not merely slot 230. A
@@ -2086,6 +2296,59 @@ impl Game {
         let current = self.databases.num(crate::db::Container::CData, 0, 12, 8)?;
         let maximum = self.databases.num(crate::db::Container::CData, 0, 12, 9)?;
         (maximum > 0).then_some((current.clamp(0, maximum), maximum))
+    }
+
+    /// True when a cover picture actually paints over the top bar band.
+    ///
+    /// The gauge is host drawn on top of the picture layer, so it has to be
+    /// hidden whenever the pixels underneath it are covered - but only then.
+    /// The retail black screen sits at y = 36 and leaves the 0..36 band
+    /// untouched (see [`HUD_TOP_BAND_HEIGHT`]), so the gauge stays visible
+    /// through the transition exactly like the retail top bar does.
+    fn hud_top_band_covered(&self) -> bool {
+        HUD_COVER_SLOTS
+            .iter()
+            .any(|number| self.picture_covers_top_band(*number))
+    }
+
+    /// True when the cover picture in one slot reaches into the top band.
+    ///
+    /// The test is geometric on purpose: the cover's destination rectangle has
+    /// to start above the band and reach below the screen origin. A cover
+    /// that starts at the bottom of the band (the retail black screen at
+    /// y = 36) leaves the bar alone.
+    fn picture_covers_top_band(&self, number: i32) -> bool {
+        let Some(picture) = self.screen.get(number) else {
+            return false;
+        };
+        if picture.hidden || picture.opacity <= 0 {
+            return false;
+        }
+        let (width, height) = self.picture_draw_size(picture);
+        let rect = picture.destination(width, height);
+        rect[1] < HUD_TOP_BAND_HEIGHT && rect[1] + rect[3] > 0.0
+    }
+
+    /// The size one picture draws, in logical pixels.
+    ///
+    /// A file picture draws its texture at its native size. The artwork may
+    /// not be decoded yet on the picture's first frame, and the asset cache is
+    /// the only reader available without `&mut self`; the canvas size is the
+    /// conservative stand-in then, because every cover in this game is a
+    /// full-screen picture either way.
+    fn picture_draw_size(&self, picture: &crate::picture::Picture) -> (f32, f32) {
+        if picture.kind.is_window() {
+            if let Some((width, height)) = picture.window {
+                return (width as f32, height as f32);
+            }
+        }
+        if let Some(size) = self.assets.cached(&picture.file).map(|image| image.size()) {
+            return (size.0 as f32, size.1 as f32);
+        }
+        (
+            crate::picture::SCREEN_W as f32,
+            crate::picture::SCREEN_H as f32,
+        )
     }
 
     /// The bar rectangle that belongs with [`Self::hud_action_points`].
@@ -2798,7 +3061,11 @@ impl Game {
                 let (name, map) = matches.remove(0);
                 self.start_engine_events();
                 self.start_pages_loaded(&map);
-                self.current_map_path = Some(format!("MapData/{name}"));
+                // The map settings table keys the scenery background by the path
+                // *with* its extension - `MapData/SampleMapA.mps` - so the
+                // restored path has to carry it too, or the loaded room loses
+                // its background layer that a normal `130` teleport keeps.
+                self.current_map_path = Some(map_data_path(&name));
                 Ok(name)
             }
             count => Err(format!(
@@ -3629,6 +3896,12 @@ impl Game {
             .as_ref()
             .is_some_and(|choices| crate::choice::is_title_image_menu(&choices.options));
         self.auto_events.set_title_menu_active(title_menu_active);
+        // The raid HUD cell bars (picture slots 500..=503) are painted by parallel
+        // meter events that the raid script never stops, so they have to be torn
+        // down when the raid scene ends (crates/wolf-game/src/raid_cleanup.rs).
+        // The teardown runs BEFORE the scheduler pass, so the meters are closed and
+        // the band erased in the same frame - afterwards they could paint again.
+        crate::raid_cleanup::sync_raid_hud(self);
         self.auto_events.sync(&mut self.vm);
         self.restart_always_events();
         // A prompt that was on screen at the start of this frame holds the cursor
@@ -3679,7 +3952,7 @@ impl Game {
         self.vm
             .vars
             .set_sys(28, (self.playtime_frames % 10_000_000) as i32);
-        let dt = current_datetime();
+        let dt = self.clock.now();
         self.vm.vars.set_sys(77, dt.year);
         self.vm.vars.set_sys(78, dt.month);
         self.vm.vars.set_sys(79, dt.day);

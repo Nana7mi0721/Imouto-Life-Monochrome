@@ -1165,3 +1165,57 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **空间清理**：删 `target/debug/incremental`、`target/debug/examples`、`target/debug/deps/*.pdb`
     （399 个陈旧调试符号，4.2 GB）、`work/out/probe_heur/` 与本轮探针脚本；`target` 10,732 MB → **6,015 MB**，
     `work` 975 MB（`work/Data` 173 MB 未动），仓库合计 12,007 MB。
+
+* 2026-11-15（实机报告 `live_play_issues_and_fixes_report.md` 剩余 9 项收口 + 三条裁定补回归）：
+  * **本轮范围**：上一轮已落地 #5a（BAD/GOOD 粗细统一为 8）、#6（GBK 标点否决）、#9（侧拉栏补间）
+    三条裁定并提交 `2bd0463`；本轮收掉报告里剩下的 9 项，并给三条裁定补上集成回归。
+    逐条结论与改法见 `docs/LIVE_PLAY_FIX_REPORT.md`。
+  * **#1 气泡闪脸**：`picture_quads()` 的屏蔽条件从瞬态的 `balloon_owns_message()`
+    改成 `balloon_picture_mode_enabled() || balloon_picture_text_is_visible()`——
+    原生 `19500..=19503` 在气泡淡出后要晚一两帧才被 CE63 擦掉，那个空档里 `19502`
+    会漏成右下角大头像。回归 `m19_balloon_ui.rs`。
+  * **#2 对话框过高**：`BALLOON_FACE_FRAME_MIN_HEIGHT` 136→107、`BALLOON_FACE_BOTTOM_Y`
+    563→558。依据零售截图 `ptr_sc/卧室_点击妹妹_首句话.png`（1.5x，内容起点物理 y=43）：
+    气泡洗色物理 732..892 = 逻辑 459.3..566.0，高 106.7；框底脚本自有，宿主只能改高度。
+    头像 `face02.png`（180x180 @50 %）对齐后左上 (228,469)、底 559。
+  * **#3 格子进度条残留**：新增 `crates/wolf-game/src/raid_cleanup.rs`——夜袭场景
+    （CE249/256/259）**结束的那一帧**擦 `500..=503` 并清 `2000090/2000091/2000092/2000154`。
+    根因：`CE 281`/`CE 282` 是并行事件，`2000091`/`2000092` 全作 350 个公共事件里
+    **没有任何一条会清零**，只有计时走完才自己擦。回归 `m22_raid_cleanup.rs`（5 条）。
+  * **#4 恶作剧光标回落**：**零售原样，不改引擎语义**。零售引擎实证
+    （`004874c0`：缺图且 field≠9 一律返回 −1；`00452de0`/`00467a90`：条件全假时分支体全不执行）
+    + 数据链路（Ev18 链尾只由结束键 `1108` 复位 `var121`；正式夜袭流程里 `1111` 根本不存在，
+    链在最后一节断掉）+ 零售截图（`ptr_sc/恶作剧_凝视胸部_穿衣.png` 鼠标在热区外仍是眼睛图标）
+    ⇒ 零售回落的是 **hand3（`var121=0`）**且只有悬停结束键才回落，报告写的 hand1/`var121=2` 不符。
+    补 `m21_cursor_hover.rs`（4 条）把零售行为钉住。
+  * **#5b 睡眠图标无呼吸**：`picture.rs` 的 Draw 分支在**同图同位**重绘时保留
+    `breath/zoom/pattern/shake`（换图或换位仍是替换语义）。根因是并行 CE237 每帧
+    `150 Show` 重画 slot 2000，把 `breath.elapsed` 清零。回归 `m19_picture_motion.rs`。
+  * **#7 黑屏时顶栏行动力条消失**：`hud_action_points()` 的「slot −1 活着就整条不画」
+    改成几何判定 `hud_top_band_covered()`（`HUD_TOP_BAND_HEIGHT = 36`，覆盖槽位 `[-1, 9000]`）。
+    零售黑幕 `cg/blackscreen.jpg` 画在 (0,36)，**在顶栏下方**，本来就不该遮顶栏。
+    slot 9000 不是死代码（`Map003.mps` 整屏遮挡），按同一几何规则处理。
+  * **#8 转场无渐变**：`Picture` 新增 `fade_from` / `fade_start`——fade 是从**命令到达时
+    屏幕上的 alpha** 走到目标 alpha 的斜坡（Draw 从透明起步，Move 从当前 alpha 起步，
+    同一条斜坡既淡入也淡出）。原来 `Picture::new()` 默认 opacity=255，使
+    `150 Move (-1, 255, fade=30)` 变成 255→255，第 0 帧瞬黑。回归 `m19_picture_motion.rs`（14 条）。
+  * **E 本地时钟**：`wolf-game` 新增 `Clock::{System,Fixed}` + `install_local_clock` 钩子，
+    宿主（`wolf-cli` / `wolf-gdext`）调 `GetLocalTime` 装进去；`--clock YYYY-MM-DD[THH:MM:SS]`
+    可钉住时钟，`m14_visual_regression` 每个场景跑在 `PINNED_CLOCK` 上。回归 `m20_clock.rs`。
+  * **F 读档缺 `.mps`**：新增 `map_data_path()`，`resume_loaded_map()` 统一补后缀
+    （`SysDatabase` 类型 0 按带后缀的路径索引背景）。回归 `m23_map_path.rs`。
+  * **三条裁定补回归**（`m24_live_play_rulings.rs`）：BAD/GOOD 外框同高同顶边（8 px）；
+    侧拉栏**拉出与收回都有位移动画**——逐帧采样 x，两侧都必须出现中间位置，
+    任一侧瞬移就红（拉出 20 帧、收回 10 帧，与零售一致）。
+  * **#6 文档口径订正**：`docs/M3_STRING_DECODE.md` 里那条启发式决定的 98 个 unique 串
+    改写为「**wolf 引擎通用的日文标签**（引擎自带数据库列名）」，不是本作画面上的日文正文。
+  * **m14 基线**：`saveui` non-black `576_221` → `576_228`。存档格会把每个槽位的存档摘要
+    画出来，像素数跟着 `work/Data/Save` 走；旧数字录于玩家存档占位时。现在出厂存档归位，
+    并用 FNV-1a 指纹 `0x752b_4235_063a_4721` 守住夹具；画面结构数字
+    （25 pictures / 27728 quads / 13 text pics / 54 glyphs / 21 atlas / 9 peak coroutines）未动。
+  * **验证**：`cargo test -q --workspace --no-fail-fast`（绝对路径 `WOLF_DATA_ROOT`）
+    **8 红、0 新增**（choice×3 / db×2 / textpic×1 / m18 `hidden_and_transparent...` /
+    m3_manual_rules `late_night_bedtime...`，全是长期基线）；本轮新增回归 **32 条**
+    （m19_balloon_ui 3、m19_picture_motion 14、m20_clock 3、m21_cursor_hover 4、
+    m22_raid_cleanup 5、m23_map_path 1、m24_live_play_rulings 2）；
+    `wolf-cli verify` **PASS 64 / 1 SKIP**。

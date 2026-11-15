@@ -6,6 +6,7 @@
 //! parser change moves one of them, the change is a bug until proven otherwise.
 
 mod hotkeys;
+mod localclock;
 mod play;
 
 /// `--audio` turns on real audio output for every command that builds a [`Game`] (M4).
@@ -13,6 +14,12 @@ mod play;
 /// `capture --map`, `dump` and `play` all honour it without threading an argument through
 /// each signature.
 pub(crate) static AUDIO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The wall clock a `--clock` run is pinned to.
+///
+/// The retail engine reads the *local* time, so a regression run whose frame
+/// count depends on the day or the hour has to pin it; see `wolf_game::Clock`.
+pub(crate) static CLOCK: std::sync::OnceLock<wolf_game::LocalDateTime> = std::sync::OnceLock::new();
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -26,7 +33,7 @@ use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
 use wolf_game::atlas::{Atlas, SpriteQuad, TextQuad};
 use wolf_game::db::Container;
-use wolf_game::{choice, Game};
+use wolf_game::{choice, Clock, Game, LocalDateTime};
 use wolf_render::{Renderer, ScaleMode, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
     ChoiceReply, DbOp, DbValue, Host, InstanceId, LogLevel, PictureCmd, PrecompileStats, Program,
@@ -76,6 +83,9 @@ impl Check {
 }
 
 fn main() -> ExitCode {
+    // The retail engine reads the *local* wall clock; the game layer is pure
+    // Rust, so the host hands it a reader before any game is built.
+    localclock::install();
     let mut args = std::env::args().skip(1);
     let mut root: Option<PathBuf> = None;
     let mut command: Option<String> = None;
@@ -325,6 +335,18 @@ fn main() -> ExitCode {
                 }
             }
             "--fullscreen" => fullscreen = true,
+            "--clock" => {
+                let value = args.next().unwrap_or_default();
+                match parse_clock(&value) {
+                    Ok(stamp) => {
+                        let _ = CLOCK.set(stamp);
+                    }
+                    Err(err) => {
+                        eprintln!("{err}");
+                        return ExitCode::from(2);
+                    }
+                }
+            }
             "--debug" => debug_overlay = true,
             "--stats" => stats_overlay = true,
             "--hotkeys" => {
@@ -708,6 +730,9 @@ fn print_help() {
     println!("                      F9 cycles the mode at runtime.");
     println!("    --fullscreen      Start 'play' borderless-fullscreen; F11 toggles it.");
     println!("    --debug           Start 'play' with the F3 debug overlay visible.");
+    println!("    --clock <STAMP>   Pin the wall clock: YYYY-MM-DD[THH:MM:SS], local time.");
+    println!("                      The retail engine reads the local clock, so a regression");
+    println!("                      run that depends on the day or the hour pins it here.");
     println!("    --debug-var <A,..> Variables the overlay lists, by flat slot or magic address");
     println!("                      (implies --debug when non-empty; F3 toggles the overlay).");
     println!(
@@ -816,6 +841,53 @@ fn parse_slot_val(value: &str) -> Option<(usize, i32)> {
 fn parse_container_type(value: &str) -> Option<(String, i32)> {
     let (container, db_type) = value.split_once(':')?;
     Some((container.trim().to_owned(), db_type.trim().parse().ok()?))
+}
+
+/// Parses the timestamp `--clock` takes: `YYYY-MM-DD`, optionally followed by
+/// `THH:MM:SS` (a space works as the separator too).
+///
+/// The stamp is *local* time, the way the retail engine reads the wall clock.
+fn parse_clock(value: &str) -> Result<LocalDateTime, String> {
+    let bad = || format!("bad clock '{value}': expected YYYY-MM-DD[THH:MM:SS]");
+    let (date, time) = match value.split_once(['T', ' ']) {
+        Some((date, time)) => (date, time),
+        None => (value, ""),
+    };
+    let mut date_parts = date.split('-');
+    let mut next = || -> Result<i32, String> {
+        date_parts
+            .next()
+            .and_then(|part| part.parse::<i32>().ok())
+            .ok_or_else(bad)
+    };
+    let year = next()?;
+    let month = next()?;
+    let day = next()?;
+
+    let (mut hour, mut minute, mut second) = (0, 0, 0);
+    if !time.is_empty() {
+        let mut time_parts = time.split(':');
+        let mut next = || -> Result<i32, String> {
+            time_parts
+                .next()
+                .and_then(|part| part.parse::<i32>().ok())
+                .ok_or_else(bad)
+        };
+        hour = next()?;
+        minute = next()?;
+        second = next()?;
+    }
+    Ok(LocalDateTime::fixed(year, month, day, hour, minute, second))
+}
+
+/// Pins the game clock when `--clock` asked for it.
+///
+/// Without the flag the game reads the host's local wall clock, which is what
+/// the retail engine does.
+pub(crate) fn apply_clock(game: &mut Game) {
+    if let Some(stamp) = CLOCK.get() {
+        game.set_clock(Clock::Fixed(*stamp));
+    }
 }
 
 fn default_root() -> PathBuf {
@@ -3970,6 +4042,7 @@ fn run_capture(
             return ExitCode::FAILURE;
         }
     };
+    apply_clock(&mut game);
     if AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
         game.enable_audio();
     }
@@ -4361,6 +4434,7 @@ fn run_capture_map(
             return ExitCode::FAILURE;
         }
     };
+    apply_clock(&mut game);
     if AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
         game.enable_audio();
     }

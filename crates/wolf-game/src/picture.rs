@@ -79,6 +79,36 @@
 //! colour-effect clock; the host calls both once per frame. A finished slide is dropped and the
 //! picture then draws exactly the fields the command asked for.
 //!
+//! # Raw argument 2 is the fade length, and a move fades the alpha
+//!
+//! The long form of `150` puts its fade length in raw argument 2, the slot the host reads as
+//! `field::FADE_IN`. A DRAW uses it as a fade-IN: the picture starts transparent and the ramp
+//! walks up to its own opacity over that many frames. That is the boot chain's splash chain -
+//! the retail disclaimer frame is 63/255 of the source art at age 5 of a 20 frame fade, and
+//! 5/20 * 255 = 63.75.
+//!
+//! A MOVE uses the same field, and because the ramp starts at the alpha that was on screen when
+//! the command arrived, one ramp fades a picture IN and OUT. The retail black screen is the
+//! proof: common event 227 pc23 is `150 [1, -1, 30, 0, 0, 1, 255, 0, 36, 100, 0]` - a move of
+//! the whole-screen layer to opacity 255 with a fade of 30 frames - and pc24 is a `180` wait of
+//! exactly 30 frames. Common event 249 pc21 moves the same slot back to opacity 0 with the
+//! same fade of 30. A move of 30 frames followed by a wait of 30 frames is a fade to black and
+//! a fade back; a host that assigns the opacity outright shows an instant cut instead.
+//!
+//! The fade lengths of the 927 `150 Move` instructions of the shipped common events
+//! (`work/Data/BasicData/CommonEvent.dat`) group as 30 (x195), 100 (x190), 5 (x146), 0 (x101),
+//! 50 (x85), 60 (x34), 20 (x26), 80 (x19), 2 (x18), 4 (x14), 150 (x13), 7 (x13), 3 (x11),
+//! 10 (x6), 40 (x6), 120 (x5), 8 (x3), 140 (x2), 180 (x2), 75 (x2), 1 (x1) and 70 (x1), plus
+//! 34 instructions whose fade is a self variable the editor resolves at run time. 178 of the
+//! 195 thirty frame moves land on slot -1, the layer the black screen lives on, and every one
+//! of them is paired with an opacity of 0 or 255.
+//!
+//! The fade and the slide are two different clocks: raw argument 2 is the fade and the
+//! animation tail is the slide. Common event 63 proves they are not the same field - pc93
+//! parks the message window with a fade of 5 and no tail, so it teleports, and pc94 repeats
+//! the command with a `3` appended, so it slides in over three frames while it fades over
+//! five.
+//!
 //! # Negative numbers are fixed-screen layers
 //!
 //! Picture numbers below zero are the screen-fixed pictures: their x/y are not affected by
@@ -771,8 +801,25 @@ pub struct Picture {
     pub anchor: u8,
     /// Kind-specific trailing arguments, kept verbatim for the animation layer.
     pub extras: Vec<i32>,
-    /// Fade-in length in frames (0 = instant).
+    /// Fade length in frames (0 = instant).
+    ///
+    /// This is raw argument 2 of the `150` command, the field the editor calls the
+    /// fade time. A draw fades the picture in from transparent over it; a move
+    /// ramps the alpha from whatever is on screen towards the new opacity, so the
+    /// same field fades a picture IN and OUT.
     pub fade: u32,
+    /// The alpha the fade ramp starts from, 0..=255.
+    ///
+    /// A draw starts at 0 because the picture is not on screen yet; a move starts
+    /// at the alpha the picture had when the command arrived, which is what lets
+    /// one ramp both fade in and fade out.
+    pub fade_from: i32,
+    /// The picture age at which the fade ramp started.
+    ///
+    /// The ramp is measured from the frame the command was applied, not from the
+    /// picture's birth: a move on a picture that has been on screen for a minute
+    /// still has to fade over its own fade length.
+    pub fade_start: u32,
     /// Frames since the picture first appeared, for animation timing.
     pub age: u32,
     /// Base per-channel brightness in percent, from the 150 colour slots.
@@ -860,6 +907,8 @@ impl Picture {
             anchor: ANCHOR_TOP_LEFT,
             extras: Vec::new(),
             fade: 0,
+            fade_from: 0,
+            fade_start: 0,
             age: 0,
             tone: TONE_NEUTRAL,
             effects: Vec::new(),
@@ -954,28 +1003,39 @@ impl Picture {
             transition.age,
             transition.duration,
         );
-        self.opacity = blend(
-            transition.from.opacity,
-            transition.to.opacity,
-            transition.age,
-            transition.duration,
-        );
+        // A fade ramp owns the alpha while it runs: it walks from the alpha that was
+        // on screen when the command was applied towards `self.opacity`, so writing
+        // an interpolated opacity here as well would move the ramp's own target and
+        // the two would fight over the same field.
+        if self.fade == 0 {
+            self.opacity = blend(
+                transition.from.opacity,
+                transition.to.opacity,
+                transition.age,
+                transition.duration,
+            );
+        }
         self.transition = Some(transition);
     }
 
     /// Opacity as 0.0..=1.0, clamped the way the renderer wants it.
     ///
-    /// A picture with a fade-in ramp is multiplied by its progress through that ramp, which
-    /// is how the boot chain's splashes appear: the retail disclaimer frame is 63/255 of the
-    /// source art at age 5 of a 20-frame fade, and 5/20 * 255 = 63.75.
+    /// A picture with a fade ramp walks from the alpha it started at towards its own
+    /// opacity over the ramp length, which is how the boot chain's splashes appear:
+    /// the retail disclaimer frame is 63/255 of the source art at age 5 of a 20-frame
+    /// fade, and 5/20 * 255 = 63.75. A draw starts the ramp at 0 (the picture is not
+    /// on screen yet) and a move starts it at the alpha that was on screen when the
+    /// command arrived, so the same ramp fades a picture in AND out.
     #[must_use]
     pub fn alpha(&self) -> f32 {
-        let opacity = (self.opacity.clamp(0, 255) as f32) / 255.0;
+        let target = self.opacity.clamp(0, 255) as f32;
         if self.fade == 0 {
-            return opacity;
+            return target / 255.0;
         }
-        let progress = (self.age as f32 / self.fade as f32).min(1.0);
-        opacity * progress
+        let elapsed = self.age.saturating_sub(self.fade_start);
+        let progress = (elapsed as f32 / self.fade as f32).min(1.0);
+        let from = self.fade_from.clamp(0, 255) as f32;
+        ((from + (target - from) * progress) / 255.0).clamp(0.0, 1.0)
     }
     /// The per-channel draw brightness this picture currently asks for, 0..=255.
     ///
@@ -1271,6 +1331,33 @@ impl Screen {
                 } else {
                     None
                 };
+                // The running animation of a slot that already shows this graphic.
+                //
+                // A redraw of the SAME graphic in the SAME place is a refresh, not a
+                // replacement: the slot keeps its breath, zoom, shake and pattern
+                // animation instead of restarting them from phase zero. The sleep
+                // status icon needs this - common event 237 is a parallel event
+                // (run=2) that re-runs every frame while the condition
+                // `Var(2000100) >= 1` holds, and every frame it redraws
+                // `Picture/sleeping_staus.png` into slot 2000 and then re-sends the
+                // same `290` type 7 expansion. Without the carry-over the icon's
+                // breathing animation would be rebuilt at phase zero every frame
+                // and never grow. The sprite sheet cannot make up for it: its six
+                // cells are the six sleep STATES (泥眠 / 熟睡 / 睡眠 / 半覚 / 寝惚 /
+                // 覚醒, one 43x43 disc each) that a case on the sleep variable
+                // picks, not six frames of one pose, so the expansion is the badge's
+                // only per-frame animation.
+                //
+                // The carry-over is deliberately narrow: same graphic AND same
+                // position. A redraw that moves the picture is a placement change
+                // and keeps the tween semantics instead.
+                let carried = self.pictures.get(&cmd.number).and_then(|old| {
+                    if old.kind == kind && old.file == cmd.file && old.text == cmd.text {
+                        Some((old.x, old.y, old.breath, old.zoom, old.pattern, old.shake))
+                    } else {
+                        None
+                    }
+                });
                 let mut picture = Picture::new(cmd.number);
                 picture.owner_event = cmd.owner_event;
                 picture.kind = kind;
@@ -1279,6 +1366,20 @@ impl Screen {
                 picture.anchor = cmd.anchor;
                 merge_args(&mut picture, &args, cmd.scale_mode);
                 align_status_meter_frame(&mut picture);
+                if let Some((old_x, old_y, breath, zoom, pattern, shake)) = carried {
+                    if (picture.x, picture.y) == (old_x, old_y) {
+                        picture.breath = breath;
+                        picture.zoom = zoom;
+                        picture.shake = shake;
+                        // A pattern animation hands the picture back to the cell the
+                        // `150` command asked for when it finishes, so the inherited
+                        // one has to name the cell this redraw asked for.
+                        picture.pattern = pattern.map(|mut fx| {
+                            fx.base = picture.pattern_index as i32;
+                            fx
+                        });
+                    }
+                }
                 if let Some(from) = from {
                     // The slot already had its graphic, so it neither fades in again
                     // nor loses its alpha: the retail writer slides it instead.
@@ -1325,6 +1426,7 @@ impl Screen {
                     list
                 };
                 for num in numbers {
+                    let existed = self.pictures.contains_key(&num);
                     let picture = self.pictures.entry(num).or_insert_with(|| {
                         let mut fresh = Picture::new(num);
                         fresh.kind = PictureKind::from_code(cmd.kind);
@@ -1357,8 +1459,24 @@ impl Screen {
                     // -1000000 sentinels: those mean "leave this field alone", and the origin of an
                     // unchanged field is its current value, which interpolates to itself.
                     let origin = Pose::of(picture);
+                    // The alpha the move's ramp starts from: what is on screen right
+                    // now. A slot that does not exist yet has no alpha at all, so it
+                    // fades in from transparent - the same reading a draw gets.
+                    let start_alpha = if existed {
+                        (picture.alpha() * 255.0).round() as i32
+                    } else {
+                        0
+                    };
                     let args = picture_args(cmd, origin.x, origin.y);
                     merge_args(picture, &args, cmd.scale_mode);
+                    // Raw argument 2 is the move's fade length. The ramp REPLACES the
+                    // draw's fade-in ramp instead of stacking on top of it: the alpha
+                    // walks from `start_alpha` to the picture's new opacity over the
+                    // fade length, so one ramp fades a picture in AND out.
+                    if take(&args, field::FADE_IN).is_some() {
+                        picture.fade_from = start_alpha.clamp(0, 255);
+                        picture.fade_start = picture.age;
+                    }
                     // With a usable duration the merged fields are only the TARGET: rewind them to
                     // where the picture already is and let `advance` walk there. Without one the
                     // merged fields are final, i.e. the teleport every duration-less move expects.
@@ -1480,7 +1598,43 @@ impl Screen {
                     picture.breath = if v1 == 0 && v2 == 0 {
                         None
                     } else {
-                        Some(Breath::new((v1, v2), duration, v3))
+                        let next = Breath::new((v1, v2), duration, v3);
+                        // Re-sending the SAME expansion keeps its phase.
+                        //
+                        // The `290` type 7 is an assignment, so a second identical
+                        // instruction would restart the cycle at phase zero. Common
+                        // event 237 - the parallel sleep-status event - re-sends the
+                        // very same `290 [112, 70, 2000, 2000, 5, 5, 180]` every
+                        // frame while the player sleeps, so with a plain assignment
+                        // the expansion would sit at phase zero forever and the
+                        // sleeping icon would never pulse.
+                        //
+                        // The expansion is the badge's ONLY per-frame animation:
+                        // `Picture/sleeping_staus.png` is 300x50, six 50x50 cells that
+                        // are the six sleep states (泥眠 / 熟睡 / 睡眠 / 半覚 / 寝惚 /
+                        // 覚醒, each a 43x43 disc), not six frames of one pose. The
+                        // retail side is NOT confirmed: the badge measures 43-45
+                        // logical pixels in `ptr_sc/恶作剧_BAD&GOOD条特写.png`, which
+                        // is exactly the asset's own ink, so a still frame cannot
+                        // show a five percent pulse.
+                        //
+                        // The carry-over is narrow on purpose: it only applies when
+                        // the amplitude, the excursion length and the rest are all
+                        // the same, so an instruction that asks for a DIFFERENT
+                        // expansion still starts a fresh cycle. Only type 7 is
+                        // touched: the flash, the blink, the colour correction, the
+                        // shift, the shake, the zoom and the pattern animations keep
+                        // the assignment semantics they always had.
+                        match picture.breath {
+                            Some(old)
+                                if old.amp == next.amp
+                                    && old.period == next.period
+                                    && old.rest == next.rest =>
+                            {
+                                Some(old)
+                            }
+                            _ => Some(next),
+                        }
                     };
                 }
                 _ => {

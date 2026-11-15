@@ -182,7 +182,12 @@ fn build(options: &[String], cursor: usize, x: f32, y: f32, font_px: f32) -> Cho
         .or_else(|| lines.first().copied());
     let cursor_h = (pitch + 1.0).max(font_px + 4.0);
     let cursor_rect = match row {
-        Some(row) => [rect[0] + ROW_TOP, row[1] - 2.0, rect[2] - ROW_TOP * 2.0, cursor_h],
+        Some(row) => [
+            rect[0] + ROW_TOP,
+            row[1] - 2.0,
+            rect[2] - ROW_TOP * 2.0,
+            cursor_h,
+        ],
         None => [rect[0], rect[1], rect[2], pitch],
     };
     ChoiceLayout {

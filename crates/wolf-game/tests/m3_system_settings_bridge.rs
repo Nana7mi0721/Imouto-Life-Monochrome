@@ -11,7 +11,7 @@
 
 use std::path::PathBuf;
 
-use wolf_game::Game;
+use wolf_game::{Clock, Game, LocalDateTime};
 use wolf_save::SaveFile;
 
 fn data_root() -> PathBuf {
@@ -111,7 +111,13 @@ impl Drop for SystemSaveGuard {
 
 fn open_game() -> Option<Game> {
     match Game::new(data_root()) {
-        Ok(game) => Some(game),
+        Ok(mut game) => {
+            // A pinned clock keeps the restart-equivalence comparison
+            // deterministic: the wall clock would otherwise tick between the
+            // two boots and move `Sys77..Sys82` under the comparison.
+            game.set_clock(Clock::Fixed(LocalDateTime::fixed(2026, 6, 15, 12, 34, 56)));
+            Some(game)
+        }
         Err(err) => {
             eprintln!(
                 "skipping: cannot open data root {}: {err}",

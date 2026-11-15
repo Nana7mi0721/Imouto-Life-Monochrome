@@ -41,6 +41,25 @@ const SCREEN_W: u32 = 1024;
 const SCREEN_H: u32 = 576;
 const TOTAL_PIXELS: u64 = (SCREEN_W as u64) * (SCREEN_H as u64);
 
+/// The wall clock every scene runs against.
+///
+/// The retail engine reads the *local* time through `GetLocalTime`, and the game
+/// copies it into `Sys77..Sys80`. A scene that reaches a date or hour branch would
+/// therefore drift with the wall clock, so the harness pins the clock: every capture
+/// runs with `--clock`, which freezes the reading the game sees. The stamp is local
+/// time, exactly what the retail engine reads.
+const PINNED_CLOCK: &str = "2026-06-15T12:34:56";
+
+/// The FNV-1a fingerprint of the shipping `Save/SaveData01.sav`.
+///
+/// The baselines were recorded against the shipping 50-picture bedroom state. A
+/// player save overwrites the same file, and the overwrite keeps the event count
+/// the old guard looked at, so the count alone cannot tell the two apart - the
+/// player's save runs one fewer parallel event and the frame shifts. The
+/// fingerprint does: any byte that differs means the fixture drifted, and the
+/// scene skips instead of reporting a renderer regression that is not one.
+const SHIPPING_SAVE_FINGERPRINT: u64 = 0x752b_4235_063a_4721;
+
 /// Offscreen wgpu capture is single-instance; scenes must not run in parallel.
 static CAPTURE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -166,6 +185,16 @@ const BASELINES: [Baseline; 5] = [
         // weight with 13 text pictures / 54 glyphs, and the real `<TRI-RIGHT>` arrow is
         // visible (21 atlas images / 27728 textured quads). The non-black count moved
         // by the cursor-blink phase; CE216 adds one coroutine.
+        //
+        // Re-recorded 2026-11-15 from 576_221 to 576_228. The save grid prints the
+        // stored preview of every slot, so the pixel count follows the save files in
+        // `work/Data/Save`; the old number was recorded while a player's save sat
+        // in that folder. The shipping save is back in place and the fixture is
+        // guarded by its fingerprint now (`shipping_save_fixture`), so the count is
+        // stable again. This is a fixture change, not a rendering regression: the
+        // picture, quad, atlas and text metrics of the scene did not move, and the
+        // clock no longer moves the frame either (every scene runs against
+        // `PINNED_CLOCK`).
         name: "saveui",
         args: &["--map", "SampleMapA", "--event", "5", "--frames", "40"],
         load_save: false,
@@ -183,7 +212,7 @@ const BASELINES: [Baseline; 5] = [
         text_items: 13,
         text_glyphs: 54,
         text_lines: 13,
-        nonblack: 576_221,
+        nonblack: 576_228,
         messages: 0,
         choices: 0,
     },
@@ -311,6 +340,11 @@ fn save_fixture() -> PathBuf {
 /// which changes the whole frame; that is fixture drift, not a renderer change, so
 /// the save-dependent scenes skip instead of failing. The save round-trip tests are
 /// the ones that must catch a real format/load regression.
+///
+/// The event count is not enough on its own: a player save keeps 50 saved events
+/// but drops one of the parallel events the shipping state runs, so the frame shifts
+/// while the count still matches. The fingerprint of the shipping file catches
+/// that too.
 fn shipping_save_fixture() -> bool {
     let Ok(bytes) = std::fs::read(save_fixture()) else {
         return false;
@@ -318,7 +352,20 @@ fn shipping_save_fixture() -> bool {
     let Ok(save) = wolf_save::SaveFile::parse(&bytes) else {
         return false;
     };
-    save.part5.events.len() == 50
+    save.part5.events.len() == 50 && fnv1a64(&bytes) == SHIPPING_SAVE_FINGERPRINT
+}
+
+/// The 64-bit FNV-1a fingerprint of a byte string.
+///
+/// A dependency-free content hash: enough to notice that a fixture file was
+/// overwritten, which is the only thing the guard needs it for.
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
 
 /// True when the save grid has exactly the two shipping slots.
@@ -420,6 +467,7 @@ fn capture_scene(baseline: &'static Baseline) -> Option<Metrics> {
     // every text metric; pin the font source so these fixtures stay independent.
     command.env_remove("WOLF_GAME_DIR");
     command.arg("--root").arg(&root);
+    command.arg("--clock").arg(PINNED_CLOCK);
     command.arg("capture");
     if baseline.load_save {
         command.arg("--load-save").arg(save_fixture());

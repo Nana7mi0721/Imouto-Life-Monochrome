@@ -168,6 +168,7 @@ pub fn run(
             return std::process::ExitCode::FAILURE;
         }
     };
+    crate::apply_clock(&mut game);
     if crate::AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
         game.enable_audio();
     }
@@ -505,6 +506,7 @@ impl App {
                 return;
             }
         };
+        crate::apply_clock(&mut game);
         if crate::AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
             game.enable_audio();
         }

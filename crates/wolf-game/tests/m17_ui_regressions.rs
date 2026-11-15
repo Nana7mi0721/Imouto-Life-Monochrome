@@ -160,22 +160,24 @@ fn balloon_face_stays_anchored_when_the_frame_grows() {
     let (_, one_line_frame, one_line_face) =
         one_line.expect("event 1 never exposed the balloon face");
     // In retail WOLF RPG (ptr_sc/卧室_点击妹妹_首句话.png), when the sister speaks
-    // with face avatar (36002), the dialogue balloon expands to 136 px (from y=428 to y=564).
-    // The face avatar sits cleanly inside at y = 444..563 (bottom at 563.0, 13 px above the
-    // 576 canvas bottom), keeping her head 10 px below the nameplate (bottom at 434.0).
+    // with face avatar (36002), the dialogue balloon expands to 107 px: the retail
+    // wash runs from physical y 732 to 892, i.e. logical 459.3 .. 566.0, and its
+    // bottom edge is script owned. The face avatar sits cleanly inside at
+    // y = 468..558 (its bottom 8 px above the balloon's bottom edge at 566), keeping
+    // her hair tip 9 px below the balloon's top edge and below the nameplate
+    // (bottom at 462).
     assert_eq!(
-        one_line_frame[3],
-        136.0,
-        "the balloon frame expands to 136 px when a face avatar is present: {one_line_frame:?}"
+        one_line_frame[3], 107.0,
+        "the balloon frame expands to 107 px when a face avatar is present: {one_line_frame:?}"
     );
     assert_eq!(
         one_line_face[1] + one_line_face[3],
-        563.0,
-        "the face bottom sits at 563.0 inside the expanded balloon"
+        558.0,
+        "the face bottom sits at 558.0 inside the expanded balloon"
     );
     assert!(
-        one_line_face[1] >= 440.0,
-        "the head sits cleanly below the nameplate bottom at 434: {}",
+        one_line_face[1] >= 462.0,
+        "the head sits cleanly below the nameplate bottom at 462: {}",
         one_line_face[1]
     );
 

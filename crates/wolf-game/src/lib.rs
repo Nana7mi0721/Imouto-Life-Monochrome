@@ -35,6 +35,7 @@ pub mod mods;
 pub mod overlay;
 pub mod patch;
 pub mod picture;
+pub mod raid_cleanup;
 pub mod savegame;
 pub mod settings;
 pub mod sysgraphic;
@@ -51,7 +52,8 @@ pub use atlas::{Atlas, AtlasRect, SpriteQuad, TextQuad, ATLAS_SIZE};
 pub use choice::{layout as choice_layout, ChoiceLayout};
 pub use fontmetrics::FontMetrics;
 pub use game::{
-    layered_data_path, Choices, FrameOutcome, Game, GameError, GameStats, Message, TITLE_EVENT,
+    install_local_clock, layered_data_path, Choices, Clock, FrameOutcome, Game, GameError,
+    GameStats, LocalDateTime, Message, TITLE_EVENT,
 };
 pub use map_runtime::{MapRuntime, PageSlot, Trigger};
 pub use overlay::{OverlayLayer, ScreenOverlay};

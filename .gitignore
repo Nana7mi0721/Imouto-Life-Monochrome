@@ -20,3 +20,16 @@
 /godot/bin/*.dll
 /godot/bin/*.pdb
 /godot/.import/
+
+# Windows reserves the name `nul`, so a stray `> nul` redirect in a shell
+# leaves an empty file that cannot even be deleted. Keep it out of the repo.
+/nul
+
+# The player's own captures and recordings live in the working tree; they are
+# evidence for the reports, not repository content.
+/ptr_sc/
+/tools/debug/
+/tools/.rustc_info.json
+/原版游戏截图.zip
+/重构游戏问题截图.zip
+/重构游戏问题截图/

@@ -104,6 +104,14 @@ pub struct AutoEvents {
     /// becomes false, the coroutine is stopped and removed.
     running: BTreeMap<u32, InstanceId>,
     enabled: bool,
+    /// Whether a raid scene common event was alive on the previous pass.
+    ///
+    /// The raid HUD teardown needs the *edge* of the raid scene, not its level:
+    /// the meter events that paint the bars are parallel events that outlive
+    /// the scene on purpose, so the cleanup has to fire exactly once, on the
+    /// frame where the scene stops running. The scheduler is the only per-frame
+    /// record of which common events are alive, so it keeps the flag.
+    raid_scene_active: bool,
     /// Whether the title menu is actually up. The title menu renderer (event 43) has a
     /// script condition (global v0 == 0) that can also hold in synthetic states where v0
     /// was never set; gating it here keeps the title buttons from painting over a scene.
@@ -144,6 +152,7 @@ impl AutoEvents {
             latched: BTreeMap::new(),
             running: BTreeMap::new(),
             enabled: true,
+            raid_scene_active: false,
             title_menu_active: false,
         }
     }
@@ -209,7 +218,22 @@ impl AutoEvents {
     pub fn reset(&mut self) {
         self.latched.clear();
         self.running.clear();
+        self.raid_scene_active = false;
         self.title_menu_active = false;
+    }
+
+    /// Whether a raid scene common event was running on the previous pass.
+    ///
+    /// See [`crate::raid_cleanup`] for what the raid HUD is and why the edge of
+    /// the scene matters.
+    #[must_use]
+    pub fn raid_scene_active(&self) -> bool {
+        self.raid_scene_active
+    }
+
+    /// Records whether a raid scene common event is running.
+    pub fn set_raid_scene_active(&mut self, active: bool) {
+        self.raid_scene_active = active;
     }
 
     /// Restarts one owned event from its first instruction.
