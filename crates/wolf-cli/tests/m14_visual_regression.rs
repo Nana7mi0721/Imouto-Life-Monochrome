@@ -24,6 +24,12 @@
 //! (see [`SIDE_PANEL_PARKED_ALPHA`] in wolf-game), even though T18 stopped the
 //! per-frame CE238/CE239 repaint that used to produce it as a side effect.
 //!
+//! 2026-11-15 (pointer): the two map scenes carry one more picture, quad and
+//! atlas image, and a few more non-black pixels. The engine paints the system
+//! pointer itself (slot 2998, `CharaChip/hand3.png`) because a Godot window
+//! only offers the system arrow; the capture harness leaves the mouse at the
+//! origin, so the hand sits in the top-left corner of the frame.
+//!
 //! Fixtures live under work/Data (gitignored). When the data root or the save
 //! fixture is missing, the affected scene prints a skip notice and returns, matching
 //! the rest of the suite: the default cargo test run must stay green without data.
@@ -235,8 +241,13 @@ const BASELINES: [Baseline; 5] = [
         frames: 240,
         // +1 for the restarting CE270 display pass (see the title scene).
         peak_coroutines: 8,
+        // The engine's own pointer (slot 2998, `CharaChip/hand3.png`), which the
+        // retail shows over the map as the system pointer and this port paints
+        // itself, rides in its own screen: it adds a quad and an atlas image
+        // but no game picture. The capture harness leaves the mouse at the
+        // origin, so the hand sits in the top-left corner.
         pictures_live: 50,
-        textured_quads: 23,
+        textured_quads: 24,
         // T18 splits CE242's `行动力 current/max` picture (slot 230) into a label run
         // at x=560 and a value run at x=668 so the host can draw the gauge between
         // them, which adds one text picture, one item and one line versus the retail
@@ -245,11 +256,11 @@ const BASELINES: [Baseline; 5] = [
         text_pictures: 24,
         choice_open: true,
         choice_options: 5,
-        atlas_images: 7,
+        atlas_images: 8,
         text_items: 23,
         text_glyphs: 76,
         text_lines: 23,
-        nonblack: 533_187,
+        nonblack: 533_373,
         messages: 0,
         choices: 1,
     },
@@ -265,18 +276,19 @@ const BASELINES: [Baseline; 5] = [
         // +1 for the restarting CE270 display pass (see the title scene), and +1 for
         // CE216, which is in ENGINE_RESTART and likewise renders no pixels.
         peak_coroutines: 8,
+        // The engine's own pointer adds a quad; see the day_command scene.
         pictures_live: 50,
-        textured_quads: 5,
+        textured_quads: 6,
         // Same slot-230 split as the day_command scene: one extra text picture,
         // item and line for the action-point label/value runs.
         text_pictures: 15,
         choice_open: false,
         choice_options: 0,
-        atlas_images: 5,
+        atlas_images: 6,
         text_items: 14,
         text_glyphs: 44,
         text_lines: 14,
-        nonblack: 554_890,
+        nonblack: 555_076,
         messages: 0,
         choices: 0,
     },

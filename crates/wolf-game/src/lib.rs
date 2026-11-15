@@ -36,6 +36,7 @@ pub mod mods;
 pub mod overlay;
 pub mod patch;
 pub mod picture;
+pub mod pointer;
 pub mod raid_cleanup;
 pub mod savegame;
 pub mod settings;

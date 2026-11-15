@@ -1,19 +1,29 @@
-//! The mouse-follow cursor (`SampleMapA.mps` event 14) and the switch that
-//! turns it on (`var 120`).
+//! The two pointers the retail shows, and the switches that drive them.
 //!
-//! The retail engine does not draw a mouse pointer of its own. The game
-//! script draws one: map event 14 ("マウス追従") paints `CharaChip/hand3.png`
-//! into picture slot 2999 at the mouse coordinates every frame, and the engine
-//! hides the system arrow while that slot is alive. The Godot front end already
-//! mirrors that (`GameView.gd` hides the hardware cursor when sprite 2999 is
-//! on screen), so the pointer only exists when event 14 runs.
+//! * The **game pointer**: map event 14 ("マウス追従") paints
+//!   `CharaChip/hand3.png` into picture slot 2999 at the mouse coordinates
+//!   every frame, and the engine hides the system arrow while that slot is
+//!   alive. The Godot front end mirrors that (`GameView.gd` hides the hardware
+//!   cursor when sprite 2999 is on screen). Event 14 is a parallel page with
+//!   the condition `var 120 == 1`, and that switch is written by two common
+//!   events only:
 //!
-//! Event 14 is a parallel page with the condition `var 120 == 1`. The switch
-//! is written by two common events only:
+//!   - `CE 230` (深夜1) sets `var 120 = 1` - it is called by map event 12
+//!     ("就寝妹", the sister is asleep).
+//!   - `CE 227` (深夜1表示) sets `var 120 = 0`.
 //!
-//! * `CE 230` (深夜1) sets `var 120 = 1` - it is called by map event 12
-//!   ("就寝妹", the sister is asleep).
-//! * `CE 227` (深夜1表示) sets `var 120 = 0`.
+//! * The **system pointer**: the hand the retail shows over every free-play
+//!   scene. It is not a game picture at all - the WOLF engine draws it, and
+//!   the game script decides when it is visible through system variable 74
+//!   ("マウスポインタ表示する?"). `CE 224` (フィールド上処理), the parallel
+//!   event that runs on the field, clears the flag while a field action runs
+//!   and sets it again when the field is free. The retail captures show
+//!   exactly that: a hand in `ptr_sc/卧室1.png` and none in
+//!   `ptr_sc/白天_起床_妹妹对话.png`.
+//!
+//! A Godot window only offers the system arrow, so the engine paints the
+//! second pointer itself (crates/wolf-game/src/pointer.rs) and the front end
+//! hides the arrow while that sprite is on screen.
 //!
 //! The tests below pin the whole chain, because the pointer silently vanishes
 //! when any link of it breaks.
@@ -23,6 +33,7 @@ use std::path::PathBuf;
 use wolf_format::mps::Map;
 use wolf_game::atlas::Atlas;
 use wolf_game::key;
+use wolf_game::pointer::{GAME_POINTER_SLOT, POINTER_HOTSPOT, POINTER_SLOT};
 use wolf_game::Game;
 
 /// Where the pointer sits in the tests.
@@ -182,5 +193,115 @@ fn the_night_event_turns_the_mouse_follow_switch_on() {
     assert!(
         game.screen.get(2999).is_some(),
         "and the pointer must be painted once the switch is on"
+    );
+}
+
+#[test]
+fn the_engine_paints_the_hand_pointer_while_the_game_asks_for_it() {
+    let Some(mut game) = open_bedroom() else {
+        return;
+    };
+    // System variable 74 is "マウスポインタ表示する?"; CE 224 sets it as soon
+    // as the player is on the field.
+    game.vm.vars.set_sys(74, 1);
+    game.mouse = POINTER;
+    for _ in 0..5 {
+        game.frame();
+    }
+    let pointer = game
+        .pointer
+        .get(POINTER_SLOT)
+        .unwrap_or_else(|| panic!("the engine must paint its own pointer"));
+    assert_eq!(pointer.file, CURSOR_FILE, "the pointer art");
+    assert_eq!(
+        (pointer.split, pointer.pattern_index),
+        ((6, 4), 1),
+        "hand3.png is a 6 x 4 sheet and the plain hand is cell 1"
+    );
+    assert_eq!(pointer.anchor, 0, "the cell is placed by its hotspot");
+    assert_eq!(
+        (pointer.x, pointer.y),
+        (
+            POINTER[0] - POINTER_HOTSPOT[0],
+            POINTER[1] - POINTER_HOTSPOT[1]
+        ),
+        "the fingertip sits on the pointer, like the retail's Windows cursor"
+    );
+    let rect = rendered_rect(&mut game, POINTER_SLOT).expect("the pointer is rendered");
+    assert_eq!(
+        rect,
+        [
+            (POINTER[0] - POINTER_HOTSPOT[0]) as f32,
+            (POINTER[1] - POINTER_HOTSPOT[1]) as f32,
+            32.0,
+            32.0
+        ],
+        "the 32 x 32 cell is drawn with its top-left corner on the pointer"
+    );
+}
+
+#[test]
+fn the_pointer_is_gone_while_the_game_hides_it() {
+    let Some(mut game) = open_bedroom() else {
+        return;
+    };
+    // CE 224 clears system variable 74 while a field action runs: the retail
+    // shows no pointer there either (ptr_sc/洗澡_一个人洗_去偷窥_浴室.png).
+    game.vm.vars.set_sys(74, 0);
+    game.mouse = POINTER;
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert!(
+        game.pointer.get(POINTER_SLOT).is_none(),
+        "system variable 74 hides the pointer"
+    );
+}
+
+#[test]
+fn the_game_pointer_replaces_the_engine_pointer() {
+    let Some(mut game) = open_bedroom() else {
+        return;
+    };
+    game.vm.vars.set_sys(74, 1);
+    game.vm.vars.set(120, 1);
+    game.mouse = POINTER;
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert!(
+        game.screen.get(GAME_POINTER_SLOT).is_some(),
+        "the night raid paints its own pointer"
+    );
+    assert!(
+        game.pointer.get(POINTER_SLOT).is_none(),
+        "and the engine's pointer steps aside, so only one pointer is on screen"
+    );
+}
+
+#[test]
+fn the_pointer_follows_the_mouse() {
+    let Some(mut game) = open_bedroom() else {
+        return;
+    };
+    game.vm.vars.set_sys(74, 1);
+    game.mouse = POINTER;
+    for _ in 0..5 {
+        game.frame();
+    }
+    game.mouse = [700, 200];
+    for _ in 0..5 {
+        game.frame();
+    }
+    let rect = rendered_rect(&mut game, POINTER_SLOT).expect("the pointer is still there");
+    assert_eq!(
+        rect,
+        [
+            (700 - POINTER_HOTSPOT[0]) as f32,
+            (200 - POINTER_HOTSPOT[1]) as f32,
+            32.0,
+            32.0
+        ],
+        "the pointer follows the mouse"
     );
 }

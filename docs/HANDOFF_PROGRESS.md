@@ -1371,3 +1371,40 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   `cargo fmt --all --check` 干净；`wolf-cli verify` PASS 64 / 1 SKIP；
   `bash tools/smoke-godot.sh` exit 0（P0 基线 `pictures=4 sprites=4` 不动）。
   * **空间**：删 `target/debug/incremental`（1.8 GB）、`target/release`、`target/ver6`、`work/out/saveprobe`，以及 `target/debug` 下 279 个 `.pdb`（2.6 GB）和本轮 24 个探针脚本/日志；仓库合计 12 GB → **7.0 GB**（`work/Data` 176 MB、`work/out` 816 MB 未动，`work/out/retail_saves/` 与 `work/out/player_saves_2026-11-15/` 保留作证据/备份）。
+
+### 2026-11-15 §二 光标（第二轮）：白天的手型光标是**系统指针**，不是 Picture 2999
+
+* **触发**：用户实机复核后指出「零售白天那张是明显和 hand3 一模一样」，于是对
+  `ptr_sc/` 全 35 张零售截图重新做模板匹配，并回到数据侧重查"谁画手型光标"。
+* **核实结论（改写上一轮）**：零售有**两个**指针。
+  * 白天/日常界面那只手 = **系统指针**（Windows 手型光标位图 = `CharaChip/hand3.png`
+    第 0 格；Windows 报的热点 `(4, 1)` 正好落在该格指尖）。它的可见性由**系统变量
+    74「マウスポインタ表示する？」**决定，全库只有 `CE 224`（フィールド上処理，parallel，
+    条件 `global[1] == 1`）在写：字段动作进行中写 `0`、结束写 `1`。
+  * `Picture 2999`（`SampleMapA` Ev 14「マウス追従」，页面条件 `var120 == 1`）只管
+    **深夜悪作剧**：`var120` 全库只有 `CE 230`（→1）/ `CE 227`（→0）写，图标由 Ev 18
+    「カーソル切り替え」按 `var121` 选（`look.png` 眼睛等）。
+  * **零售存档佐证**：`SaveData01`（第 1 天 19:30 周一）`var120 = 0`、`var121 = 0`，
+    而同一时刻的 `卧室_点击妹妹_首句话.png` 里**有手** → 白天的手不可能是 2999。
+  * 有手/无手的截图分布与 Sys74 规则完全吻合（有手：`卧室1`、`卧室_点击妹妹_首句话`、
+    `对话_妹妹1`、`白天_出门_妹妹对话`、`傍晚_购物`；无手：`白天_起床_妹妹对话`、
+    `洗澡_*`、`中央消息_*`、存档/道具/选项面板）。
+  * 上一轮"零售也是上过床之后才有手型光标"的结论**作废**。
+* **落地（引擎侧，不挂 Godot 硬件光标）**：新增 `crates/wolf-game/src/pointer.rs`。
+  * 引擎自己画系统指针：`CharaChip/hand3.png` 第 0 格（6×4 帧表、cell 1），按热点
+    `(4, 1)` 把**指尖**放在鼠标上（2999 脚本用的是居中锚点，两者刻意不同）。
+  * 可见性**完全跟随 Sys74**，不在引擎里另设开关。
+  * 落点：独立的单槽"屏幕" `Game::pointer`，**不进游戏图集** → 脚本的图片计数与存档
+    文件都不受影响（零售存档没有这条记录）；`picture_quads()` 把它接在最后绘制。
+  * 互斥：脚本画了自己的指针（深夜 2999）时引擎指针让位，屏幕上永远只有一个指针。
+  * 前端 `godot/scripts/GameView.gd`：2998/2999 任一在屏就隐藏系统箭头（沿用原来
+    只管 2999 的规则）→ 不会出现"箭头 + 手"，也不会闪烁。
+  * `ux方案.md` 的"Godot 侧挂硬件自定义光标"仍然**未采用**。
+* **回归与验证**：`m25_cursor_follow` **8 条**（原 4 条 + Sys74 显隐 / 2999 让位 /
+  跟随鼠标 4 条）；`m14_visual_regression` 两个地图场景重录基线（图集 +1、quad +1、
+  非黑像素 +186/+186；**图集图片数不变**，因为指针不进游戏图集）。
+  `cargo test -q --workspace --no-fail-fast` 与长期基线逐条一致、**0 条新增**；
+  `cargo fmt --all --check` 干净；`wolf-cli verify` PASS 64 / 1 SKIP；
+  `bash tools/smoke-godot.sh` exit 0（P0 基线 `pictures=4 sprites=4` 不动）。
+  * **空间**：删 `target/debug/incremental` 与 `work/out` 下 43 个探针产物，
+    `target` 10.9 GB → **9.1 GB**，仓库合计 **11 GB**。

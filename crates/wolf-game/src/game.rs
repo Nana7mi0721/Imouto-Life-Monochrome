@@ -806,6 +806,12 @@ pub struct Game {
     pub vm: Vm,
     /// Live pictures, in WOLF draw order.
     pub screen: Screen,
+    /// The engine's own mouse pointer, in its own one-slot screen.
+    ///
+    /// It is not a game picture: the retail shows it as the *system* pointer,
+    /// so it must not appear in the picture counts the scripts and the save
+    /// files rely on. See [`crate::pointer`].
+    pub pointer: Screen,
     /// Whole-screen colour state from `151 ChangeColor`: a brightness ramp for the map
     /// and screen-layer pictures, plus a fading full-screen colour quad for a flash.
     pub screen_tint: ScreenTint,
@@ -1110,6 +1116,7 @@ impl Game {
         let mut game = Self {
             vm: Vm::new(programs),
             screen: Screen::new(),
+            pointer: Screen::new(),
             screen_tint: ScreenTint::new(),
             screen_transition: ScreenTransition::new(),
             font_metrics: None,
@@ -2243,6 +2250,17 @@ impl Game {
         if !self.balloon_nameplate_active() {
             // Suppress the plate pieces when the speaker name is inactive.
             quads.retain(|quad| !(36_008..=36_012).contains(&quad.number));
+        }
+        // The engine's own pointer rides on top of the scene, like the system
+        // pointer of the retail does. It lives in its own screen, so the game
+        // picture layer (and every count that reads it) stays untouched.
+        if !self.pointer.is_empty() {
+            quads.extend(atlas.sprites_with_panel_rect_excluding(
+                &self.pointer,
+                &mut self.assets,
+                None,
+                &[],
+            ));
         }
         self.apply_screen_tint(&mut quads, true);
         self.drain_asset_fallbacks();
@@ -4262,6 +4280,11 @@ impl Game {
         // is only valid while the pointer is over a hot zone.
         // (crates/wolf-game/src/cursor_fallback.rs)
         crate::cursor_fallback::sync_cursor_fallback(self);
+        // The retail shows a hand pointer over the map, and the game script
+        // decides when it shows through system variable 74. The engine paints
+        // that pointer itself, because the desktop only offers the arrow.
+        // (crates/wolf-game/src/pointer.rs)
+        crate::pointer::sync_pointer(self);
         if had_choice && self.choices.is_none() {
             self.choice_cursor = 0;
         }

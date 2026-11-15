@@ -819,11 +819,16 @@ func _reset_modal_input() -> void:
 	held_order.clear()
 
 
-## The packet's sprite list without the runtime's own pointer (picture 2999).
+## The packet's sprite list without the runtime's pointers.
+##
+## Picture 2999 is the pointer the game script paints (the night raid), 2998
+## is the engine's own hand pointer. Both are replaced by the system arrow
+## while a front-end modal is up, so only one pointer is ever on screen.
 func _without_runtime_cursor(sprites: Array) -> Array:
 	var kept: Array = []
 	for sprite in sprites:
-		if int(sprite.get("number", -1)) == 2999:
+		var number := int(sprite.get("number", -1))
+		if number == 2999 or number == 2998:
 			continue
 		kept.append(sprite)
 	return kept
@@ -859,7 +864,10 @@ func _exit_tree() -> void:
 func _update_mouse_cursor(sprites: Array) -> void:
 	var has_custom_cursor := false
 	for sprite in sprites:
-		if sprite.get("number", -1) == 2999 and sprite.get("alpha", 0.0) > 0.0:
+		var number := int(sprite.get("number", -1))
+		if number != 2999 and number != 2998:
+			continue
+		if sprite.get("alpha", 0.0) > 0.0:
 			has_custom_cursor = true
 			break
 	if has_custom_cursor:
