@@ -51,3 +51,37 @@ fn genuine_gbk_chinese_is_not_reinterpreted_as_cp932() {
     let bytes = hex("c3bbd3d0cafdbedd"); // "没有数据"
     assert_eq!(decode_wolf_str(&bytes), "没有数据");
 }
+
+#[test]
+fn gbk_chinese_ending_in_an_ellipsis_is_not_read_as_cp932() {
+    // "\E欸…哥、哥哥…！？" — common event 295 pc53. The fan translation writes
+    // the ellipsis as `A1 AD` and the fullwidth question mark as `A3 BF`, and
+    // CP932 reads those leads as the halfwidth punctuation ｡ ｣, so the line
+    // used to come out as halfwidth-kana noise.
+    let bytes = hex("5c459a47a1adb8e7a1a2b8e7b8e7a1ada3a1a3bf");
+    assert_eq!(decode_wolf_str(&bytes), "\\E欸…哥、哥哥…！？");
+}
+
+#[test]
+fn gbk_chinese_full_of_question_marks_is_not_read_as_cp932() {
+    // "\E欸…？哥…哥…？我…为什么…？" — SampleMapA event 17 pc388.
+    let bytes = hex("5c459a47a1ada3bfb8e7a1adb8e7a1ada3bfced2a1adceaacab2c3b4a1ada3bf");
+    assert_eq!(decode_wolf_str(&bytes), "\\E欸…？哥…哥…？我…为什么…？");
+}
+
+#[test]
+fn gbk_japanese_left_behind_by_the_translation_is_read_as_gbk() {
+    // "以下フェラ処理です" — this line stayed in the original encoding, and the
+    // halfwidth punctuation it contains used to turn it into kana noise.
+    let bytes = hex("d2d4cfc2a5d5a5a7a5e98449c0eda4c7a4b9");
+    assert_eq!(decode_wolf_str(&bytes), "以下フェラ処理です");
+}
+
+#[test]
+fn a_cp932_label_with_a_halfwidth_middle_dot_stays_cp932() {
+    // "顔画像 [ﾊﾞﾄﾙ･ｽﾃｰﾀｽ用]" — the op250 label for the battle face graphic.
+    // Its middle dot is U+FF65, one code point above the veto range, so the
+    // label keeps pointing at the same database column.
+    let bytes = hex("8ae789e6919c205bcadec4d9a5bdc3b0c0bd97705d");
+    assert_eq!(decode_wolf_str(&bytes), "顔画像 [ﾊﾞﾄﾙ･ｽﾃｰﾀｽ用]");
+}

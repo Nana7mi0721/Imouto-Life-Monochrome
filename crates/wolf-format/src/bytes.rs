@@ -309,10 +309,22 @@ fn cp932_gbk_reading(raw: &[u8]) -> (String, i32) {
     // one full CP932 kanji pair, and the GBK reading must also lean on 0x81..=0x9F
     // kanji leads (GBK extension, i.e. rare chars). Genuine GB2312 display text is
     // built from the common B0..=0xF7 leads and stays GBK.
+    //
+    // One extra veto keeps the Chinese side honest. The fan translation writes
+    // `…` as `A1 AD` and `？` as `A3 BF`, and CP932 reads those leads as the
+    // halfwidth punctuation ｡ ｢ ｣ instead - so a Chinese line that merely
+    // contains an ellipsis or a question mark can land in this branch and come
+    // out as halfwidth-kana noise. Real Japanese UI text never uses those four
+    // marks, so a CP932 reading that contains one is a mistranslation. The range
+    // stops at U+FF64 on purpose: U+FF65 (･) is the halfwidth middle dot, which
+    // the shipped `顔画像 [ﾊﾞﾄﾙ･ｽﾃｰﾀｽ用]` label really does contain, and that
+    // label is an op250 address - reading it as GBK would point the database
+    // lookup at the wrong column.
     if !cp_bad
         && !gb_bad
         && cp_looks_japanese(&cp)
         && has_halfwidth_kana(&cp)
+        && !has_halfwidth_punct(&cp)
         && cp932_kanji_pairs(raw) >= 1
         && gbk_kanji_lead_pairs(raw) >= 1
     {
@@ -390,6 +402,17 @@ fn cp_looks_japanese(text: &str) -> bool {
 fn has_halfwidth_kana(text: &str) -> bool {
     text.chars()
         .any(|ch| (0xFF61..=0xFF9F).contains(&u32::from(ch)))
+}
+
+/// True when `text` contains a halfwidth ideographic punctuation mark
+/// (U+FF61..=U+FF64: ｡ ｢ ｣ ､).
+///
+/// CP932 maps the GBK fullwidth punctuation leads `A1..A4` onto these four
+/// marks, so their presence in a CP932 reading means the payload was really
+/// GBK text that is being read as Japanese.
+fn has_halfwidth_punct(text: &str) -> bool {
+    text.chars()
+        .any(|ch| (0xFF61..=0xFF64).contains(&u32::from(ch)))
 }
 
 /// Score valid UTF-8 multibyte sequences: +3 each. Only called after

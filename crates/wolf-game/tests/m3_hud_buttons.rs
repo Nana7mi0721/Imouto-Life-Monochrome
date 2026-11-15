@@ -528,12 +528,18 @@ fn status_panel_opens_and_tracks_hover_once_the_gate_is_forced() {
         Some(10),
         "status strip must start map event 10"
     );
-    assert_eq!(slot_x(&game, 320), Some(0));
     assert_eq!(slot_file(&game, 320), "Picture/status01.png");
     game.mouse_buttons = 0;
     for _ in 0..6 {
         game.frame();
     }
+    // The retail drawer slides in over the draw's wait time, so the panel is
+    // still on its way when the click frame ends; it lands on the left edge
+    // once the slide is over.
+    for _ in 0..25 {
+        game.frame();
+    }
+    assert_eq!(slot_x(&game, 320), Some(0));
 
     game.mouse = [100, 137];
     for _ in 0..20 {

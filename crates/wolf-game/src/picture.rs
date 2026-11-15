@@ -1253,14 +1253,58 @@ impl Screen {
                 } else {
                     (0, 0)
                 };
+                let args = picture_args(cmd, base_x, base_y);
+                // Retail draws over a slot that already carries the same graphic by
+                // sliding it to the new spot over the command's wait time; only an
+                // empty slot fades in. The retail picture writer arms the same
+                // interpolation the move command uses
+                // (work/out/re_all/all/0049c7a0_FUN_0049c7a0.c) and keeps the
+                // slot's current alpha, so the host slides too. Common event 238
+                // parks the status panel at x=-305 and brings it back at x=0, and
+                // those two draws are the drawer sliding out of and into the room.
+                let kind = PictureKind::from_code(cmd.kind);
+                let redraws = self.pictures.get(&cmd.number).is_some_and(|old| {
+                    old.kind == kind && old.file == cmd.file && old.text == cmd.text
+                });
+                let from = if redraws {
+                    self.pictures.get(&cmd.number).map(Pose::of)
+                } else {
+                    None
+                };
                 let mut picture = Picture::new(cmd.number);
                 picture.owner_event = cmd.owner_event;
-                picture.kind = PictureKind::from_code(cmd.kind);
+                picture.kind = kind;
                 picture.file = cmd.file.clone();
                 picture.text = cmd.text.clone();
                 picture.anchor = cmd.anchor;
-                let args = picture_args(cmd, base_x, base_y);
                 merge_args(&mut picture, &args, cmd.scale_mode);
+                align_status_meter_frame(&mut picture);
+                if let Some(from) = from {
+                    // The slot already had its graphic, so it neither fades in again
+                    // nor loses its alpha: the retail writer slides it instead.
+                    picture.fade = 0;
+                    let mut to = Pose::of(&picture);
+                    if take(&args, field::OPACITY).is_none() {
+                        to.opacity = from.opacity;
+                    }
+                    let frames = u32::try_from(args.first().copied().unwrap_or(0)).unwrap_or(0);
+                    if frames > 0
+                        && frames <= MAX_TRANSITION_FRAMES
+                        && (from.x, from.y) != (to.x, to.y)
+                    {
+                        picture.transition = Some(Transition {
+                            from,
+                            to,
+                            duration: frames,
+                            age: 0,
+                        });
+                        picture.x = from.x;
+                        picture.y = from.y;
+                        picture.scale = from.scale;
+                        picture.scale_y = from.scale_y;
+                        picture.opacity = from.opacity;
+                    }
+                }
                 if let Some(shift) = inherited_shift {
                     picture.shift = shift;
                 }
@@ -1930,6 +1974,42 @@ fn merge_args(picture: &mut Picture, args: &[i32], scale_mode: u8) {
     }
 }
 
+/// The slot of the BAD status-meter frame in common event 237.
+///
+/// Event 237 draws the two status meters side by side. Both outer frames are the
+/// same `<SQUARE><FRAME>` system graphic and both fills are the same
+/// `<SQUARE>` block, but the script asks for a six-pixel window for the BAD
+/// frame and an eight-pixel one for the GOOD frame, and it puts the BAD frame one
+/// pixel lower. The retail screen does not show that difference: in the shipped
+/// screenshot (`ptr_sc/恶作剧_BAD&GOOD条特写.png`) both frames put their top and
+/// bottom edges on the very same rows, so the two bars read as one weight.
+///
+/// These four draws are the only `<SQUARE><FRAME>` and `<SQUARE>` windows the
+/// game ever creates, so the host pins the BAD frame onto the GOOD frame's box
+/// instead of shipping a visibly thinner bar.
+const STATUS_METER_BAD_FRAME_SLOT: i32 = 1998;
+
+/// The GOOD frame's window height, which the BAD frame is pinned to.
+const STATUS_METER_FRAME_HEIGHT: i32 = 8;
+
+/// The GOOD frame's top edge, which the BAD frame is pinned to.
+const STATUS_METER_FRAME_Y: i32 = 56;
+
+/// Puts the BAD status-meter frame on the same box as the GOOD one.
+///
+/// The width, the fill block and the mirrored scale are left alone: only the
+/// window height and the top edge change, so the bar keeps its length and the
+/// fill still sits inside the frame exactly as it does on the GOOD side.
+fn align_status_meter_frame(picture: &mut Picture) {
+    if picture.number != STATUS_METER_BAD_FRAME_SLOT {
+        return;
+    }
+    if let Some((width, _)) = picture.window {
+        picture.window = Some((width, STATUS_METER_FRAME_HEIGHT));
+    }
+    picture.y = STATUS_METER_FRAME_Y;
+}
+
 /// Reads a field, mapping the UNCHANGED sentinel and out-of-range indices to None.
 fn take(args: &[i32], index: usize) -> Option<i32> {
     match args.get(index) {
@@ -1989,6 +2069,10 @@ mod tests {
 
     /// A draw whose head word carries 0x10000 treats x/y as offsets from the slot current
     /// position. CE238 parks status panel 320 at x=-305, then redraws it with +305.
+    ///
+    /// The redraw lands on a slot that already carries the graphic, so the retail
+    /// picture writer slides it there over the command's wait time instead of
+    /// teleporting it.
     #[test]
     fn a_relative_draw_offsets_from_the_current_position() {
         let mut screen = Screen::new();
@@ -2011,7 +2095,50 @@ mod tests {
         show.relative = true;
         screen.apply(&show);
         let picture = screen.get(320).expect("panel");
-        assert_eq!((picture.x, picture.y), (0, 0));
+        assert_eq!(
+            (picture.x, picture.y),
+            (-305, 0),
+            "the slide starts at the old spot"
+        );
+        assert!(
+            picture.transition.is_some(),
+            "a redraw over the same graphic slides instead of teleporting"
+        );
+        for _ in 0..20 {
+            screen.advance();
+        }
+        let picture = screen.get(320).expect("panel");
+        assert_eq!((picture.x, picture.y), (0, 0), "the panel lands on screen");
+    }
+
+    /// CE 237 asks for a six-pixel window for the BAD meter frame and an
+    /// eight-pixel one for the GOOD frame, but the retail screen draws both at
+    /// the same weight, so the host puts the BAD frame on the GOOD frame's box.
+    #[test]
+    fn the_bad_status_meter_frame_is_drawn_at_the_good_frames_box() {
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            1998,
+            3,
+            PictureAction::Draw,
+            "<SQUARE><FRAME>",
+            "",
+            &[0, 217, 6, 1, 255, 491, 57, -100, 0],
+        ));
+        screen.apply(&cmd(
+            1994,
+            3,
+            PictureAction::Draw,
+            "<SQUARE><FRAME>",
+            "",
+            &[0, 217, 8, 1, 255, 530, 56, 100, 0],
+        ));
+        let bad = screen.get(1998).expect("bad frame");
+        let good = screen.get(1994).expect("good frame");
+        assert_eq!(bad.window, Some((217, 8)));
+        assert_eq!(bad.y, 56);
+        assert_eq!(bad.window, good.window);
+        assert_eq!(bad.y, good.y);
     }
 
     /// The same flag on a Move shifts a label relative to where the hidden panel put it.

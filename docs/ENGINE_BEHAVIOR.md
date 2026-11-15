@@ -82,6 +82,7 @@
 | 叠色顺序 / 作用域 | **先 tint 后 fade，两段独立合成**（fade 前 `SetDrawBright(255,255,255)` 复位 → tint 不污染 fade）；151 只乘负号层（quad.number<0），160/162 溶解是独立 overlay、不逐 quad 相乘 | 逆向/实测 | 已实现 | crates/wolf-game/src/game.rs:1161,1204；crates/wolf-render/src/overlay.rs；crates/wolf-render/src/renderer.rs（freeze/set_overlays） | capture 对照 HUD 是否被 tint/溶解 |
 | 触发频度 | op160 CE 侧 1 次；op161/162 地图侧各 1 次（全作极少触发） | 实测（opcode 直方图） | 部分实现 | crates/wolf-game/src/game.rs:2747 | HANDOFF_M0.md:93,123 opcode 计数 |
 | Picture 淡入上限 | 单张 picture fade 帧数上限 MAX_TRANSITION_FRAMES=600 | 逆向 `[上限推断]` | 已实现 | crates/wolf-game/src/picture.rs:126 | 长帧 fade 输入核对 |
+| Picture `150 表示`(Draw) 命中已有图像 | **不是重画瞬移**：零售 action=0 作用在**已有图像**的槽位上时，把图片从旧坐标**补间**到新坐标，时长 = 该命令第 3 个参数（ウェイト時間）；alpha 保留不变（**不淡入**）。只有**空槽**才淡入（alpha 从 1 插到目标） | 逆向（`work/out/re_all/all/0049c7a0_FUN_0049c7a0.c`：Draw 应用器内含与 Move 应用器 `0049f280` 同构的插值算式，结尾把 `param_1[0x6c]`/`[0x6d]` 同时置为 ウェイト時間；`param_1[1]==0` 即空槽时位置直接就位） | 已实现 | crates/wolf-game/src/picture.rs:1231（Draw 分支）、:1266（同图判定）、:2003（状态条对齐） | 全作仅 **39 条**「同图重定位」Draw（CE234/238/239/283/293）；侧栏 CE238/239 滑入 20 帧、滑出 10 帧，实测 x 从 −305 逐帧到 0 |
 
 ### 1.6 present / swapchain
 
