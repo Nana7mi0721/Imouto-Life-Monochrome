@@ -431,8 +431,6 @@ enum Item {
     Align(Align),
 }
 
-/// Map the two shipped alertness-meter tiles onto box-drawing glyphs.
-
 /// Feed plain text into the item stream: a real LF is a break, everything else is a glyph.
 fn push_plain(items: &mut Vec<Item>, text: &str, style: Style) {
     for ch in text.chars() {

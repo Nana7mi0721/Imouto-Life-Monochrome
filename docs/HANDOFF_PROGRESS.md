@@ -1130,3 +1130,99 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     1. 针对鼠标图标：在 `GameView.gd` 每帧监测，当 Picture 2999（手掌/注视/谈话等恶作剧光标）存在且可见时，自动设置 `Input.mouse_mode = Input.MOUSE_MODE_HIDDEN` 隐藏 Windows 原生箭头光标，使游戏专用光标清晰独立显示；在光标销毁或窗口失焦时恢复 `MOUSE_MODE_VISIBLE`。
     2. 针对姿势与动作按钮：在 `PICTURE_ACTION_CONTROLS` 补充 `(1109, 22, "Picture/pose_iconarea.png")`，在 `picture_action_event_at` 规范化 Windows 反斜杠路径（`replace('\\', '/')`），在 `Game::hover()` 补充 1109；并在无苏醒（`v18 > 15, v125 == 0`）与正常互动状态下经 Godot headless 实机验证，点击结束（1108）触发事件 21 并弹出确认选项 `["是", "否"]`，点击姿势（1110）触发事件 22 并弹出换姿势选项 `["是 ", "否 "]`，点击存档（-5）稳定唤起存档界面（CE14）。
   * **验证**：`godot/tests/verify_ui_and_interaction_fixes.gd` 全检通过；`bash tools/smoke-godot.sh` 全套冒烟通过；`godot/bin/wolf_gdext.dll`（最新构建）同步更新。
+
+* 2026-11-15（云端 Gemini 只读审查包，16 MB 单包上限）：
+  * **新增工具**：`tools/pack_gemini_review.py`（**未 commit**）。与沙箱构建包
+    `tools/pack_review_bundle.py`（带 175 MB `work/Data` 与离线依赖树）定位不同：
+    本脚本产**只读代码审查包**——完整代码 + 交接文档 + 新改动补丁 + 字节码转储
+    + 实机截图，不含游戏数据本体与依赖树。
+  * **产物**：`work/out/gemini_upload_2026-11-15/`，10 个 zip，**单包 ≤ 16 MB**
+    （脚本内置硬上限校验 + `zipfile.testzip()` 完整性校验），总计 24.17 MB：
+    `01_source_code`（`crates/` 全量 9 crate 207 项，含未入库的
+    `crates/wolf-game/examples/probe_prologue_pic.rs`）、`02_godot_frontend`
+    （GDScript 35 项）、`03_docs`（106 项）、`04_tools`（24 项）、`05_new_changes`
+    （`1c76dcc..HEAD` 的 patch/stat/commits/file-list + 新增未跟踪文件）、
+    `06_review_reports`（35 项）、`07_bytecode_dumps`（CE/Map/Opcode 全量转储）、
+    `08/09_retail_screenshots`（`ptr_sc` 35 张实机截图，按体积切两组）、
+    `10_issue_screenshots`（本轮 21 张问题截图）。
+  * **明确不含**：`work/Data/`、`target/`、`godot/bin/*.dll`、`godot/addons/`
+    （第三方 Godot AI MCP 插件）、`docs/攻略文档/`、`tools/debug/`、
+    `原版游戏截图.zip`（与 `ptr_sc/` 内容重复，已核对为同一批 35 张）。
+  * **随包说明**：`00_REVIEW_BRIEF.md`（建议审查顺序、本轮新改动摘要、7 条审查
+    重点、输出格式要求）、`00_README_UPLOAD.md`（上传步骤）、`SHA256SUMS.txt`。
+  * **基线**：HEAD = `9a817e4`，工作区无 tracked 改动；本轮新改动 =
+    `1c76dcc..HEAD`（24 文件，+1442/-163），内容集中在实机视觉与交互缺陷闭环
+    （名牌 span 批量淡出、对话框 136 px、格子条改贴图、选项游标框、夜间点击热区
+    与 `COMMON_SELF_BASE` 过滤、`Sys77..Sys82` 逐帧时间、Opcode 124 鼠标哨兵）。
+  * **清理**：删除 `target/debug/incremental`（1.4 GB）、`target/release`、
+    `target/ver6`（均不存在）与本轮临时探针脚本（`work/out/_zippeek.py`、
+    `_verify_bundles.py`、`_verify_keys.py`、`_newchanges.diff`）；仓库由 **11 GB
+    降到 9.3 GB**（target 8.1 / work 985 M，其中 work/Data 175 M 保留不动）。
+
+* 2026-11-15（外部只读审查 `code_review_9a817e4.md` 核实与闭环）：
+  * **核实口径**：350 个公共事件 + 8 张地图 102 页全量字节码（33,970 条脚本串）；
+    Opcode 122 的 `mode` 直方图 448 条（`0x0200` 全作 **0 处**，掩码 `0xFFF0` 下
+    全部落在手册操作上）；Sys 变量以 `变量对照表.csv` + SysDatabase 类型 14 为准；
+    零售 8 个 `.sav` 全在白天 `SampleMapA`（`v18/v69/v100/v101/v120/v125/v176/v238/
+    v247/v260` 均为 0）。
+  * **P0（成立，已修）**：`exec.rs` 的 `122` 掩码 `0xFF00` → `0xFFF0`，分支
+    `0x0200` → `0x0010`（CE268 `pc14`、CE270 `pc2000` 是全作仅有的两条首行截取）；
+    删掉被写错的「代入先を変数で指定」注释，单测还原 `0x0011`；新增
+    `op122_first_line_cut_moves_the_head_out_of_a_numbered_source`（镜像 CE270 形态）；
+    `docs/OPCODE_122.md` 末尾补回归说明。
+  * **P2（成立，已修）**：`\img` 贴图条与文字分层——`textpic::is_inline_image_only`
+    /`has_inline_image`、`game.rs` 改用之、`atlas.rs` 过滤 `alpha<=0` 并按
+    `anchor`/`scale`/`scale_y` 定位且按行分组、`message.rs` 删孤立注释；
+    失效单测重写为 `an_image_only_text_picture_produces_no_glyphs` +
+    `a_picture_that_mixes_text_and_images_keeps_its_words`。
+    全作 771 条 `\img` **图文混排 0 条**（写法仍按防御性修复）。
+  * **P2（成立，已修）**：读档 `resume_loaded_map` 补回 `.mps` 后缀
+    （SysDatabase 类型 0 列 0 存的是带后缀路径）；新增
+    `m4_load_resume::the_resumed_map_keeps_its_mps_path_and_its_scenery`。
+  * **P1（成立，已修）**：`Sys77..Sys82` 改本地时间（Windows `GetLocalTime` FFI，
+    非 Windows 回退 UTC）并新增可注入 `Clock::{System,Fixed}`；
+    `wolf-game` 的 `#![forbid(unsafe_code)]` 放宽为 `#![deny(unsafe_code)]`，
+    仅该 FFI 点开白名单；新增 3 个时钟单测。
+  * **P2（成立，已修）**：动作键绕过名单 `5|21|22|28|30|35` → `5|21|22|28`，
+    且 `action_key_event_ignoring_interaction_mode` **只跳过交互模式变量**
+    （`v100` = `深夜1`，magic `2_000_100`），其余页条件逐条保留；
+    新增 `conditions_met_except` 与 3 个 map_runtime 单测 +
+    `m3_night_interaction_e2e::the_pose_icon_bridge_keeps_the_scripts_own_stage_gate`。
+    **相册（35）与数据（30）不再绕过**：相册真正的开放在 `ev35` 并行页
+    （`op124 hover(-7)` → `op123` 鼠标 → `op210` 调 `CE303`），图片桥指向的
+    page1（`v247==1`、程序为空）在并行页运行期间本就返回 `None`，移除绕过不影响相册。
+  * **P2（成立，已修）**：`picture.rs` 新增 `Screen::move_targets()`，
+    `150 Move` 改走 `pictures.range(lo..=hi)` 活跃槽位查询（不再逐整数遍历）；
+    3 个新单测（含 `span = i32::MAX` 护栏与旧参照实现逐例比对）。
+  * **P3（路径成立、两处坐标前提被证伪）**：Godot 脚本硬编码绝对路径改为
+    `--data-root=` → `WOLF_DATA_ROOT` → `res://../work/Data` 解析链，缺数据=skip exit 0、
+    目录在但打不开=exit 1；`Picture 2999` 由 Map Event 14 创建（页条件 `v120==1`）、
+    `(935,505)` 命中的 `ev21` 页条件 `v100==1`，零售存档全在白天故白天不绘制，
+    原断言不可证伪 → 改为状态推导式两分支硬断言（白天 `-5`→事件 5、`-4`→事件 30）；
+    两份脚本接入 `tools/smoke-godot.sh` 末尾。
+  * **误报留证**：`武器スキルセット` / `防具スキルセット` **本作不存在**
+    （33,970 条脚本串中 `スキルセット` 0 命中；库存 CE 的 `武器増加処理`/
+    `防具増加処理` 是 WOLF 通用库模板），不实现、不改代码。
+  * **额外发现（未复现，不立项）**：子代理报告「反复打开状态界面（事件 30）会吃爆
+    内存」，实测 8 轮开关：Godot 静态内存在 25,452,589 / 25,497,253 字节间波动、
+    无单调增长，Rust 侧 picture 91 / 实例 8 恒定 → 未复现，相关临时探针已删。
+  * **验证**：`cargo fmt --all -- --check` 0；`cargo test -q --workspace --no-fail-fast`
+    仅余 3 项既有失败（`m3_manual_rules::late_night_bedtime_skips_to_next_evening`、
+    `m3_save_load::save_data_01_and_02_differ_in_hud_time_and_money`、
+    `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge`）；
+    **HEAD 基线对照**（`git stash` 取原树实测）：`cargo test -q -p wolf-game --lib`
+    在 `9a817e4` 上已有 **4 项红灯**——`choice::tests::the_panel_geometry_is_the_measured_102_panel`、
+    `choice::tests::a_long_option_widens_the_panel`、
+    `choice::tests::the_known_ce257_replacement_character_never_reaches_the_glyph_pass`、
+    `textpic::tests::inline_box_images_survive_as_box_glyphs_in_text_picture`
+    （前三条是「面板宽 +4 px 防折行」「U+FFFD 剥离」改了实现没跟上断言，
+    第四条是 `\img` 改走贴图后旧断言失效）→ 本轮全部对齐/重写，**HEAD 的 4 项红灯归零**；
+    `WOLF_DATA_ROOT=<绝对路径> cargo test -q -p wolf-game --lib` 369 passed / 2 failed
+    （既有 `db::tests::*` 姊妹作差异）；`wolf-cli verify` PASS 64 / 1 SKIP；
+    `tools/build-godot.sh` 重建 DLL 成功；`bash tools/smoke-godot.sh` **exit 0**。
+  * **报告**：`docs/REVIEW_9a817e4_FIX_REPORT.md`；评审原文追加 §6「核实与勘误」。
+  * **清理**：删除临时探针 `crates/wolf-game/examples/probe_prologue_pic.rs`、
+    `work/out/scan_img.py`、`work/out/scan_var100.py`、`work/out/verify_skillset_claim.py`；
+    删除 `target/debug/incremental`、`target/release`、`target/ver6`、`work/out/saveprobe`；
+    清理后 `du -sh .` = **9.3 GB**（target 8.1 G / work 986 M，其中 work/Data 176 M
+    保留不动，work/out 810 M）。

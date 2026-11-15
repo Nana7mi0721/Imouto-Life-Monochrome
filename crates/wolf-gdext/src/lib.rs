@@ -641,7 +641,9 @@ impl WolfGame {
     #[func]
     fn screen_picture_info(&self, number: i32) -> VarDictionary {
         let mut d = VarDictionary::new();
-        let Some(game) = self.game.as_ref() else { return d; };
+        let Some(game) = self.game.as_ref() else {
+            return d;
+        };
         if let Some(pic) = game.screen.get(number) {
             d.set("exists", true);
             d.set("file", pic.file.clone());
@@ -659,34 +661,50 @@ impl WolfGame {
 
     #[func]
     fn get_var(&self, idx: i32) -> i64 {
-        let Some(game) = self.game.as_ref() else { return 0; };
+        let Some(game) = self.game.as_ref() else {
+            return 0;
+        };
         game.vm.vars.get(idx as usize) as i64
     }
 
     #[func]
     fn set_var(&mut self, idx: i32, val: i64) {
-        let Some(game) = self.game.as_mut() else { return; };
+        let Some(game) = self.game.as_mut() else {
+            return;
+        };
         game.vm.vars.set(idx as usize, val as i32);
     }
 
     #[func]
     fn get_sys_var(&self, idx: i32) -> i64 {
-        let Some(game) = self.game.as_ref() else { return 0; };
+        let Some(game) = self.game.as_ref() else {
+            return 0;
+        };
         game.vm.vars.get_sys(idx as usize) as i64
     }
 
     #[func]
     fn common_self_str(&self, ce_id: i32, idx: i32) -> GString {
-        let Some(game) = self.game.as_ref() else { return GString::new(); };
-        game.vm.vars.common_self.get(&(ce_id as u32))
+        let Some(game) = self.game.as_ref() else {
+            return GString::new();
+        };
+        game.vm
+            .vars
+            .common_self
+            .get(&(ce_id as u32))
             .map(|b| GString::from(b.get_str(idx as usize)))
             .unwrap_or_default()
     }
 
     #[func]
     fn common_self_num(&self, ce_id: i32, idx: i32) -> i64 {
-        let Some(game) = self.game.as_ref() else { return 0; };
-        game.vm.vars.common_self.get(&(ce_id as u32))
+        let Some(game) = self.game.as_ref() else {
+            return 0;
+        };
+        game.vm
+            .vars
+            .common_self
+            .get(&(ce_id as u32))
             .map(|b| b.get(idx as usize) as i64)
             .unwrap_or(0)
     }

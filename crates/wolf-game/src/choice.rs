@@ -182,7 +182,12 @@ fn build(options: &[String], cursor: usize, x: f32, y: f32, font_px: f32) -> Cho
         .or_else(|| lines.first().copied());
     let cursor_h = (pitch + 1.0).max(font_px + 4.0);
     let cursor_rect = match row {
-        Some(row) => [rect[0] + ROW_TOP, row[1] - 2.0, rect[2] - ROW_TOP * 2.0, cursor_h],
+        Some(row) => [
+            rect[0] + ROW_TOP,
+            row[1] - 2.0,
+            rect[2] - ROW_TOP * 2.0,
+            cursor_h,
+        ],
         None => [rect[0], rect[1], rect[2], pitch],
     };
     ChoiceLayout {
@@ -319,7 +324,7 @@ pub fn skin_pieces(layout: &ChoiceLayout, skin_w: u32, skin_h: u32) -> Vec<Windo
 /// broken, so map just those three keys to localised labels here. Every other prompt keeps
 /// its own text untouched, and the underlying option strings (used for branching and for
 /// tests) are never rewritten. A lone U+FFFD from the known CE257 tea-price data defect is
-/// replaced by a space here, because the font cannot draw it; see [`option_label`].
+/// stripped here, because the font cannot draw it; see [`option_label`].
 fn option_label(option: &str) -> Cow<'_, str> {
     match option {
         "menu1" => Cow::Borrowed("开始游戏"),
@@ -490,10 +495,16 @@ mod tests {
     fn the_panel_geometry_is_the_measured_102_panel() {
         // A four-option prompt of seven full-width characters: the retail 102 panel is
         // 156 px wide, 114 px tall, rows 27 px apart and text 8 px inside the frame.
+        // The engine adds four pixels of slack on top of that measurement so a row
+        // that exactly fills the measured width cannot wrap its last character.
         let rows = vec!["已经这个时间了".to_owned(); 4];
         let panel =
             layout_at_sized(&rows, 0, 400, 200, 20.0).expect("an on-screen anchor yields a panel");
-        assert_eq!(panel.rect[2], 7.0 * 20.0 + TEXT_INSET * 2.0, "panel width");
+        assert_eq!(
+            panel.rect[2],
+            7.0 * 20.0 + TEXT_INSET * 2.0 + 4.0,
+            "panel width"
+        );
         assert_eq!(panel.rect[3], ROW_TOP + 4.0 * 27.0, "four rows are 114 px");
         assert_eq!(panel.lines[0][0], panel.rect[0] + TEXT_INSET, "text inset");
         assert_eq!(
@@ -529,8 +540,9 @@ mod tests {
         let narrow = layout(&["a".to_owned()], 0);
         let wide = layout(&["a".repeat(40)], 0);
         // No minimum width: the engine sizes the window to the widest option plus the
-        // 8 px inset on each side, and a one-letter option gets a 26 px box.
-        assert_eq!(narrow.rect[2], text_width("a") + TEXT_INSET * 2.0);
+        // 8 px inset on each side plus the 4 px wrap slack, and a one-letter option
+        // gets a 30 px box.
+        assert_eq!(narrow.rect[2], text_width("a") + TEXT_INSET * 2.0 + 4.0);
         assert!(wide.rect[2] > narrow.rect[2]);
     }
 
@@ -568,7 +580,7 @@ mod tests {
         let (_, texts) = overlay(&mut atlas, &mut assets, std::slice::from_ref(&raw), 0);
         assert_eq!(texts.len(), 1);
         assert!(!texts[0].text.contains('\u{FFFD}'));
-        assert_eq!(texts[0].text, "红茶　　　  2000円");
+        assert_eq!(texts[0].text, "红茶　　　 2000円");
         // The option handed back to the VM must stay exactly as the script wrote it.
         assert_eq!(raw, "红茶　　　\u{FFFD} 2000円");
     }

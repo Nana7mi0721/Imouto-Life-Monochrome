@@ -14,11 +14,15 @@
 //!   messages and choices into typed state and advances the VM one frame at a time.
 //! * [`key`] - the key bitmask opcode 123 polls.
 //!
-//! Everything here is pure data plus maths: no GPU, no window, no clock. That keeps the
-//! whole crate unit-testable on a machine with no display, which matters because the
-//! renderer can only be verified by eye.
+//! Everything here is pure data plus maths: no GPU, no window, and no clock of its own.
+//! That keeps the whole crate unit-testable on a machine with no display, which matters
+//! because the renderer can only be verified by eye. The one exception is the wall
+//! clock the scripts read through `Sys77..Sys82`: it needs the host's **local** civil
+//! time, which `std` cannot compute, so a single Win32 call lives in
+//! [`game::Clock`] behind a scoped `allow(unsafe_code)`. The clock is injectable, so
+//! no test ever depends on it.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 pub mod achievements;
 pub mod assets;
@@ -51,7 +55,8 @@ pub use atlas::{Atlas, AtlasRect, SpriteQuad, TextQuad, ATLAS_SIZE};
 pub use choice::{layout as choice_layout, ChoiceLayout};
 pub use fontmetrics::FontMetrics;
 pub use game::{
-    layered_data_path, Choices, FrameOutcome, Game, GameError, GameStats, Message, TITLE_EVENT,
+    layered_data_path, Choices, Clock, FrameOutcome, Game, GameError, GameStats, LocalDateTime,
+    Message, TITLE_EVENT,
 };
 pub use map_runtime::{MapRuntime, PageSlot, Trigger};
 pub use overlay::{OverlayLayer, ScreenOverlay};
