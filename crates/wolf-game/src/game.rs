@@ -759,6 +759,47 @@ pub struct TextCacheStats {
     pub pictures: usize,
 }
 
+/// How long the front-end may show its "auto-saved" banner, in frames.
+pub const AUTO_SAVE_BANNER_FRAMES: u32 = 120;
+
+/// One save slot of the save/load grid.
+///
+/// CE131 numbers its slots across pages: the page and the row inside the page
+/// together give the absolute slot number, and the absolute number is the file
+/// name (`Save/SaveDataNN.sav`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SaveSlotHit {
+    /// The 1-based slot number. Slot `n` is `Save/SaveDataNN.sav`.
+    pub slot: i32,
+    /// The file the slot maps to.
+    pub path: PathBuf,
+    /// True when the slot already holds a save.
+    pub occupied: bool,
+    /// True when the grid reads saves (the title screen's load path) instead of
+    /// writing them (the in-game save path).
+    pub loading: bool,
+}
+
+/// CE131's own grid state, read out of the common event's self variables.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SaveGridState {
+    /// True when the grid reads saves instead of writing them.
+    loading: bool,
+    /// The page the cursor is on, 0-based.
+    page: i32,
+    /// How many slots one page holds.
+    per_page: i32,
+    /// The row the cursor is on, 0-based.
+    row: i32,
+}
+
+impl SaveGridState {
+    /// The absolute slot number of `row` on this page.
+    fn slot_of_row(&self, row: i32) -> i32 {
+        self.page * self.per_page + row + 1
+    }
+}
+
 /// The running game.
 pub struct Game {
     /// The interpreter.
@@ -959,6 +1000,19 @@ pub struct Game {
     engine_events_started: bool,
     /// `220` loads queued by the interpreter; applied after the VM step that asked.
     save_requests: Vec<crate::savegame::SaveRequest>,
+    /// The slot the daily auto-save writes to, when the host enabled one.
+    ///
+    /// The auto-save overwrites a slot the player may have written by hand, so it
+    /// is the host's decision, not the engine's: the regression suite leaves it
+    /// off and never touches the shipped save files.
+    auto_save_slot: Option<u32>,
+    /// Whether CE258 (晩ごはん処理) was alive on the previous frame.
+    ///
+    /// The auto-save fires on the edge where the event ends, so the flag has to
+    /// remember the previous frame: an event that never ran must not save.
+    ce258_running: bool,
+    /// Frames left of the "auto-saved" banner the front-end can show.
+    auto_saved_frames: u32,
     /// `130` teleports queued by the interpreter; applied after the VM step that asked.
     map_requests: Vec<MapRequest>,
     /// The last save this game loaded or was born from, used as the template for
@@ -1126,6 +1180,9 @@ impl Game {
             engine_always: None,
             engine_events_started: false,
             save_requests: Vec::new(),
+            auto_save_slot: None,
+            ce258_running: false,
+            auto_saved_frames: 0,
             map_requests: Vec::new(),
             base_save,
             system_save,
@@ -1613,6 +1670,155 @@ impl Game {
         Ok(bytes.len())
     }
 
+    /// Asks the runtime to load `path` at the end of the current frame.
+    ///
+    /// The interpreter cannot load a save while it holds the game, so the retail
+    /// `220` opcode queues the request and [`Self::frame`] applies it after the VM
+    /// step. A front-end button has the same problem, so it publishes the request
+    /// here instead of calling the loader directly: the load then travels the same
+    /// path as the game's own, including the BGM flush, the menu teardown and the
+    /// map resume.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the file is not there; a missing slot must not queue a load
+    /// that would fail later without a diagnostic.
+    pub fn request_load(&mut self, path: &Path) -> Result<(), String> {
+        if !path.is_file() {
+            return Err(format!("220 SaveLoad: no save at {}", path.display()));
+        }
+        self.save_requests
+            .push(crate::savegame::SaveRequest::Load(path.to_path_buf()));
+        Ok(())
+    }
+
+    /// Turns the daily auto-save on or off.
+    ///
+    /// The auto-save writes slot `n` after the evening meal (CE258 晩ごはん処理)
+    /// ends. It overwrites a slot the player may have written by hand, so the host
+    /// decides: the regression suite leaves it off and never touches the shipped
+    /// save files.
+    pub fn set_auto_save_slot(&mut self, slot: Option<u32>) {
+        self.auto_save_slot = slot.filter(|slot| (1..=99).contains(slot));
+    }
+
+    /// True while the front-end may show its "auto-saved" banner.
+    #[must_use]
+    pub fn auto_saved_banner(&self) -> bool {
+        self.auto_saved_frames > 0
+    }
+
+    /// The save slot under the pointer, when the save/load grid is up.
+    ///
+    /// CE94 draws one panel per slot row and those panels are the authoritative
+    /// hit boxes: [`Screen::picture_rect`] answers with the panel box, not with the
+    /// 18x18 window skin. The slot number needs the grid's own page state, because
+    /// the rows of the second page are slots five to eight, not slots two to four.
+    pub fn save_slot_at(&mut self, x: i32, y: i32) -> Option<SaveSlotHit> {
+        let grid = self.save_grid_state()?;
+        for row in 0..grid.per_page {
+            let rect = {
+                let screen = &self.screen;
+                let assets = &mut self.assets;
+                screen.picture_rect(12050 + 20 * row, |file| assets.texture_size(file))
+            };
+            let Some(rect) = rect else {
+                continue;
+            };
+            if (x as f32) >= rect[0]
+                && (x as f32) < rect[0] + rect[2]
+                && (y as f32) >= rect[1]
+                && (y as f32) < rect[1] + rect[3]
+            {
+                let slot = grid.slot_of_row(row);
+                return Some(self.save_slot(grid, slot));
+            }
+        }
+        None
+    }
+
+    /// The slot the grid's own cursor is on, when the save/load grid is up.
+    ///
+    /// This is the slot a keyboard confirm would act on. The pointer may have
+    /// moved since the last frame, so a front end that wants to act on a click
+    /// should ask for [`Self::save_slot_at`] instead.
+    #[must_use]
+    pub fn selected_save_slot(&self) -> Option<SaveSlotHit> {
+        let grid = self.save_grid_state()?;
+        let slot = grid.slot_of_row(grid.row);
+        Some(self.save_slot(grid, slot))
+    }
+
+    /// Fills in the file and the occupancy of one slot.
+    fn save_slot(&self, grid: SaveGridState, slot: i32) -> SaveSlotHit {
+        let path = self
+            .root
+            .join("Save")
+            .join(format!("SaveData{slot:02}.sav"));
+        SaveSlotHit {
+            slot,
+            occupied: path.is_file(),
+            path,
+            loading: grid.loading,
+        }
+    }
+
+    /// CE131's own grid state, or `None` when the grid is not up.
+    fn save_grid_state(&self) -> Option<SaveGridState> {
+        let instance = self
+            .vm
+            .instances()
+            .iter()
+            .find(|instance| instance.event == 131)?;
+        Some(SaveGridState {
+            loading: instance.self_vars.get(600) == 1,
+            page: instance.self_vars.get(611).max(0),
+            per_page: instance.self_vars.get(627).clamp(1, 10),
+            row: instance.self_vars.get(610).max(0),
+        })
+    }
+
+    /// Writes the daily auto-save when the evening meal ends.
+    ///
+    /// CE258 (晩ごはん処理) closes the evening; when it is gone the day's progress
+    /// is worth keeping. The write only happens for a session that really played
+    /// the evening: the boot map (the title screen) and a pending return to the
+    /// title both skip it.
+    fn sync_auto_save(&mut self) {
+        let running = self
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 258);
+        let ended = self.ce258_running && !running;
+        self.ce258_running = running;
+        if !ended {
+            return;
+        }
+        let Some(slot) = self.auto_save_slot else {
+            return;
+        };
+        if self.boot_map_active || self.pending_return_to_title {
+            return;
+        }
+        let path = self
+            .root
+            .join("Save")
+            .join(format!("SaveData{slot:02}.sav"));
+        match self.save_to(&path) {
+            Ok(bytes) => {
+                self.diagnostics.insert(
+                    format!("auto save: wrote {bytes} byte(s) to {}", path.display()),
+                    1,
+                );
+                self.auto_saved_frames = AUTO_SAVE_BANNER_FRAMES;
+            }
+            Err(err) => {
+                self.diagnostics.entry(err).or_insert(0);
+            }
+        }
+    }
+
     /// Starts one common event as a coroutine. Returns false when the id is unknown.
     pub fn start_event(&mut self, id: u32) -> bool {
         self.vm.start_event(id).is_some()
@@ -1810,6 +2016,16 @@ impl Game {
         self.auto_events.reset();
         self.engine_events_started = false;
         let _ = self.boot();
+    }
+
+    /// Asks the game to go back to the title screen at the end of this frame.
+    ///
+    /// The script's own `174 ReturnToTitle` sets the same flag from inside the
+    /// interpreter, where tearing the map down mid-frame would corrupt the
+    /// scheduler. A front-end button has the same problem, so it publishes the
+    /// intent here instead of calling [`Self::reset_to_title`] directly.
+    pub fn trigger_return_to_title(&mut self) {
+        self.pending_return_to_title = true;
     }
 
     /// Starts one map event first page as a coroutine.
@@ -3385,6 +3601,17 @@ impl Game {
     /// at the same origin, so their visible rectangles form the natural target.
     /// Resolve the pose through v14 to the same action-key event the map data
     /// defines; that event still owns its v23/v176/v238 conditions.
+    ///
+    /// Two rules, in this order:
+    ///
+    /// * The visible silhouette wins. Every pose that has standing art on screen
+    ///   is clicked on the art itself, including the sleeping pose: CE240 can
+    ///   draw 900..903 while v14 is 5 (the day-time parallel page ev30 calls it
+    ///   regardless of the pose), so the art is a real target there too.
+    /// * The map event rectangle is the fallback. It is the only target the game
+    ///   data offers for the sleeping pose, whose body lies in a full-screen CG
+    ///   rather than in a standing-art slot. Keeping it means "click the bed"
+    ///   still works wherever the silhouette does not reach.
     fn sister_body_action_event_at(&mut self, x: i32, y: i32) -> Option<u32> {
         if self.vm.vars.get(100) != 0 {
             return None;
@@ -3399,31 +3626,44 @@ impl Game {
             6 => 25,
             _ => return None,
         };
+
+        // Slot 900 is the guard: without the standing art there is no silhouette
+        // to hit, and the awake poses have no other target at all.
+        let has_standing_art = match self.screen.get(900) {
+            Some(body) => {
+                !body.hidden && body.opacity > 0 && body.file.starts_with("Picture/stand_")
+            }
+            None => false,
+        };
+        let mut silhouette_hit = false;
+        if has_standing_art {
+            for slot in 900..=903 {
+                let Some(picture) = self.screen.get(slot) else {
+                    continue;
+                };
+                if picture.hidden || picture.opacity <= 0 || picture.file.is_empty() {
+                    continue;
+                }
+                if self.picture_alpha_hit(slot, x, y, SISTER_HIT_RADIUS) {
+                    silhouette_hit = true;
+                    break;
+                }
+            }
+        }
+
+        // The visible silhouette wins for every pose, the sleeping one included.
+        if silhouette_hit {
+            return Some(event);
+        }
         if pose == 5 {
-            // The sleeping pose has no CE240 standing-art slots. Its only visible
-            // target is the 就寝妹 action rectangle; expand that rectangle by the
-            // same forgiveness used around the alpha silhouette.
+            // The sleeping pose keeps the 就寝妹 action rectangle as its
+            // fallback; expand that rectangle by the same forgiveness used
+            // around the alpha silhouette.
             let (left, top, width, height) = self.runtime.action_key_rect(&self.vm, event)?;
             let radius = SISTER_HIT_RADIUS;
             let inside = (left - radius..left + width + radius).contains(&x)
                 && (top - radius..top + height + radius).contains(&y);
             return inside.then_some(event);
-        }
-        let body = self.screen.get(900)?;
-        if body.hidden || body.opacity <= 0 || !body.file.starts_with("Picture/stand_") {
-            return None;
-        }
-
-        for slot in 900..=903 {
-            let Some(picture) = self.screen.get(slot) else {
-                continue;
-            };
-            if picture.hidden || picture.opacity <= 0 || picture.file.is_empty() {
-                continue;
-            }
-            if self.picture_alpha_hit(slot, x, y, SISTER_HIT_RADIUS) {
-                return Some(event);
-            }
         }
         None
     }
@@ -4178,6 +4418,13 @@ impl Game {
             }
         }
         self.load_grid_open = load_grid_now;
+        // The evening meal (CE258) closes the day; when it ends the auto-save
+        // writes the configured slot. This runs before the return-to-title flag
+        // is taken, so a session that leaves for the title does not save.
+        self.sync_auto_save();
+        if self.auto_saved_frames > 0 {
+            self.auto_saved_frames -= 1;
+        }
         // `174 ReturnToTitle` and `211 CommonEventReserve` both wait for the VM step
         // and the queued save/map work to finish. A return-to-title discards every
         // instance and reservation, so it wins over a pending reservation.

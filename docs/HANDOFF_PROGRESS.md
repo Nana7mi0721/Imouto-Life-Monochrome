@@ -1296,3 +1296,78 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   `cargo fmt --all -- --check` 干净；clippy 只剩 `tint.rs` 那 3 条既有
   `mistyped_literal_suffix`（非本轮引入）；`wolf-cli verify` PASS 64 / 1 SKIP；
   `bash tools/smoke-godot.sh` exit 0。
+### 2026-11-15 深夜 · M25 实机 UX 四项收口（RNG / 光标 / 睡姿热区 / 存读档）
+
+* **输入与顺序**：`github_audit_rng_and_ux_report.md` + `ux方案.md`（外部只读产物，不入库）。
+  用户拍板：**1（2999 光标）→ 2（删 `pose == 5` 早退 + `alpha` 命中优先，不加 `item_icon`）
+  → 3（方案 B：前端「返回标题」入口）→ 4（可选 `WOLF_LIVE_RNG=1`）
+  → 5（先解决 `_input` 顶部拦截与 `SaveRequest` 入队安全，再做存单弹窗与晚饭后槽 1 自动存档）**。
+  详细核实与落地见 **`docs/M25_LIVE_UX.md`**。
+* **§二 光标 —— 核实结论：引擎本来就是对的，本轮不改引擎**：
+  * 零售的手型指针 = **Picture 2999**，`SampleMapA.mps` **Ev 14「マウス追従」**
+    （parallel，条件 `var120 == 1`）画 `150 [4096, 2999, 0, 6, 4, 1, 255, 1100000, 1100001,
+    100, 0] "CharaChip/hand3.png"`；坐标来自 `124 [1100000, 4096, -2, 6]` /
+    `[1100001, 4096, -2, 7]`（Sys71/72）。
+  * `CharaChip/hand3.png` = 192×128 = **6×4 帧表、每格 32×32**（`ux方案.md` 写的 4×1 /
+    48×128 是错的）。零售截图 `ptr_sc/卧室_点击妹妹_首句话.png` 模板匹配命中帧 0 @
+    游戏坐标 (320,356)，得分 2054。
+  * `var120` **只在夜间流程后为 1**：`CE230`（深夜1）pc46 `var120 = 1` + pc47
+    `var100 = 1`；`CE227`（深夜1表示）pc50 `var120 = 0`；`CE230` 的调用方是 ev12
+    （就寝妹）与 ev23（深夜表情自動変更）。
+  * **零售 5 个存档实测**：retail-01/02/03/04 → `var120 = 0`；retail-05（第 4 天 23:00）
+    → `var120 = 1`；本仓端口存档（第 1 天 19:00）→ `var120 = 0`，**与零售一致**。
+  * 结论：**零售也是"上过床之后"才有手型光标**，玩家存档停在第 1 天 19:00 所以没有。
+    方案里的"Godot 硬件自定义光标"**否决**（会与 2999 闪烁冲突、偏离零售）。
+    回归 `m25_cursor_follow` 4 条（`var120` 开/关、跟随、`CE230` 打开开关）。
+* **§一 RNG（opt-in）**：`crates/wolf-vm/src/rng.rs` 新增 `LIVE_RNG_ENV = "WOLF_LIVE_RNG"`、
+  `live_rng_enabled()`、`live_jitter()`（纳秒 × `0x9E3779B97F4A7C15` 旋转 23 ⊕ 原子计数
+  × `0xBF58476D1CE4E5B9`），以及可注入 API `from_game_with_live` / `from_game_with_cursor` /
+  `set_cursor_live` / `set_cursor_with_live` / `set_cursor_with_jitter`；
+  `savegame.rs:168` 读档入口改用 `set_cursor_live`（playtime 定位保留）。
+  **环境变量没设时逐位等价**；测试不碰环境变量（Rust `set_var` 有 data race），走注入 API。
+  回归 `m25_live_rng` 15 条。
+* **§三 睡姿妹妹的热区**：报告的"pose 5 没有 CE240 的 900..903 槽位"**因果是错的**
+  （CE240 随时可画这四槽，白天并行页 ev30 独立调用它，与 `v14` 无关）；真因是宿主
+  `game.rs:3402` 的**无条件早退**。改法：删早退 → **轮廓命中优先 → 地图矩形兜底**
+  （兜底仍只给 `pose == 5`，矩形 `144,320,144,64` 原样）。
+  **没有**照方案放大 ev12 矩形（缺口在**上方** y 248..304，且 `width.max(120)` 对 144
+  是恒等；方案要求先有夜间卧室实机截图，按 `AGENTS.md` 不臆造 UI 数值），
+  **没有**把 `item_icon00..03` 加进 `PICTURE_ACTION_CONTROLS`（会破坏 ev26 的 op124
+  点击链）。回归 `m25_sister_pose5` 4 条（含"旧代码必然失败"的负例；坑：
+  `last_action_event` 只在 `reset_to_title` 清空，负例必须用全新 game）。
+* **§四 存读档**：
+  * **入队安全**：`Game::save_requests` 是 **private**，两份文档都漏了，**没有任何公开
+    API 能入队 `SaveRequest::Load`**；方案里的 `Path::new(path.to_string().as_str())`
+    **编译不过（E0716）**。新增 `Game::request_load(&Path)`（push 到 `save_requests`，
+    由 `Game::frame` 在 VM step 之后结算，走 `load_into` → `flush_pending_sounds` →
+    `boot_map_active = false` → `retire_load_ui_chain` → `resume_loaded_map`，与游戏
+    自己的 `220` opcode 同一条路）。
+  * **CE131 槽号算法（实测钉死）**：self `600` = 模式（**0 写 / 1 读**）、`610` = 页内行号、
+    `611` = 页号（0-based）、`612` = 光标绝对槽号、`613` = 总页数、`626/627` = 每页行数/槽数。
+    **绝对槽号 = `611 * 627 + 610 + 1`**，共 **12 槽 / 3 页**。写盘实测：第 1 页第三行 →
+    `SaveData03`、第 2 页 → `SaveData07`、第 3 页 → `SaveData11`。命中盒用
+    `Screen::picture_rect` 的**面板盒**（928×115），不是 18×18 皮肤。
+  * **存单弹窗（报告没提的真问题）**：零售存档格**左键点一下就直接覆盖该槽**（无确认框），
+    误点 = 毁档。本轮在 **Godot `_input` 最顶部**（`_handle_mouse_button` 之前）拦截，
+    命中**非空**槽时吞掉点击并弹自绘面板：**保存到此槽**（把原点击**重放**给运行时，
+    让游戏自己写槽，`System.sav` 的"上次写的是第几槽"也跟着更新）/ **读取此存档**
+    （`request_load`）/ **取消**。空槽不弹窗（照常写入）。标题读档格是"读"模式，
+    按钮只有 **读取此存档 / 取消**。
+  * **返回标题入口**：`Game::trigger_return_to_title()` 复用脚本 `174 ReturnToTitle`
+    的同一个标志位（帧末才拆地图）；gdext 加 `return_to_title()` / `at_title()`；
+    `Esc` 打开自绘确认面板（**是 / 否**，默认焦点在"否"），浮层期间吞掉全部输入。
+    **Esc 语义变更**：不再当运行时的取消别名（说明书里取消键是 Backspace / X / 右键）。
+  * **晚饭后槽 1 自动存档**：`CE 258`（晩ごはん処理）**正常结束**那一帧写
+    `Save/SaveData01.sav`，并给前端 120 帧横幅。**宿主开关**
+    `Game::set_auto_save_slot(Option<u32>)`，**默认关**；Godot 只在**真窗口 + 非 capture**
+    会话打开（headless / `--capture` / `--auto-new-game` 都不开），回归套件因此
+    不会写花 `work/Data/Save/`。**注意：槽 1 是玩家的正常槽位，开了自动存档会被覆盖。**
+* **回归与验证**：`m25_cursor_follow` 4、`m25_live_rng` 15、`m25_sister_pose5` 4、
+  `m25_return_to_title` 2、**`m25_save_slot` 10**（新增）；Godot 端到端新增
+  `godot/tests/save_slot_modal.gd`（点已占用槽 1 → 弹窗打开且**没有**立刻读档；
+  "取消"关闭且不读档；"读取此存档" → 引擎排队读档生效，诊断出现 `220 SaveLoad: loaded`），
+  已接入 `tools/smoke-godot.sh`。
+  `cargo test -q --workspace --no-fail-fast` **与长期基线逐条一致、0 条新增**；
+  `cargo fmt --all --check` 干净；`wolf-cli verify` PASS 64 / 1 SKIP；
+  `bash tools/smoke-godot.sh` exit 0（P0 基线 `pictures=4 sprites=4` 不动）。
+  * **空间**：删 `target/debug/incremental`（1.8 GB）、`target/release`、`target/ver6`、`work/out/saveprobe`，以及 `target/debug` 下 279 个 `.pdb`（2.6 GB）和本轮 24 个探针脚本/日志；仓库合计 12 GB → **7.0 GB**（`work/Data` 176 MB、`work/out` 816 MB 未动，`work/out/retail_saves/` 与 `work/out/player_saves_2026-11-15/` 保留作证据/备份）。

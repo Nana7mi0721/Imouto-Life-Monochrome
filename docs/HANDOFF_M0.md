@@ -312,6 +312,37 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     比所有 `.rs` 都新）；玩家存档备份在 `work/out/player_saves_2026-11-15/`，
     `work/Data/Save/` 已是出厂存档。
 
+* **M25 实机 UX 四项收口（2026-11-15 深夜，当前状态）**：输入 `github_audit_rng_and_ux_report.md`
+  + `ux方案.md`（外部只读产物），用户拍板顺序 1→5。详见 **`docs/M25_LIVE_UX.md`**。
+  - **§二 光标：核实结论是引擎没坏，本轮不改引擎**。零售手型指针 = Picture 2999
+    （`SampleMapA` Ev 14「マウス追従」，条件 `var120 == 1`，画 `CharaChip/hand3.png`，
+    **6×4 帧表 / 每格 32×32**）；`var120` **只在夜间流程后为 1**（`CE230` pc46 置 1、
+    `CE227` pc50 置 0）。零售 5 存档实测：retail-01..04 → `var120 = 0`、
+    retail-05（第 4 天 23:00）→ `1`；本仓端口存档（第 1 天 19:00）→ `0`，**与零售一致**。
+    ⇒ 玩家看不到手型光标是**进度状态**不是 bug；"Godot 硬件自定义光标"已否决。
+    回归 `m25_cursor_follow` 4 条。
+  - **§一 RNG（opt-in）**：`WOLF_LIVE_RNG=1` 时新档/读档的随机游标加时间基扰动；
+    环境变量没设时**逐位等价**（回归基线不受影响）。回归 `m25_live_rng` 15 条。
+  - **§三 睡姿热区**：报告的"pose 5 没有 CE240 槽位"因果是错的；真因是宿主
+    `game.rs` 的无条件早退。改法 = 删早退 → **轮廓命中优先 → 地图矩形兜底**。
+    **没有**放大 ev12 矩形（缺口在上方且缺夜间实机截图）、**没有**加 `item_icon`
+    （会破坏 ev26 的 op124 链）。回归 `m25_sister_pose5` 4 条。
+  - **§四 存读档**：`Game::request_load(&Path)` 打通"`SaveRequest` 入队安全"（原字段
+    private，两份文档都漏了；方案里的 `Path::new(path.to_string().as_str())` 编译不过）；
+    **CE131 槽号算法实测钉死**：self `600` 模式(0 写/1 读)、`610` 行、`611` 页、
+    `612` 绝对槽号、`613` 总页数、`626/627` 每页行/槽 ⇒ **绝对槽号 = `611*627+610+1`**，
+    共 12 槽 3 页（第 1/2/3 页第三行写 `SaveData03/07/11`，已写盘实测）。
+    **存单弹窗**：零售存档格单击即覆盖（误点毁档），本轮在 Godot `_input` 最顶部拦截，
+    非空槽弹「保存到此槽 / 读取此存档 / 取消」，保存按钮**重放原点击**让游戏自己写。
+    **返回标题入口**：`Esc` → 自绘确认面板（是/否，默认"否"）；Esc 不再是运行时取消别名。
+    **晚饭后槽 1 自动存档**：`CE258` 正常结束那帧写 `SaveData01`，**宿主开关
+    `set_auto_save_slot`，默认关**；Godot 只在真窗口非 capture 会话打开。
+  - **回归状态**：`cargo test -q --workspace --no-fail-fast` **与长期基线逐条一致、
+    0 条新增**；本轮新增 **35 条**（m25_cursor_follow 4、m25_live_rng 15、
+    m25_sister_pose5 4、m25_return_to_title 2、m25_save_slot 10）+ Godot 端到端
+    `godot/tests/save_slot_modal.gd`（已接入 `tools/smoke-godot.sh`）；
+    `cargo fmt --all --check` 干净；`wolf-cli verify` PASS 64 / 1 SKIP；
+    `bash tools/smoke-godot.sh` exit 0。
 * **T14 实机 UI/性能收口（2026-11-12 深夜，当前状态）**：最新冷构建下新游戏/读档
   第 `1/2/3/6/10` 帧均 `yellowish=0 / greenish=0`；读档 HUD 的 100x8 白色带框精力条
   在第 1 帧已实际绘制。相册图标纳入图片墨迹命中，侧栏关闭态命中扩到屏幕 `x=0`，

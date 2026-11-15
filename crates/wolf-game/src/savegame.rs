@@ -163,7 +163,9 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
     // entry 0 on every load made every replay of a save draw the same sequence
     // (report II.1); derive the position from playtime instead, which is stable
     // for one save and different across saves without changing the save layout.
-    game.vm.rng.set_cursor(loaded.playtime_frames as usize);
+    // A live session (`WOLF_LIVE_RNG`) shifts that starting point, so reloading
+    // one save twice draws a different sequence; the default path is unchanged.
+    game.vm.rng.set_cursor_live(loaded.playtime_frames as usize);
 
     // The running BGM is part of the save. Restore it before the picture layer so the
     // first frame after a load already has the right track (and so a script that only

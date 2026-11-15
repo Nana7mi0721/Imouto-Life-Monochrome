@@ -25,6 +25,7 @@ use godot::prelude::*;
 mod localclock;
 
 use wolf_game::atlas::{Atlas, SpriteQuad, TextQuad};
+use wolf_game::game::BOOT_MAP;
 use wolf_game::message::{self, Run as MessageRun};
 use wolf_game::{Game, OverlayLayer};
 use wolf_vm::{ChoiceReply, SoundAction, SoundChannel};
@@ -458,6 +459,8 @@ impl WolfGame {
         packet.set("transition_active", game.screen_transition.is_active());
         packet.set("pictures", outcome.pictures as i64);
         packet.set("idle", outcome.idle);
+        // The daily auto-save finished; the front-end may show a short banner.
+        packet.set("auto_saved", game.auto_saved_banner());
         if let Some((current, maximum)) = game.hud_action_points() {
             let mut ap = VarDictionary::new();
             ap.set("current", current as i64);
@@ -621,6 +624,88 @@ impl WolfGame {
                 false
             }
         }
+    }
+
+    /// Sends the live session back to the title screen.
+    ///
+    /// The runtime tears the running map down at the end of the frame that
+    /// carries the request, exactly like the script's own `174 ReturnToTitle`,
+    /// so a front-end menu can call this without corrupting the scheduler.
+    /// Returns false when there is no session.
+    #[func]
+    fn return_to_title(&mut self) -> bool {
+        let Some(game) = self.game.as_mut() else {
+            return false;
+        };
+        game.trigger_return_to_title();
+        true
+    }
+
+    /// True while the session sits on the title screen.
+    ///
+    /// The front-end uses it to keep the "back to the title" entry from
+    /// replaying the opening when there is nothing to go back from. A session
+    /// that was started through the title event instead of the boot map has no
+    /// map path at all, and that is the title as well.
+    #[func]
+    fn at_title(&self) -> bool {
+        let Some(game) = self.game.as_ref() else {
+            return false;
+        };
+        match game.current_map_path.as_deref() {
+            None => true,
+            Some(path) => path == BOOT_MAP,
+        }
+    }
+
+    /// The save slot under the pointer, when the save/load grid is up.
+    ///
+    /// Answers an empty dictionary when the grid is closed or the pointer is
+    /// outside every slot panel. A slot that already holds a save comes back
+    /// with `occupied` set, which is what the front end needs to decide
+    /// between a plain click and a confirmation.
+    #[func]
+    fn save_slot_at(&mut self, x: i32, y: i32) -> VarDictionary {
+        let mut out = VarDictionary::new();
+        let Some(game) = self.game.as_mut() else {
+            return out;
+        };
+        let Some(hit) = game.save_slot_at(x, y) else {
+            return out;
+        };
+        out.set("slot", hit.slot as i64);
+        let path = GString::from(hit.path.to_string_lossy().as_ref());
+        out.set("path", &path);
+        out.set("occupied", hit.occupied);
+        out.set("loading", hit.loading);
+        out
+    }
+
+    /// Asks the runtime to load a save file at the end of the current frame.
+    ///
+    /// The load travels the same path as the game's own `220` opcode: the
+    /// interpreter cannot read a save while it holds the game, so the request
+    /// is queued and the frame applies it, which also retires the menu chain
+    /// and resumes the saved map.
+    #[func]
+    fn request_load(&mut self, path: GString) -> bool {
+        let Some(game) = self.game.as_mut() else {
+            return false;
+        };
+        let path = std::path::PathBuf::from(path.to_string());
+        game.request_load(&path).is_ok()
+    }
+
+    /// Turns the daily auto-save on or off.
+    ///
+    /// Slot 0 turns it off. The auto-save overwrites a slot the player may have
+    /// written by hand, so only a live session asks for it.
+    #[func]
+    fn set_auto_save_slot(&mut self, slot: i32) {
+        let Some(game) = self.game.as_mut() else {
+            return;
+        };
+        game.set_auto_save_slot(if slot > 0 { Some(slot as u32) } else { None });
     }
 
     /// Logical resolution of the runtime (1024x576 in this game).

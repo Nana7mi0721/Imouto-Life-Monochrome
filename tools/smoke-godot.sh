@@ -8,6 +8,7 @@
 #   6. load the retail SaveData01.sav and assert the resumed map draws;
 #   7. walk the real title -> load screen -> slot 3 -> bedroom path;
 #   8. new-game save -> fresh-session load round trip.
+#   9. the front-end save-slot confirmation (click a used slot, cancel, load).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -43,6 +44,9 @@ if [ -f "$SAVE" ]; then
         --data-root="$DATA_ROOT" --save="$SAVE"
 
     "$GODOT" --headless --path godot --script res://tests/load_menu.gd -- \
+        --data-root="$DATA_ROOT"
+
+    "$GODOT" --headless --path godot --script res://tests/save_slot_modal.gd -- \
         --data-root="$DATA_ROOT"
 else
     echo "skip: no $SAVE"

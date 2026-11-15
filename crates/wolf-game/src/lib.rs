@@ -54,7 +54,7 @@ pub use choice::{layout as choice_layout, ChoiceLayout};
 pub use fontmetrics::FontMetrics;
 pub use game::{
     install_local_clock, layered_data_path, Choices, Clock, FrameOutcome, Game, GameError,
-    GameStats, LocalDateTime, Message, TITLE_EVENT,
+    GameStats, LocalDateTime, Message, SaveSlotHit, TITLE_EVENT,
 };
 pub use map_runtime::{MapRuntime, PageSlot, Trigger};
 pub use overlay::{OverlayLayer, ScreenOverlay};

@@ -100,6 +100,113 @@ class _BlendBatch extends Node2D:
 				true
 			)
 
+class _ModalLayer extends Node2D:
+	## A front-end modal dialog.
+	##
+	## The runtime draws every pixel itself, so a modal is hand-drawn too: a
+	## dimmed screen, one panel, a title, a line of body text and the buttons.
+	## It lives on its own canvas item with a high `z_index`, so it stays above
+	## the blend batches the runtime spawns for the mixed-blend path.
+	##
+	## The same layer carries the short banner the front-end shows after the
+	## daily auto-save, so a message never has to fight the game's own pictures.
+
+	const LOGICAL_SIZE := Vector2(1024.0, 576.0)
+	const PANEL := Rect2(212.0, 160.0, 600.0, 250.0)
+	const BUTTON_SIZE := Vector2(160.0, 44.0)
+	const BUTTON_GAP := 30.0
+	const TOAST_RECT := Rect2(654.0, 12.0, 358.0, 40.0)
+
+	var open := false
+	var title := ""
+	var body := ""
+	var labels: Array[String] = []
+	var focus_index := 0
+	## The banner text; empty means no banner.
+	var toast := ""
+	var bold_font: Font
+	var regular_font: Font
+
+	## The clickable button boxes, left to right.
+	func button_rects() -> Array[Rect2]:
+		var rects: Array[Rect2] = []
+		var count := labels.size()
+		if count <= 0:
+			return rects
+		var total := float(count) * BUTTON_SIZE.x + float(count - 1) * BUTTON_GAP
+		var left := PANEL.position.x + (PANEL.size.x - total) * 0.5
+		var top := PANEL.position.y + PANEL.size.y - BUTTON_SIZE.y - 28.0
+		for index in range(count):
+			var x := left + float(index) * (BUTTON_SIZE.x + BUTTON_GAP)
+			rects.append(Rect2(Vector2(x, top), BUTTON_SIZE))
+		return rects
+
+	func _draw() -> void:
+		if open:
+			draw_rect(Rect2(Vector2.ZERO, LOGICAL_SIZE), Color(0.0, 0.0, 0.0, 0.62))
+			draw_rect(PANEL, Color(0.09, 0.09, 0.11, 0.97), true)
+			draw_rect(PANEL, Color(0.82, 0.82, 0.86, 0.95), false, 2.0)
+			_draw_label(
+				title,
+				Rect2(PANEL.position + Vector2(24.0, 26.0), Vector2(PANEL.size.x - 48.0, 34.0)),
+				26.0,
+				true
+			)
+			if not body.is_empty():
+				_draw_label(
+					body,
+					Rect2(PANEL.position + Vector2(24.0, 84.0), Vector2(PANEL.size.x - 48.0, 26.0)),
+					19.0,
+					false,
+					Color(0.72, 0.72, 0.78, 1.0)
+				)
+			var rects := button_rects()
+			for index in range(rects.size()):
+				var focused := index == focus_index
+				var fill := Color(0.26, 0.26, 0.30, 0.98) if focused else Color(0.14, 0.14, 0.16, 0.98)
+				var border := Color(0.95, 0.95, 0.98, 1.0) if focused else Color(0.52, 0.52, 0.58, 1.0)
+				draw_rect(rects[index], fill, true)
+				draw_rect(rects[index], border, false, 2.0 if focused else 1.0)
+				_draw_label(labels[index], rects[index], 22.0, true)
+		if not toast.is_empty():
+			draw_rect(TOAST_RECT, Color(0.09, 0.09, 0.11, 0.90), true)
+			draw_rect(TOAST_RECT, Color(0.62, 0.72, 0.86, 0.85), false, 1.0)
+			_draw_label(toast, TOAST_RECT, 19.0, false, Color(0.92, 0.94, 0.98, 1.0))
+
+	## Draws one centred label through the same shaper the runtime text uses,
+	## so the modal matches the game's own typography.
+	func _draw_label(
+		text: String,
+		box: Rect2,
+		size: float,
+		bold: bool,
+		colour: Color = Color(0.95, 0.95, 0.97, 1.0)
+	) -> void:
+		var font := bold_font if bold else regular_font
+		if font == null:
+			return
+		var px := maxi(1, int(round(size)))
+		var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+		var pitch := WolfTextScript.line_pitch(size)
+		var origin := Vector2(
+			box.position.x + maxf(0.0, (box.size.x - width) * 0.5),
+			box.position.y + (box.size.y - pitch) * 0.5
+		)
+		WolfTextScript.draw_text(
+			self,
+			{
+				"text": text,
+				"rect": Rect2(origin, Vector2(width + 8.0, pitch)),
+				"font_px": size,
+				"weight": 700 if bold else 400,
+				"colour": colour,
+				"alpha": 1.0,
+				"outline": true,
+			},
+			bold_font,
+			regular_font
+		)
+
 var wolf: WolfGame
 var atlas_texture: ImageTexture
 var atlas_len: int = -1
@@ -181,6 +288,25 @@ var wheel_notches: int = 0
 ## held as a fresh edge, or regaining focus fakes a click on a map hotspot.
 var focus_gained := false
 
+## The front-end modal that owns the input, if any.
+##
+## "" = none, "return_title" = the back-to-title confirmation, "save_slot" = the
+## save-slot confirmation. While a modal is up no key, no wheel notch and no
+## click reaches the runtime.
+var _modal_kind := ""
+## What each button of the current modal does: "save", "load" or "cancel".
+var _modal_actions: Array[String] = []
+## The slot the "save_slot" modal is about.
+var _modal_slot := {}
+## Where the pointer was when the save-slot modal opened. The "save" button
+## replays the click there, so the game performs its own save.
+var _modal_click := Vector2i(-1, -1)
+## A click the front-end owes the runtime, replayed on the next physics frame.
+var _pending_click := Vector2i(-1, -1)
+## The slot the daily auto-save writes to, 0 when it is off.
+var _auto_save_slot := 0
+var _modal_layer: _ModalLayer
+
 var log_input := false
 var log_messages := false
 var log_events := false
@@ -235,6 +361,16 @@ func _ready() -> void:
 	_attach_fallback(bold_font, symbol_fallback)
 	_attach_fallback(regular_font, symbol_fallback)
 	print("startup: godot_fonts_ms=", "%.1f" % ((Time.get_ticks_usec() - fonts_started) / 1000.0))
+	# The modal is a front-end layer of its own, so it is not part of the
+	# runtime's picture stack and can never be overwritten by a sprite.
+	_modal_layer = _ModalLayer.new()
+	_modal_layer.name = "ModalLayer"
+	# The blend batches the runtime spawns are ordinary children with
+	# `z_index` 0, so a high index keeps the modal on top of every picture.
+	_modal_layer.z_index = 100
+	_modal_layer.bold_font = bold_font
+	_modal_layer.regular_font = regular_font
+	add_child(_modal_layer)
 
 	if root.is_empty():
 		push_error("data root not found: pass `-- --data-root=<unpacked Data dir>`")
@@ -249,6 +385,14 @@ func _ready() -> void:
 		set_physics_process(false)
 		return
 	print("startup: wolf_open_ms=", "%.1f" % ((Time.get_ticks_usec() - open_started) / 1000.0))
+	# The daily auto-save writes slot 1 after the evening meal. It overwrites a
+	# slot the player may have written by hand, so only a live session asks for
+	# it: a capture run and a headless check must never touch the shipped save
+	# files.
+	if capture_path.is_empty() and not auto_new_game and DisplayServer.get_name() != "headless":
+		_auto_save_slot = 1
+		wolf.set_auto_save_slot(_auto_save_slot)
+		print("wolf: auto-save enabled for slot ", _auto_save_slot)
 	if auto_new_game:
 		# Mirrors `wolf-cli capture --answer 0`: advance messages and answer every
 		# choice with option 0 so a scripted capture reaches the daily loop.
@@ -310,18 +454,43 @@ func _physics_process(_delta: float) -> void:
 	# pointer moved before this physics tick.
 	if mouse_latch & 1 != 0 and mouse_latch_pos.x >= 0 and mouse_latch_pos.y >= 0:
 		mouse_pos = mouse_latch_pos
-	var raw_keys := _raw_key_codes()
+	# A modal is a front-end dialog: while it is up the runtime must
+	# not see the keyboard, the wheel or the pointer at all, or a click would
+	# fall through onto a map hotspot behind the panel.
+	var modal_open := not _modal_kind.is_empty()
+	var raw_keys := PackedInt32Array() if modal_open else _raw_key_codes()
 	# Consume the focus-in marker: only the first tick after a focus-in skips the
 	# level query; later ticks trust it again for genuinely held buttons.
 	var skip_level := focus_gained
 	focus_gained = false
-	var buttons := _mouse_buttons(skip_level)
+	var buttons := 0 if modal_open else _mouse_buttons(skip_level)
+	# A modal that confirmed "save this slot" replays the click that opened it,
+	# so the game performs its own save: it also updates System.sav's last-slot
+	# row, which a front-end write could not.
+	if _pending_click.x >= 0:
+		mouse_pos = _pending_click
+		buttons |= 1
+		_pending_click = Vector2i(-1, -1)
 	mouse_latch = 0
-	wolf.set_wheel(wheel_notches)
+	wolf.set_wheel(0 if modal_open else wheel_notches)
 	wheel_notches = 0
 	wolf.set_input(_key_bits(raw_keys), raw_keys, mouse_pos, buttons)
 	var wolf_started := Time.get_ticks_usec()
 	packet = wolf.frame()
+	if modal_open:
+		# The runtime paints its own pointer into picture 2999 and hides the
+		# system arrow. The modal is a front-end element, so the system arrow
+		# has to come back while the panel is up; hiding the runtime's pointer
+		# keeps a single cursor on screen.
+		packet["sprites"] = _without_runtime_cursor(packet.get("sprites", []))
+	# The daily auto-save finished; the banner rides on the modal layer so it
+	# never fights a picture of the game.
+	var toast := ""
+	if bool(packet.get("auto_saved", false)) and _auto_save_slot > 0:
+		toast = "已自动保存到存档槽 %d" % _auto_save_slot
+	if toast != _modal_layer.toast:
+		_modal_layer.toast = toast
+		_modal_layer.queue_redraw()
 	var wolf_us := Time.get_ticks_usec() - wolf_started
 	perf_wolf_us_total += wolf_us
 	perf_wolf_us_max = maxi(perf_wolf_us_max, wolf_us)
@@ -384,8 +553,18 @@ func _physics_process(_delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if not _modal_kind.is_empty():
+		# The modal owns the input while it is up.
+		_handle_modal_event(event)
+		return
 	if event is InputEventMouseButton:
-		_handle_mouse_button(event as InputEventMouseButton)
+		var mouse_event := event as InputEventMouseButton
+		# The save grid writes the slot on a plain click, so the click is
+		# intercepted here, at the very top, before the runtime can see it.
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			if _open_save_slot_modal(mouse_event):
+				return
+		_handle_mouse_button(mouse_event)
 		return
 	if not (event is InputEventKey):
 		return
@@ -400,6 +579,14 @@ func _input(event: InputEvent) -> void:
 		return
 	if log_input:
 		print("input: key=", identity, " pressed=", key_event.pressed, " echo=", key_event.echo, " frame=", game_frames)
+	if identity == KEY_ESCAPE:
+		# Escape opens the front-end "back to the title" confirmation. The
+		# runtime treats Escape as an alias for Backspace, so the key never
+		# reaches it: the manual binds cancel to Backspace / X / right click,
+		# and those keep working.
+		if key_event.pressed and not key_event.echo:
+			_open_return_modal()
+		return
 	if key_event.pressed:
 		# OS auto-repeat echoes the key; the held set already has it.
 		if key_event.echo or held_keys.has(identity):
@@ -455,6 +642,191 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 		mouse_down &= ~bit
 		if log_input:
 			print("input: mouse up bit=", bit, " frame=", game_frames)
+
+
+## Handles one input event while a modal is up.
+##
+## The modal is front-end only: the runtime sees nothing until the player
+## answers, so a click cannot fall through onto a map hotspot and a key
+## cannot advance a message behind the panel.
+func _handle_modal_event(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if not key_event.pressed or key_event.echo:
+			return
+		var identity := key_event.physical_keycode
+		if identity == 0:
+			identity = key_event.keycode
+		var count := maxi(1, _modal_layer.labels.size())
+		match identity:
+			KEY_ESCAPE:
+				_close_modal()
+			KEY_LEFT, KEY_A:
+				_set_modal_focus((_modal_layer.focus_index - 1 + count) % count)
+			KEY_RIGHT, KEY_D:
+				_set_modal_focus((_modal_layer.focus_index + 1) % count)
+			KEY_TAB:
+				_set_modal_focus((_modal_layer.focus_index + 1) % count)
+			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
+				_activate_modal_focus()
+		return
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+			return
+		# Control-local coordinates, the same space the runtime hit-tests in.
+		var local := get_global_transform_with_canvas().affine_inverse() * mouse_event.position
+		var point := Vector2(local.x, local.y)
+		var rects := _modal_layer.button_rects()
+		for index in range(rects.size()):
+			if rects[index].has_point(point):
+				_set_modal_focus(index)
+				_activate_modal_focus()
+				return
+		# A click outside the panel is a cancel, like Escape.
+		_close_modal()
+
+
+## Opens the "back to the title" confirmation.
+func _open_return_modal() -> void:
+	if wolf == null or not _modal_kind.is_empty():
+		return
+	if wolf.at_title():
+		# The session already sits on the title screen, so a reset would only
+		# replay the opening.
+		return
+	_modal_kind = "return_title"
+	_modal_actions = ["title", "cancel"]
+	_modal_layer.title = "返回标题画面？"
+	_modal_layer.body = "未保存的进度将会丢失。"
+	_modal_layer.labels = ["是", "否"]
+	# 「否」 is the default: the player may still be holding the confirm key
+	# from the dialogue behind the panel.
+	_modal_layer.focus_index = 1
+	_modal_layer.open = true
+	_modal_layer.queue_redraw()
+	_reset_modal_input()
+	print("ui: return-to-title confirmation opened")
+
+
+## Opens the save-slot confirmation when the click landed on a used slot.
+##
+## The retail grid writes the slot on a plain click, so a mis-click destroys
+## the save that was there. The click is swallowed here and the player picks
+## what should happen instead.
+##
+## Returns true when the click was consumed.
+func _open_save_slot_modal(event: InputEventMouseButton) -> bool:
+	if wolf == null:
+		return false
+	var local := get_global_transform_with_canvas().affine_inverse() * event.position
+	var hit: Dictionary = wolf.save_slot_at(int(local.x), int(local.y))
+	if hit.is_empty():
+		return false
+	if not bool(hit.get("occupied", false)):
+		# An empty slot has nothing to lose: the game writes it as usual.
+		return false
+	_modal_kind = "save_slot"
+	_modal_slot = hit
+	_modal_click = Vector2i(int(local.x), int(local.y))
+	_modal_layer.title = "存档槽 %d" % int(hit.get("slot", 0))
+	_modal_layer.body = "该槽位已有存档。"
+	if bool(hit.get("loading", false)):
+		# The title screen reads saves; there is nothing to write here.
+		_modal_layer.labels = ["读取此存档", "取消"]
+		_modal_actions = ["load", "cancel"]
+	else:
+		_modal_layer.labels = ["保存到此槽", "读取此存档", "取消"]
+		_modal_actions = ["save", "load", "cancel"]
+	# The safe choice is the default: the player may still be holding the
+	# confirm key from the grid behind the panel.
+	_modal_layer.focus_index = _modal_layer.labels.size() - 1
+	_modal_layer.open = true
+	_modal_layer.queue_redraw()
+	_reset_modal_input()
+	print("ui: save slot confirmation opened for slot ", hit.get("slot", 0))
+	return true
+
+
+## Closes the modal without acting on it.
+func _close_modal() -> void:
+	if _modal_kind.is_empty():
+		return
+	_modal_kind = ""
+	_modal_actions = []
+	_modal_slot = {}
+	_modal_click = Vector2i(-1, -1)
+	if _modal_layer != null:
+		_modal_layer.open = false
+		_modal_layer.queue_redraw()
+
+
+## Moves the keyboard focus between the buttons.
+func _set_modal_focus(index: int) -> void:
+	if index == _modal_layer.focus_index:
+		return
+	_modal_layer.focus_index = index
+	_modal_layer.queue_redraw()
+
+
+## Runs the focused button.
+func _activate_modal_focus() -> void:
+	var index := _modal_layer.focus_index
+	var action := ""
+	if index >= 0 and index < _modal_actions.size():
+		action = _modal_actions[index]
+	match _modal_kind:
+		"return_title":
+			_close_modal()
+			if action == "title" and wolf != null:
+				wolf.return_to_title()
+				print("ui: return to title requested")
+		"save_slot":
+			_activate_save_slot(action)
+		_:
+			_close_modal()
+
+
+## Performs the action the save-slot modal's focused button asks for.
+##
+## "save" replays the click that opened the modal, so the game performs its
+## own save and updates System.sav's last-slot row. "load" queues a load the
+## same way the game's `220` opcode does.
+func _activate_save_slot(action: String) -> void:
+	var path := str(_modal_slot.get("path", ""))
+	var click := _modal_click
+	_close_modal()
+	match action:
+		"save":
+			_pending_click = click
+		"load":
+			if wolf != null and not path.is_empty():
+				if not bool(wolf.request_load(path)):
+					push_warning("ui: could not queue the load of ", path)
+			else:
+				push_warning("ui: no save file to load")
+		_:
+			pass
+
+
+## Hands the pointer and the keyboard to the modal.
+func _reset_modal_input() -> void:
+	mouse_down = 0
+	mouse_latch = 0
+	mouse_latch_pos = Vector2i(-1, -1)
+	wheel_notches = 0
+	held_keys.clear()
+	held_order.clear()
+
+
+## The packet's sprite list without the runtime's own pointer (picture 2999).
+func _without_runtime_cursor(sprites: Array) -> Array:
+	var kept: Array = []
+	for sprite in sprites:
+		if int(sprite.get("number", -1)) == 2999:
+			continue
+		kept.append(sprite)
+	return kept
 
 
 func _notification(what: int) -> void:

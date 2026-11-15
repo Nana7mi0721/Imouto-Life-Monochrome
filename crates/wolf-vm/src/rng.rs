@@ -74,8 +74,35 @@
 //!   observed.
 //! * This build's corrupted tail is read as-is (masked to 7 bits), because that
 //!   is what the engine would have done with the patched bytes.
+//!
+//! Live-play jitter (opt-in)
+//!
+//! The cursor above is data-defined, so a fresh game and a re-loaded save
+//! replay the same draws. That is the retail-fidelity behaviour this module
+//! documents, and every regression in the tree depends on it: the visual
+//! baselines and the shop/night-event expectations all pin the exact draw
+//! order.
+//!
+//! A player who wants a different roll every time is asking for a product
+//! decision, not a fidelity fix, so it lives behind an environment variable:
+//! set [`LIVE_RNG_ENV`] (`WOLF_LIVE_RNG`) to anything non-empty and a live
+//! session shifts the starting cursor of a new game and of every load by a
+//! time-based offset. With the variable unset - the default, and what CI and
+//! the test suite use - every path is byte-for-byte what it was before.
+//!
+//! The variable is read from the process environment, so exporting it
+//! globally also moves the retail-comparison tests (the seeded stream
+//! fixtures and the visual baselines) off their expected draws. Unset it
+//! again before running the regression suite.
+//!
+//! Note on variable names: the engine's `Sys110` ("the current random seed")
+//! lives in the `9_000_000 + n` magic bank, and this game's scripts never
+//! write it. The scripts do write normal variable 110 (`2_000_000 + 110`),
+//! which is an ordinary game variable and has nothing to do with the seed.
 
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Fallback seed used only to synthesise a table when no `Game.dat` table has
 /// been supplied (unit tests, `Vm::new` before the loader wires the real one).
@@ -96,6 +123,47 @@ const MULTIPLIER: u32 = 0x0003_43FD;
 
 /// MSVC C-runtime LCG increment (0x269EC3).
 const INCREMENT: u32 = 0x0026_9EC3;
+
+/// Environment variable that opts a live session into the cursor jitter.
+///
+/// Any non-empty value turns it on. The variable is read once per
+/// [`WolfRng::from_game`] call and once per [`WolfRng::set_cursor_live`]
+/// call, never per draw, so the stream stays a pure function of the script
+/// path within one frame.
+pub const LIVE_RNG_ENV: &str = "WOLF_LIVE_RNG";
+
+/// Monotonic counter mixed into [`live_jitter`].
+///
+/// Two jitter requests inside the same nanosecond would otherwise collide;
+/// the counter makes every request distinct even then.
+static LIVE_JITTER_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// True when the live-play cursor jitter is enabled for this process.
+///
+/// The environment is the only switch: the regression suite must stay
+/// deterministic, so the jitter is off unless a player asks for it.
+#[must_use]
+pub fn live_rng_enabled() -> bool {
+    std::env::var_os(LIVE_RNG_ENV).is_some_and(|value| !value.is_empty())
+}
+
+/// A fresh offset into the static-random table.
+///
+/// The wall clock supplies the entropy and the counter guarantees that two
+/// requests never share one, so a player who restarts the game inside the
+/// same second still lands on a different part of the table. The result is
+/// mixed before it is returned, because the raw nanosecond counter only has
+/// meaningful entropy in its low bits.
+#[must_use]
+pub fn live_jitter() -> usize {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0u64, |elapsed| elapsed.as_nanos() as u64);
+    let tick = LIVE_JITTER_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mixed = nanos.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(23)
+        ^ tick.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    (mixed as usize) ^ ((mixed >> 32) as usize)
+}
 
 /// The retail random source: a cursor over the pre-generated 7-bit table from
 /// `Game.dat`.
@@ -153,15 +221,42 @@ impl WolfRng {
     /// leading words are accepted for API/source fidelity but are **not** seeds:
     /// the editor derives them from its first two draws, as the module docs
     /// explain.
+    ///
+    /// The cursor starts at 0, which is the only value the retail data pins
+    /// down. A live session may start elsewhere: see [`LIVE_RNG_ENV`].
     #[must_use]
     pub fn from_game(seed_a: u32, _seed_b: u32, table: Vec<u8>) -> Self {
+        Self::from_game_with_live(seed_a, _seed_b, table, live_rng_enabled())
+    }
+
+    /// Same as [`Self::from_game`], but the live jitter is forced on or off
+    /// instead of being read from the environment.
+    ///
+    /// The environment is a process-wide setting, so a regression test cannot
+    /// flip it while other tests run in parallel. This is the injectable form
+    /// those tests drive.
+    #[must_use]
+    pub fn from_game_with_live(seed_a: u32, _seed_b: u32, table: Vec<u8>, live: bool) -> Self {
+        let cursor = if live { live_jitter() } else { 0 };
+        Self::from_game_with_cursor(seed_a, _seed_b, table, cursor)
+    }
+
+    /// Same as [`Self::from_game`], but the cursor starts at `cursor`.
+    ///
+    /// The offset is taken modulo the table length. This is the injectable
+    /// form: the live path calls [`Self::from_game`], and the regression tests
+    /// drive this one with an explicit offset so they never have to touch the
+    /// process environment.
+    #[must_use]
+    pub fn from_game_with_cursor(seed_a: u32, _seed_b: u32, table: Vec<u8>, cursor: usize) -> Self {
         if table.is_empty() {
             // A store without Game.dat must still run deterministically.
             return Self::from_seed(seed_a);
         }
+        let cursor = cursor % table.len();
         Self {
             table,
-            cursor: 0,
+            cursor,
             draws: 0,
         }
     }
@@ -175,6 +270,37 @@ impl WolfRng {
     pub fn set_cursor(&mut self, cursor: usize) {
         if !self.table.is_empty() {
             self.cursor = cursor % self.table.len();
+        }
+    }
+
+    /// Moves the cursor to `base` and, in a live session, shifts it further.
+    ///
+    /// This is the entry point a load uses: the save itself carries no cursor,
+    /// so the playtime still picks the starting point and the live jitter only
+    /// moves it somewhere else. With [`LIVE_RNG_ENV`] unset the result is
+    /// exactly [`Self::set_cursor`].
+    pub fn set_cursor_live(&mut self, base: usize) {
+        self.set_cursor_with_live(base, live_rng_enabled());
+    }
+
+    /// Moves the cursor to `base` and, when `live` is on, shifts it further.
+    ///
+    /// The injectable form of [`Self::set_cursor_live`]: the environment is a
+    /// process-wide setting, so a regression test cannot flip it while other
+    /// tests run in parallel.
+    pub fn set_cursor_with_live(&mut self, base: usize, live: bool) {
+        let jitter = if live { live_jitter() } else { 0 };
+        self.set_cursor_with_jitter(base, jitter);
+    }
+
+    /// Moves the cursor to `base` and then shifts it by `jitter`.
+    ///
+    /// A jitter of 0 leaves the cursor exactly where `base` put it, which is
+    /// what the deterministic default relies on.
+    pub fn set_cursor_with_jitter(&mut self, base: usize, jitter: usize) {
+        self.set_cursor(base);
+        if jitter != 0 {
+            self.set_cursor(self.cursor.wrapping_add(jitter));
         }
     }
 
