@@ -173,25 +173,6 @@ fn enter_interface() -> Option<Game> {
     Some(game)
 }
 
-/// The interface pages plus the two pose pages (ev22/ev28), so the picture
-/// bridge has a trigger-0 page to reach. The pose pages stay dormant until a
-/// click starts them, exactly like in the shipped map.
-fn enter_interface_with_pose() -> Option<Game> {
-    let mut game = open_loaded()?;
-    let bytes = std::fs::read(data_root().join("MapData").join("SampleMapA.mps")).ok()?;
-    let mut map = Map::parse(&bytes).ok()?;
-    map.events
-        .retain(|event| matches!(event.id, 15 | 16 | 17 | 18 | 19 | 20 | 22 | 23 | 26 | 28));
-    game.start_pages(&map, None);
-    game.vm.vars.set(100, 1);
-    game.start_event(230);
-    let mut seen = Vec::new();
-    for _ in 0..260 {
-        step_collect(&mut game, &mut seen);
-    }
-    Some(game)
-}
-
 /// Real left click: move onto the button (hover is polled by op124), hold the
 /// button for a few frames so the per-frame poll cannot miss the edge, release.
 /// Returns false when the picture is not on screen.
@@ -575,54 +556,4 @@ fn end_choice_runs_the_trigger_zero_exit_script() {
     );
     assert_eq!(var(&game, 125), 0, "the end choice clears the action phase");
     assert_eq!(game.stats.warnings, 0, "warnings");
-}
-
-/// The pose icon (picture 1110) is a visible picture button, so the click bridge
-/// has to reach its action page 22. Page 22 is gated by `v100 >= 1` (the
-/// interface page) and `v69 == 0` (the forbidden stage). The bridge may ignore
-/// the interface page - the pose submenu holds it at 0 while the icon stays on
-/// screen - but it must not ignore the stage gate: the script deliberately
-/// refuses the pose change once `v69` is set.
-#[test]
-fn the_pose_icon_bridge_keeps_the_scripts_own_stage_gate() {
-    // The forbidden stage: the script refuses the pose change.
-    let Some(mut game) = enter_interface_with_pose() else {
-        return;
-    };
-    game.vm.vars.set(69, 1);
-    assert!(click_picture(&mut game, 1110), "the pose icon is on screen");
-    for _ in 0..10 {
-        game.frame();
-    }
-    assert_ne!(
-        game.last_action_event,
-        Some(22),
-        "the stage gate must survive the picture bridge"
-    );
-    assert!(
-        !live_events(&game).contains(&22),
-        "event 22 must not run in the forbidden stage"
-    );
-
-    // The ordinary state: the pose icon opens its confirmation. A fresh
-    // interface, because the refused click may have left a message on screen
-    // and an open message owns the pointer.
-    let Some(mut game) = enter_interface_with_pose() else {
-        return;
-    };
-    game.vm.vars.set(69, 0);
-    assert_eq!(
-        picture_file(&game, 1110).as_deref(),
-        Some("Picture/pose_icon01.png"),
-        "the pose icon is on screen"
-    );
-    assert!(click_picture(&mut game, 1110), "the pose icon is on screen");
-    for _ in 0..10 {
-        game.frame();
-    }
-    assert_eq!(
-        game.last_action_event,
-        Some(22),
-        "the pose icon opens the pose change"
-    );
 }

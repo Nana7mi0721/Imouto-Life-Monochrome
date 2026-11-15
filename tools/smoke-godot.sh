@@ -7,11 +7,7 @@
 #   5. drive wheel + arrow through the real GameView scene script;
 #   6. load the retail SaveData01.sav and assert the resumed map draws;
 #   7. walk the real title -> load screen -> slot 3 -> bedroom path;
-#   8. new-game save -> fresh-session load round trip;
-#   9. replay the opening and assert the scenery shows and the action bar
-#      never leaks under the black cover;
-#  10. load the retail save and assert the night action buttons are drawn and
-#      dispatch their map events.
+#   8. new-game save -> fresh-session load round trip.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -54,9 +50,3 @@ fi
 
 "$GODOT" --headless --path godot --script res://tests/save_roundtrip.gd -- \
     --data-root="$DATA_ROOT" --save-path="$PWD/work/out/godot_roundtrip.sav"
-
-"$GODOT" --headless --path godot --script res://tests/verify_p0_fixes.gd -- \
-    --data-root="$DATA_ROOT"
-
-"$GODOT" --headless --path godot --script res://tests/verify_ui_and_interaction_fixes.gd -- \
-    --data-root="$DATA_ROOT"

@@ -263,49 +263,6 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-14）
 
-* **外部只读审查 `9a817e4` 核实与闭环（2026-11-15，当前状态）**：
-  评审原文 `code_review_9a817e4.md`（未跟踪）逐条核实后闭环，报告见
-  `docs/REVIEW_9a817e4_FIX_REPORT.md`，评审原文追加了 §6「核实与勘误」：
-  1. **P0（成立）**：`Opcode 122` 掩码 `0xFF00` → `0xFFF0`、分支 `0x0200` →
-     `0x0010`（CE268 `pc14`、CE270 `pc2000` 是全作仅有的两条首行截取，`0x0200`
-     全作 0 处）；新增镜像 CE270 的回归单测，`docs/OPCODE_122.md` 补说明。
-  2. **P2（成立）**：`\img` 贴图条与文字分层（`textpic::is_inline_image_only`）、
-     `atlas.rs` 过滤 `alpha<=0` 并按 `anchor`/`scale` 定位；
-     全作 771 条 `\img` **图文混排 0 条**。
-  3. **P2（成立）**：读档 `resume_loaded_map` 补回 `.mps` 后缀
-     （SysDatabase 类型 0 列 0 存带后缀路径），新增 `m4_load_resume` 回归。
-  4. **P1（成立）**：`Sys77..Sys82` 改**本地时间**（Windows `GetLocalTime` FFI）
-     并新增可注入 `Clock::{System,Fixed}`；`wolf-game` 的 `forbid(unsafe_code)`
-     放宽为 `deny(unsafe_code)`（仅该 FFI 白名单）。
-  5. **P2（成立）**：动作键绕过名单收紧为 `5|21|22|28`，且**只跳过交互模式变量
-     `v100`**（`深夜1`），其余页条件（`v176`/`v238`/`v69`/`v125`/`v18`/`v101`）
-     逐条保留；相册（35）与数据（30）不再绕过——相册开放在 `ev35` 并行页
-     （`hover(-7)` → `op123` 鼠标 → `op210` 调 `CE303`），与图片桥无关。
-  6. **P2（成立）**：`150 Move` 改走活跃槽位区间查询（`Screen::move_targets`），
-     不再按 `lo..=hi` 逐整数遍历。
-  7. **P3（路径成立、两处坐标前提被证伪）**：`Picture 2999` 由 Map Event 14 创建
-     （页条件 `v120==1`）、`(935,505)` 命中的 `ev21` 页条件 `v100==1`，
-     零售存档全在白天故白天不绘制 → 断言改为状态推导式两分支硬断言；
-     数据根改为 `--data-root=` → `WOLF_DATA_ROOT` → `res://../work/Data` 解析链，
-     两份脚本接入 `tools/smoke-godot.sh`。
-  8. **误报**：`武器スキルセット` / `防具スキルセット` **本作不存在**
-     （33,970 条脚本串中 `スキルセット` 0 命中；库存 CE 的 `武器増加処理`/
-     `防具増加処理` 是 WOLF 通用库模板），不实现。
-  9. **未复现**：子代理报告的「反复打开状态界面会吃爆内存」实测 8 轮无单调增长
-     （Godot 静态内存 25.45/25.50 MB 波动，Rust 侧 picture 91 / 实例 8 恒定），
-     不予立项，探针已删。
-  10. **验证**：`cargo fmt --all -- --check` 0；`cargo test -q --workspace
-      --no-fail-fast` 仅余 **3 项既有失败**（`m3_manual_rules::late_night_bedtime...`、
-      `m3_save_load::save_data_01_and_02_differ_in_hud_time_and_money`、
-      `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge`）；
-      **HEAD 基线对照**（`git stash` 取原树实测）：`cargo test -q -p wolf-game --lib`
-      在 `9a817e4` 上本已有 **4 项红灯**（choice.rs 3 条陈旧断言 + textpic 1 条失效断言），
-      本轮全部对齐/重写，**HEAD 的 4 项红灯归零**；
-      `WOLF_DATA_ROOT=<绝对路径> cargo test -q -p wolf-game --lib` 369 passed / 2 failed
-      （既有 `db::tests::*` 姊妹作差异）；`wolf-cli verify` PASS 64 / 1 SKIP；
-      Godot DLL 重建 + `bash tools/smoke-godot.sh` exit 0。
-      清理后 `du -sh .` = **9.3 GB**（target 8.1 G / work 986 M，work/Data 176 M 保留）。
-
 * **T14 实机 UI/性能收口（2026-11-12 深夜，当前状态）**：最新冷构建下新游戏/读档
   第 `1/2/3/6/10` 帧均 `yellowish=0 / greenish=0`；读档 HUD 的 100x8 白色带框精力条
   在第 1 帧已实际绘制。相册图标纳入图片墨迹命中，侧栏关闭态命中扩到屏幕 `x=0`，
@@ -407,7 +364,6 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 | 时间 | 内容 | 提交 |
 |---|---|---|
-| 2026-11-15 | 代码审查修复：`9a817e4` 评审核实与闭环（Opcode 122 掩码回滚、`\img` 分层、读档 `.mps`、本地时钟、动作键门禁收窄、Picture Move 区间查询、Godot 脚本断言重写） | 本提交 |
 | 2026-11-14 | 实机排查三轮：开场空槽/19:00 卧室背景/连续同人名牌/随机事件时间种子/夜间部位与姿势点击/格子条全面闭环 | 本提交 |
 | 2026-11-14 | 实机截图二轮复核：开场空槽、茶摊乱码、格子条基础映射 | beb9693 / e5b4d61 |
 | 2026-11-14 | 代码审查修复：Gemini 审查 1c76dcc 闭环，行动力条拆分重构 | 112ed76 |

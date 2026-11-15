@@ -1170,34 +1170,6 @@ impl Screen {
             .retain(|_, picture| !(picture.erase_after_slide && picture.transition.is_none()));
     }
 
-    /// The picture numbers a `150` Move touches.
-    ///
-    /// The span is a range of picture NUMBERS, and the move applies to the slot the
-    /// command names plus every live slot inside the closed range. A number in the
-    /// range that holds no picture is not worth a probe of its own.
-    ///
-    /// The store is keyed and sorted, so the live slots inside the range are one range
-    /// query. Walking every integer in the range instead would be unbounded: a script
-    /// whose span variable is uninitialised would turn a single instruction into
-    /// millions of map probes.
-    fn move_targets(&self, cmd: &PictureCmd) -> Vec<i32> {
-        let span = cmd.span.unwrap_or(cmd.number);
-        let (lo, hi) = (cmd.number.min(span), cmd.number.max(span));
-        if lo == hi {
-            return vec![cmd.number];
-        }
-        let mut list: Vec<i32> = self.pictures.range(lo..=hi).map(|(&n, _)| n).collect();
-        // The command's own slot always lies inside the range - lo and hi are its
-        // minimum and maximum against the span end - and it joins the list even when
-        // nothing lives there yet, because the move creates that slot. The list stays
-        // in the ascending order the per-number walk used to produce.
-        if !list.contains(&cmd.number) {
-            list.push(cmd.number);
-            list.sort_unstable();
-        }
-        list
-    }
-
     /// Applies one `150` picture command.
     ///
     /// The four actions are not symmetric: Draw and Set build a fresh slot (so UNCHANGED
@@ -1295,7 +1267,19 @@ impl Screen {
                 self.pictures.insert(cmd.number, picture);
             }
             PictureAction::Move => {
-                let numbers = self.move_targets(cmd);
+                let span = cmd.span.unwrap_or(cmd.number);
+                let (lo, hi) = (cmd.number.min(span), cmd.number.max(span));
+                let numbers: Vec<i32> = if lo == hi {
+                    vec![cmd.number]
+                } else {
+                    let mut list = Vec::new();
+                    for n in lo..=hi {
+                        if n == cmd.number || self.pictures.contains_key(&n) {
+                            list.push(n);
+                        }
+                    }
+                    list
+                };
                 for num in numbers {
                     let picture = self.pictures.entry(num).or_insert_with(|| {
                         let mut fresh = Picture::new(num);
@@ -2329,170 +2313,6 @@ mod tests {
         assert_eq!(picture.x, 10);
         assert_eq!(picture.y, 20);
         assert_eq!(picture.file, "Kagura/bg.png");
-    }
-
-    /// The list the old implementation produced: every integer between the two ends of
-    /// the span, filtered down to the slot the command names plus the slots that hold
-    /// a picture. Kept here as the reference the range query has to agree with.
-    fn reference_move_targets(screen: &Screen, cmd: &PictureCmd) -> Vec<i32> {
-        let span = cmd.span.unwrap_or(cmd.number);
-        let (lo, hi) = (cmd.number.min(span), cmd.number.max(span));
-        let mut list = Vec::new();
-        for n in lo..=hi {
-            if n == cmd.number || screen.pictures.contains_key(&n) {
-                list.push(n);
-            }
-        }
-        list
-    }
-
-    /// A move over a span has to reach exactly the slots the per-number walk reached:
-    /// the slot the command names plus every live slot inside the closed range, in
-    /// ascending order.
-    #[test]
-    fn a_move_over_a_span_reaches_the_slots_the_per_number_walk_reached() {
-        for (number, span) in [
-            (10, Some(30)),
-            (30, Some(10)),
-            (12, Some(30)),
-            (7, None),
-            (7, Some(7)),
-        ] {
-            let mut screen = Screen::new();
-            for slot in [5, 10, 15, 20, 30, 40] {
-                screen.apply(&cmd(
-                    slot,
-                    0,
-                    PictureAction::Draw,
-                    "Kagura/bg.png",
-                    "",
-                    &short_draw_args(),
-                ));
-            }
-            let mut move_cmd = cmd(
-                number,
-                0,
-                PictureAction::Move,
-                "",
-                "",
-                &[
-                    UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, 10, 20, 100, 0,
-                ],
-            );
-            move_cmd.span = span;
-            assert_eq!(
-                screen.move_targets(&move_cmd),
-                reference_move_targets(&screen, &move_cmd),
-                "number {number} span {span:?}"
-            );
-        }
-    }
-
-    /// A span that reaches across the whole picture-number space must still resolve
-    /// from the live slots alone. The per-number walk asked the store about every
-    /// number in the range, so a span of two billion numbers cost two billion probes;
-    /// the range query costs one.
-    #[test]
-    fn a_move_over_a_wide_span_reaches_only_the_live_slots() {
-        let mut screen = Screen::new();
-        for slot in [-5, 10, 15, 20, 30] {
-            screen.apply(&cmd(
-                slot,
-                0,
-                PictureAction::Draw,
-                "Kagura/bg.png",
-                "",
-                &short_draw_args(),
-            ));
-        }
-
-        let mut move_cmd = cmd(
-            10,
-            0,
-            PictureAction::Move,
-            "",
-            "",
-            &[
-                UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, 777, 888, 100, 0,
-            ],
-        );
-        move_cmd.span = Some(i32::MAX);
-
-        let started = std::time::Instant::now();
-        screen.apply(&move_cmd);
-        let elapsed = started.elapsed();
-
-        for slot in [10, 15, 20, 30] {
-            let picture = screen.get(slot).expect("slot inside the span");
-            assert_eq!(
-                (picture.x, picture.y),
-                (777, 888),
-                "slot {slot} sits inside the span"
-            );
-        }
-        let below = screen.get(-5).expect("slot below the span");
-        assert_eq!(
-            (below.x, below.y),
-            (0, 0),
-            "a slot below the span must not move"
-        );
-
-        // A per-number walk over this span would need billions of probes and take
-        // seconds; the range query is a logarithm of the slot count.
-        assert!(
-            elapsed < std::time::Duration::from_secs(3),
-            "a span of two billion numbers took {elapsed:?}"
-        );
-    }
-
-    /// The span is closed on both ends, and a live slot outside it is not reached.
-    #[test]
-    fn a_move_stays_inside_the_two_ends_of_its_span() {
-        let mut screen = Screen::new();
-        for slot in [5, 10, 50, 150] {
-            screen.apply(&cmd(
-                slot,
-                0,
-                PictureAction::Draw,
-                "Kagura/bg.png",
-                "",
-                &short_draw_args(),
-            ));
-        }
-
-        let mut move_cmd = cmd(
-            10,
-            0,
-            PictureAction::Move,
-            "",
-            "",
-            &[
-                UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, 777, 888, 100, 0,
-            ],
-        );
-        move_cmd.span = Some(100);
-        screen.apply(&move_cmd);
-
-        for slot in [10, 50] {
-            let picture = screen.get(slot).expect("slot inside the span");
-            assert_eq!(
-                (picture.x, picture.y),
-                (777, 888),
-                "slot {slot} sits inside the span"
-            );
-        }
-        let below = screen.get(5).expect("slot below the span");
-        assert_eq!(
-            (below.x, below.y),
-            (0, 0),
-            "a slot below the span must not move"
-        );
-        let above = screen.get(150).expect("slot above the span");
-        assert_eq!(
-            (above.x, above.y),
-            (0, 0),
-            "a slot past the span end must not move"
-        );
     }
 
     /// The shortest argument list that draws a visible sprite.

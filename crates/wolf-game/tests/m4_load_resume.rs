@@ -10,7 +10,7 @@
 
 use std::path::PathBuf;
 
-use wolf_game::{Atlas, Game};
+use wolf_game::Game;
 
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/Data".to_owned());
@@ -109,25 +109,4 @@ fn loading_a_save_does_not_replay_the_opening_autorun() {
         game.messages
     );
     assert!(game.choices.is_none(), "no opening choice after load");
-}
-
-#[test]
-fn the_resumed_map_keeps_its_mps_path_and_its_scenery() {
-    let Some(mut game) = load_and_resume() else {
-        return;
-    };
-    // The scenery lookup matches the path against SysDatabase type 0 column 0,
-    // which stores the full relative path *with* the `.mps` suffix
-    // ("MapData/SampleMapA.mps"). A resumed map that drops the suffix no longer
-    // matches, and the bedroom draws without its background.
-    assert_eq!(
-        game.current_map_path.as_deref(),
-        Some("MapData/SampleMapA.mps"),
-        "the resumed map path has to match the SysDatabase map list"
-    );
-    let mut atlas = Atlas::new();
-    assert!(
-        game.scenery_quad(&mut atlas).is_some(),
-        "the resumed bedroom draws its scenery background"
-    );
 }

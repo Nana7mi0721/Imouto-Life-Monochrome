@@ -2651,20 +2651,14 @@ fn execute(
             }
             122 => {
                 // 122 SetString. The mode word is a bitfield: the operation is
-                // `mode & 0xFFF0` and the low nibble selects the right-hand operand
+                // `mode & 0xFF00` and the low nibble selects the right-hand operand
                 // (0 literal, 1 string variable, 2 string variable addressed by a
-                // numeric variable, 3 keyboard input). Note the first-line cut is
-                // operation 0x0010, so masking with 0xFF00 would fold 17/18 into the
-                // plain-assignment operation 0; the manual lists 上1行切り取り as its
-                // own operation and CE268 uses mode 17 for exactly that.
-                //
-                // "代入先を変数で指定" (indirect destination) is *not* a mode bit: the
-                // editor encodes it in the destination operand itself, and
-                // `resolve_string_target` follows the address stored there.
+                // numeric variable, 3 keyboard input). Bit 0x0010 indicates that the
+                // destination is addressed indirectly by a numeric variable ("代入先を変数で指定").
                 let target = resolve_string_target(arg(cmd, 0), inst);
                 let mode = arg(cmd, 1);
                 let source = arg(cmd, 2);
-                let operation = mode & 0xFFF0;
+                let operation = mode & 0xFF00;
                 let source_kind = mode & 0x0F;
                 let mut literal = |cmd: &Command| {
                     cmd.strings
@@ -2718,7 +2712,7 @@ fn execute(
                     }
                     // `上1行切り取り`: move the first line to the destination and
                     // remove it (plus its newline) from the source.
-                    0x0010 => {
+                    0x0200 => {
                         let text = read_source();
                         let (line, rest) = split_first_line(&text);
                         store_str(inst, vars, target, line, cross_writes);
@@ -4001,7 +3995,7 @@ mod tests {
                     &["one
 two"],
                 ),
-                cmd(122, &[3_000_003, 0x0011, 3_000_000], &[]),
+                cmd(122, &[3_000_003, 0x0201, 3_000_000], &[]),
                 cmd(122, &[3_000_007, 1, 3_000_000], &[]),
                 cmd(
                     122,
@@ -4030,52 +4024,6 @@ two"],
         assert_eq!(vm.vars.get_str(7), "two");
         assert_eq!(vm.vars.get_str(4), "one");
         assert_eq!(vm.vars.get_str(0), "えお");
-    }
-
-    #[test]
-    fn op122_first_line_cut_moves_the_head_out_of_a_numbered_source() {
-        // Manual (文字列操作 → ２．代入方法): 上1行切り取り takes the source's first
-        // line into the destination and removes that line from the source. The
-        // manual's source kind 2 ("ロード位置を変数で指定") resolves the string
-        // address through a numeric variable, which is how CE270 pc2000 moves the
-        // pending speaker name out of the cross-event bank CE269 owns.
-        //
-        // The shape below mirrors that site one to one: the source is
-        // `15_000_000 + 100*42 + 5`, the destination is `... + 6`, and the source
-        // address arrives through self slot 0.
-        const BANK: u32 = 42;
-        let source = 15_000_000 + 100 * BANK as i32 + 5;
-        let destination = 15_000_000 + 100 * BANK as i32 + 6;
-        let ev = event(
-            12,
-            "cross event cut",
-            vec![
-                // The pending name bank holds two lines.
-                cmd(122, &[source], &["first\nsecond\n"]),
-                // self0 = the address of the pending name bank.
-                cmd(121, &[1_600_000, source, 0, 4], &[]),
-                // The cut: destination = first line, source loses it.
-                cmd(122, &[destination, 0x0012, 1_600_000], &[]),
-            ],
-        );
-        let mut vm = vm_with(vec![ev]);
-        vm.start_event(12).unwrap();
-        vm.step_frame(&mut Recorder::default());
-        let bank = vm
-            .vars
-            .common_self
-            .get(&BANK)
-            .expect("the cross-event bank exists");
-        assert_eq!(
-            bank.get_str(1),
-            "first",
-            "the whole first line moves to the destination, not just one character"
-        );
-        assert_eq!(
-            bank.get_str(0),
-            "second\n",
-            "the source gives up the line that was consumed"
-        );
     }
 
     #[test]

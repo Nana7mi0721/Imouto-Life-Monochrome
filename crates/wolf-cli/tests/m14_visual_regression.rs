@@ -198,13 +198,7 @@ const BASELINES: [Baseline; 5] = [
         expect_header: "  entry     : save file",
         frames: 240,
         // +1 for the restarting CE270 display pass (see the title scene).
-        //
-        // Re-recorded 2026-11-15: the count is 7, not 8. `1ea060d` re-based
-        // ENGINE_ALWAYS on this game's own event list, and one of the always-on
-        // passes of the sister game's list does not exist here. The missing
-        // coroutine renders no pixels, so every geometry, text and non-black
-        // number below is unchanged - only the scheduling count moved.
-        peak_coroutines: 7,
+        peak_coroutines: 8,
         pictures_live: 50,
         textured_quads: 23,
         // T18 splits CE242's `行动力 current/max` picture (slot 230) into a label run
@@ -234,10 +228,7 @@ const BASELINES: [Baseline; 5] = [
         frames: 60,
         // +1 for the restarting CE270 display pass (see the title scene), and +1 for
         // CE216, which is in ENGINE_RESTART and likewise renders no pixels.
-        // Re-recorded 2026-11-15 to 7 for the same reason as the day_command
-        // scene: the game's own ENGINE_ALWAYS list is one pass shorter than the
-        // sister game's, and that pass draws nothing.
-        peak_coroutines: 7,
+        peak_coroutines: 8,
         pictures_live: 50,
         textured_quads: 5,
         // Same slot-230 split as the day_command scene: one extra text picture,

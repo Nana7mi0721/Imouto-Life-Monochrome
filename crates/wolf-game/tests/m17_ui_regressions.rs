@@ -164,7 +164,8 @@ fn balloon_face_stays_anchored_when_the_frame_grows() {
     // The face avatar sits cleanly inside at y = 444..563 (bottom at 563.0, 13 px above the
     // 576 canvas bottom), keeping her head 10 px below the nameplate (bottom at 434.0).
     assert_eq!(
-        one_line_frame[3], 136.0,
+        one_line_frame[3],
+        136.0,
         "the balloon frame expands to 136 px when a face avatar is present: {one_line_frame:?}"
     );
     assert_eq!(

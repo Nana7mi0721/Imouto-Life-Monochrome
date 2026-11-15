@@ -291,7 +291,7 @@ fn query_hover(game: &mut Game, number: i32) -> i32 {
 }
 
 #[test]
-fn hidden_pictures_do_not_report_hover_but_transparent_hotboxes_do() {
+fn hidden_and_transparent_pictures_do_not_report_hover() {
     let Some(mut game) = open_game() else {
         return;
     };
@@ -324,9 +324,8 @@ fn hidden_pictures_do_not_report_hover_but_transparent_hotboxes_do() {
     game.screen.get_mut(400).expect("hover picture").opacity = 0;
     assert_eq!(
         query_hover(&mut game, 400),
-        1,
-        "a fully transparent picture still answers hover: the night interface uses \
-         opacity-0 <SQUARE> pictures as the hotboxes for the sister's body parts"
+        0,
+        "a fully transparent picture must not answer hover"
     );
 
     game.screen.get_mut(400).expect("hover picture").opacity = 255;

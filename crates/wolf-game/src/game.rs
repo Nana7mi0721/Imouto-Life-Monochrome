@@ -291,118 +291,16 @@ fn picture_ink_rect_in(screen: &Screen, assets: &mut Assets, number: i32) -> Opt
     ])
 }
 
-/// A civil timestamp, the shape the engine publishes in `Sys77..Sys82`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct LocalDateTime {
-    /// Full year, e.g. 2026.
-    pub year: i32,
-    /// Month, 1..=12.
-    pub month: i32,
-    /// Day of the month, 1..=31.
-    pub day: i32,
-    /// Hour, 0..=23.
-    pub hour: i32,
-    /// Minute, 0..=59.
-    pub minute: i32,
-    /// Second, 0..=59.
-    pub second: i32,
+struct LocalDateTime {
+    year: i32,
+    month: i32,
+    day: i32,
+    hour: i32,
+    minute: i32,
+    second: i32,
 }
 
-/// Where the engine reads the wall clock from.
-///
-/// The retail engine filled `Sys77..Sys82` from `GetLocalTime`, so production runs
-/// on the host's **local** civil time. Reading UTC instead shifts the date and the
-/// hour by the zone offset, and in East Asia it moves the day boundary by eight
-/// hours. A headless capture, an offline parity dump or a regression test can pin
-/// a fixed timestamp instead, so a replay does not depend on the hour it was
-/// recorded at.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Clock {
-    /// The host's local civil time.
-    #[default]
-    System,
-    /// A pinned civil time.
-    Fixed(LocalDateTime),
-}
-
-impl Clock {
-    /// The civil time this clock reports right now.
-    #[must_use]
-    pub fn now(self) -> LocalDateTime {
-        match self {
-            Clock::System => system_local_time(),
-            Clock::Fixed(stamp) => stamp,
-        }
-    }
-}
-
-/// The host's local civil time.
-///
-/// Windows exposes the same `GetLocalTime` the retail engine used, so the FFI
-/// below is the exact source of the `Sys77..Sys82` values. `std` has no portable
-/// local-time API, so other hosts fall back to UTC and say so in the log-free
-/// way that matters: the timestamp is still a well-formed civil time.
-fn system_local_time() -> LocalDateTime {
-    #[cfg(windows)]
-    {
-        if let Some(stamp) = windows_local_time() {
-            return stamp;
-        }
-    }
-    utc_from_unix_epoch()
-}
-
-/// The `SYSTEMTIME` the Win32 API fills in.
-#[cfg(windows)]
-#[repr(C)]
-struct SystemTime {
-    year: u16,
-    month: u16,
-    day_of_week: u16,
-    day: u16,
-    hour: u16,
-    minute: u16,
-    second: u16,
-    milliseconds: u16,
-}
-
-/// The host's local civil time, straight from Win32.
-#[cfg(windows)]
-#[allow(unsafe_code)]
-fn windows_local_time() -> Option<LocalDateTime> {
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn GetLocalTime(out: *mut SystemTime) -> ();
-    }
-
-    let mut raw = SystemTime {
-        year: 0,
-        month: 0,
-        day_of_week: 0,
-        day: 0,
-        hour: 0,
-        minute: 0,
-        second: 0,
-        milliseconds: 0,
-    };
-    // SAFETY: `GetLocalTime` writes exactly one `SYSTEMTIME` into the buffer it is
-    // handed, and the struct above has the layout the API expects.
-    unsafe { GetLocalTime(&mut raw) };
-    if raw.year == 0 {
-        return None;
-    }
-    Some(LocalDateTime {
-        year: i32::from(raw.year),
-        month: i32::from(raw.month),
-        day: i32::from(raw.day),
-        hour: i32::from(raw.hour),
-        minute: i32::from(raw.minute),
-        second: i32::from(raw.second),
-    })
-}
-
-/// The civil time of a Unix timestamp in UTC.
-fn utc_from_unix_epoch() -> LocalDateTime {
+fn current_datetime() -> LocalDateTime {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -414,11 +312,7 @@ fn utc_from_unix_epoch() -> LocalDateTime {
     let mut days = (secs / 86400) as i32;
     let mut year = 1970;
     loop {
-        let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
-            1
-        } else {
-            0
-        };
+        let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 };
         let days_in_year = 365 + leap;
         if days >= days_in_year {
             days -= days_in_year;
@@ -427,11 +321,7 @@ fn utc_from_unix_epoch() -> LocalDateTime {
             break;
         }
     }
-    let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
-        1
-    } else {
-        0
-    };
+    let leap = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 };
     let days_in_months = [31, 28 + leap, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     let mut month = 1;
     for &dim in &days_in_months {
@@ -828,12 +718,6 @@ pub struct Game {
     pub auto_events: AutoEvents,
     /// Frames of play time; the save stores this in SavePart2.vars3_21[0].
     pub playtime_frames: u32,
-    /// The wall clock the `Sys77..Sys82` date variables are read from.
-    ///
-    /// Defaults to the host's local civil time, which is what the retail engine
-    /// used. A headless capture or a parity dump can pin it to a fixed timestamp
-    /// so the published date does not depend on when the run happened.
-    pub clock: Clock,
     /// Mouse position in logical pixels, [-1, -1] when the pointer is outside.
     pub mouse: [i32; 2],
     /// Mouse buttons held this frame: bit 0 left, bit 1 right, bit 2 middle.
@@ -1033,7 +917,6 @@ impl Game {
             last_action_event: None,
             auto_events,
             playtime_frames: 0,
-            clock: Clock::default(),
             mouse: [-1, -1],
             mouse_buttons: 0,
             side_panel_retract_frames: 0,
@@ -1848,12 +1731,7 @@ impl Game {
             scenery_file,
             -20_000,
             [0, 0, crate::picture::SCREEN_W, crate::picture::SCREEN_H],
-            [
-                0.0,
-                0.0,
-                crate::picture::SCREEN_W as f32,
-                crate::picture::SCREEN_H as f32,
-            ],
+            [0.0, 0.0, crate::picture::SCREEN_W as f32, crate::picture::SCREEN_H as f32],
             1.0,
         )?;
         let [r, g, b] = self.screen_tint_rgb();
@@ -2194,18 +2072,10 @@ impl Game {
         }
         // If an opaque screen cover exists at a higher z-layer (e.g. slot 9000 or slot -1),
         // slot 230 is occluded and the HUD gauge must not be shown.
-        if self
-            .screen
-            .get(9000)
-            .is_some_and(|p| !p.hidden && p.opacity > 0)
-        {
+        if self.screen.get(9000).is_some_and(|p| !p.hidden && p.opacity > 0) {
             return None;
         }
-        if self
-            .screen
-            .get(-1)
-            .is_some_and(|p| !p.hidden && p.opacity > 0)
-        {
+        if self.screen.get(-1).is_some_and(|p| !p.hidden && p.opacity > 0) {
             return None;
         }
         // The picture itself has to be CE242's readout, not merely slot 230. A
@@ -2527,10 +2397,8 @@ impl Game {
             }
             // Inline-image meters (CE277 alertness grid, H scene progression) are rendered
             // as crisp texture SpriteQuads in Atlas::sprites_with_panel_rect_excluding.
-            // Skip them here so they do not produce font-based character TextQuads. A
-            // picture that mixes images and text keeps the text pass, so its words are
-            // never swallowed.
-            if crate::textpic::is_inline_image_only(&picture.text) {
+            // Skip them here so they do not produce font-based character TextQuads.
+            if picture.text.contains(r"\img") {
                 continue;
             }
             // The same prologue slot can hold unrelated narration. Do not let it
@@ -2930,11 +2798,7 @@ impl Game {
                 let (name, map) = matches.remove(0);
                 self.start_engine_events();
                 self.start_pages_loaded(&map);
-                // The scenery lookup matches the path against SysDatabase type 0
-                // column 0, which stores the full relative path with the `.mps`
-                // suffix ("MapData/SampleMapA.mps"). Dropping the suffix made the
-                // match miss, so the resumed map drew without its background.
-                self.current_map_path = Some(format!("MapData/{name}.mps"));
+                self.current_map_path = Some(format!("MapData/{name}"));
                 Ok(name)
             }
             count => Err(format!(
@@ -3031,21 +2895,13 @@ impl Game {
             // an unrelated hotspot behind the icon.
             self.mouse_consumed = true;
             let mut started = self.runtime.action_key_event(&mut self.vm, event);
-            if started.is_none() && matches!(event, 5 | 21 | 22 | 28) {
-                // The night end arrow and the pose buttons stay drawn while the pose
-                // submenu (CE227) holds `深夜1` at 0, which hides the very pages they
-                // belong to. The bridge may ignore that one variable; every other
-                // condition on the page keeps its script meaning, so the save icon
-                // still refuses to open while the stats or the album is up and the
-                // pose buttons still refuse to run in a forbidden stage.
-                //
-                // The stats (30) and the album (35) are deliberately NOT in this
-                // list. Both gate on `深夜1 == 0` on purpose - they belong to the
-                // daytime map - and the album's action page is an empty program
-                // whose only effect is to stop the parallel page that opens it.
+            if started.is_none() && matches!(event, 5 | 21 | 22 | 28 | 30 | 35) {
+                // The night end arrow, pose button and save icon are visible in action
+                // submenus even when v100 is temporarily changed or page conditions
+                // require ignoring strict map conditions.
                 started = self
                     .runtime
-                    .action_key_event_ignoring_interaction_mode(&mut self.vm, event);
+                    .action_key_event_ignoring_conditions(&mut self.vm, event);
             }
             if let Some(id) = started {
                 self.last_action_event = Some(id);
@@ -3823,7 +3679,7 @@ impl Game {
         self.vm
             .vars
             .set_sys(28, (self.playtime_frames % 10_000_000) as i32);
-        let dt = self.clock.now();
+        let dt = current_datetime();
         self.vm.vars.set_sys(77, dt.year);
         self.vm.vars.set_sys(78, dt.month);
         self.vm.vars.set_sys(79, dt.day);
@@ -7197,53 +7053,5 @@ mod tests {
         let mut host = host(&mut game);
         assert_eq!(host.picture_state(12053, 0), Some(420));
         assert_eq!(host.picture_state(12053, 1), Some(33));
-    }
-
-    #[test]
-    fn a_pinned_clock_reports_exactly_the_pinned_time() {
-        let pinned = LocalDateTime {
-            year: 2026,
-            month: 11,
-            day: 15,
-            hour: 3,
-            minute: 4,
-            second: 5,
-        };
-        assert_eq!(Clock::Fixed(pinned).now(), pinned);
-        // Two readings of a pinned clock agree, which is what makes a headless
-        // capture or a parity dump reproducible.
-        assert_eq!(Clock::Fixed(pinned).now(), Clock::Fixed(pinned).now());
-    }
-
-    #[test]
-    fn the_system_clock_reports_a_plausible_civil_time() {
-        let stamp = Clock::System.now();
-        assert!(stamp.year >= 2024, "year {stamp:?}");
-        assert!((1..=12).contains(&stamp.month), "month {stamp:?}");
-        assert!((1..=31).contains(&stamp.day), "day {stamp:?}");
-        assert!(stamp.hour < 24, "hour {stamp:?}");
-        assert!(stamp.minute < 60, "minute {stamp:?}");
-        assert!(stamp.second < 60, "second {stamp:?}");
-    }
-
-    #[test]
-    fn the_frame_publishes_the_clock_into_sys77_to_sys82() {
-        let Some(root) = have_data() else { return };
-        let mut game = Game::new(&root).expect("game");
-        game.clock = Clock::Fixed(LocalDateTime {
-            year: 2026,
-            month: 11,
-            day: 15,
-            hour: 3,
-            minute: 4,
-            second: 5,
-        });
-        let _ = game.frame();
-        assert_eq!(game.vm.vars.get_sys(77), 2026);
-        assert_eq!(game.vm.vars.get_sys(78), 11);
-        assert_eq!(game.vm.vars.get_sys(79), 15);
-        assert_eq!(game.vm.vars.get_sys(80), 3);
-        assert_eq!(game.vm.vars.get_sys(81), 4);
-        assert_eq!(game.vm.vars.get_sys(82), 5);
     }
 }

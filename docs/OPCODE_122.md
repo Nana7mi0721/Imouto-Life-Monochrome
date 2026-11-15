@@ -149,10 +149,3 @@ comparison true every frame, which reset the name-exists flag and hid picture
   `op122_advanced_modes_move_the_right_text_and_keep_the_manual_direction`;
   `crates/wolf-game/tests/m3_save_ui_roundtrip.rs`, `m3_hud_buttons.rs`,
   `m3_menu_screens.rs` assert the slot strings.
-- The `0xFF00` mask regression introduced by `9a817e4` is fixed again: the
-  `mode` histogram of all 448 `122` instructions in `work/out/_ce_full.json`
-  contains no `0x0200` at all, while `0x0011` and `0x0012` each occur once
-  (CE268 pc14 and CE270 pc2000, the only two first-line cuts in the game), so
-  `0xFFF0` maps every instruction in the corpus onto a documented operation.
-  New coverage: `op122_first_line_cut_moves_the_head_out_of_a_numbered_source`
-  mirrors CE270 pc2000's cross-event write.
