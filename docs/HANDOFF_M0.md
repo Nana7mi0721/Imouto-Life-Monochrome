@@ -266,8 +266,8 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 * **实机报告 11 项全部收口（2026-11-15，当前状态）**：详见 `docs/LIVE_PLAY_FIX_REPORT.md`。
   - 核实结论：`live_play_issues_and_fixes_report.md` 的 11 项断言里 **7 项是宿主 bug**
     （#1 气泡闪脸、#2 对话框过高、#3 进度条残留、#5b 睡眠呼吸、#6 中文乱码、#7 顶栏行动力条、
-    #8 转场渐变）、**2 项按用户裁定统一**（#5a BAD/GOOD 粗细统一为 8、#9 侧拉栏双向补间）、
-    **2 项零售原样/报告误判**（#4 光标回落、#5a 原始读法）；报告引用的 9 张 `{GUID}.png`
+    #8 转场渐变）、**3 项按用户裁定统一**（#4 光标回落、#5a BAD/GOOD 粗细统一为 8、#9 侧拉栏双向补间）、
+    **1 项零售原样/报告误判**（#5a 原始读法）；报告引用的 9 张 `{GUID}.png`
     截图本机全部不存在，视觉证据不可复现。
   - **已落地**：#1 气泡模式全程屏蔽原生 `19500..=19503`；#2 气泡高 136→107、头像底 563→558
     （零售截图 1.5x 实测：气泡洗色逻辑 459.3..566.0）；#3 新增 `raid_cleanup`，夜袭场景结束的
@@ -275,8 +275,17 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     #5b 同图重绘保留 `breath/zoom/pattern`，并行 CE237 不再每帧清零相位；
     #7 顶栏条改成几何判定（零售黑幕在 y=36，不遮顶栏）；#8 `150 Move` 的 fade 变成真正的
     alpha 斜坡（`fade_from/fade_start`）；E 宿主读 `GetLocalTime` + `--clock` 可钉住；
-    F 读档路径补 `.mps` 后缀；#4 按零售保持「粘住」（零售截图证明回落的是 hand3 且只有悬停
-    结束键才回落），补 4 条回归锁住。
+    F 读档路径补 `.mps` 后缀。
+  - **#4 已按用户裁定改成回落（2026-11-15 晚）**：零售确实是"粘住"的——脚本自带
+    的默认回落分支（`SampleMapA` Ev18 pc 42，写 `var121 = 0` → `CharaChip/hand3.png`）
+    挡在最后一个探针 `1111` 后面，而正式夜袭流程把 `1111` 删掉了（Ev19 pc 66
+    `150 [818, 1111, 0]`），`124` 于是回答 -1，链在最后一节断掉。宿主补上这条规则：
+    新增 `crates/wolf-game/src/cursor_fallback.rs`——**身体部位图标只在指针停在热区上
+    时有效**，否则回落成普通手掌；热区集合取 Ev18 自己探的 `1100..=1108` 与 `1111`；
+    回落目标是零售自己的 `hand3`（`CURSOR_PLAIN_HAND = 0`），想换成报告写的
+    `hand1`（握拳，`var121 = 2`）只改这一个常量。`GameHost::hover()` 的命中测试
+    抽成自由函数 `hover_picture()`，宿主规则与脚本 `124` field 8 共用同一套判定。
+    逃生口 `WOLF_CURSOR_FALLBACK_OFF`。`m21_cursor_hover` 4 → **7 条**回归。
   - **回归状态**：`cargo test -q --workspace --no-fail-fast`（绝对路径 `WOLF_DATA_ROOT`）
     **8 红，0 新增**（choice×3 / db×2 / textpic×1 / m18 `hidden_and_transparent...` /
     m3_manual_rules `late_night_bedtime...`，全是长期基线）；本轮新增回归 **32 条**

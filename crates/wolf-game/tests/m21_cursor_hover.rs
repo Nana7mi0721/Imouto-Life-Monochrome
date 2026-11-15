@@ -1,5 +1,5 @@
-//! The prank-scene cursor chain (`SampleMapA.mps` event 18) and the retail rules
-//! behind it.
+//! The prank-scene cursor chain (`SampleMapA.mps` event 18) and the fallback the
+//! host adds to it.
 //!
 //! The chain walks the body hot zones 1100..1108 and 1111 one after another and
 //! writes the cursor picture into variable 121:
@@ -28,13 +28,22 @@
 //!
 //! The raid runs with variable 106 = 4 (common event 227 writes it before the
 //! raid starts), and event 19 erases the 1111 hot zone in that state. The chain
-//! therefore stops at its last probe and variable 121 keeps the icon of the
-//! body part the pointer visited last. That is retail behaviour, not a host
-//! bug: `ptr_sc/恶作剧_凝视胸部_穿衣.png` shows the eye cursor while the
-//! pointer sits on the album panel, and `ptr_sc/恶作剧_首次系统提示.png` shows
-//! the plain hand in the very same spot before any body part was visited.
+//! therefore stops at its last probe, and the chain's own default branch -
+//! the one that restores the plain hand - sits behind that probe (event 18
+//! pc 42) and never runs. Variable 121 keeps the icon of the body part the
+//! pointer visited last. That is what the retail game does:
+//! `ptr_sc/恶作剧_凝视胸部_穿衣.png` shows the eye cursor while the pointer
+//! sits on the album panel, and `ptr_sc/恶作剧_首次系统提示.png` shows the plain
+//! hand in the very same spot before any body part was visited.
 //! `ptr_sc/恶作剧_选择结束_二次确认(再次点击会出现选项).png` shows the plain
 //! hand on the end button.
+//!
+//! The play test asks for the fallback the retail chain already describes, so
+//! the host performs it (`crates/wolf-game/src/cursor_fallback.rs`): a
+//! body-part icon is only valid while the pointer is over a hot zone, and it
+//! falls back to the plain hand otherwise. The tests below pin both halves:
+//! the icon stays while the pointer is on the zone, and it falls back as soon
+//! as the pointer leaves it.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -54,11 +63,21 @@ const RAID_PANTIES: i32 = 4;
 
 /// The chest hot zone (1103) in the retail layout.
 const CHEST: [i32; 2] = [460, 320];
+/// The head hot zone (1100), the one that shows the closed hand.
+const HEAD: [i32; 2] = [433, 60];
 /// The middle of the visible end button (1108).
 ///
 /// The art is 90x70 pixels and its ink starts four pixels below the picture
 /// origin, so the picture rectangle is not the button.
 const END_BUTTON: [i32; 2] = [975, 535];
+/// The right hand 触摸 button (picture 400).
+const SIDE_BUTTON: [i32; 2] = [820, 290];
+/// The album panel in the lower left corner, under the sleeping cat.
+///
+/// Nothing is drawn there as a picture, so no hot zone can answer a hover
+/// query: this is the spot the retail screenshot `ptr_sc/恶作剧_凝视胸部_穿衣.png`
+/// shows the eye cursor on.
+const ALBUM_PANEL: [i32; 2] = [130, 335];
 /// A corner that is not on any hot zone.
 const EMPTY_SPOT: [i32; 2] = [10, 10];
 
@@ -113,7 +132,7 @@ fn the_end_button_puts_the_plain_hand_back() {
 }
 
 #[test]
-fn the_cursor_keeps_the_body_icon_off_the_hot_zones() {
+fn the_cursor_falls_back_to_the_plain_hand_off_the_hot_zones() {
     let Some(mut game) = open_raid() else {
         return;
     };
@@ -129,9 +148,80 @@ fn the_cursor_keeps_the_body_icon_off_the_hot_zones() {
     }
     assert_eq!(
         game.vm.vars.get(121),
-        1,
-        "retail keeps the last body icon: the chain stops at the erased 1111 hot \
-         zone, so variable 121 is never reset (ptr_sc/恶作剧_凝视胸部_穿衣.png)"
+        0,
+        "the pointer left every hot zone, so the cursor falls back to the plain \
+         hand (CharaChip/hand3.png) instead of keeping the last body icon"
+    );
+}
+
+#[test]
+fn the_cursor_falls_back_on_the_album_panel() {
+    let Some(mut game) = open_raid() else {
+        return;
+    };
+    game.mouse = CHEST;
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert_eq!(game.vm.vars.get(121), 1, "the chest icon is showing");
+
+    game.mouse = ALBUM_PANEL;
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert_eq!(
+        game.vm.vars.get(121),
+        0,
+        "the album panel is not a body hot zone, so the cursor falls back to the \
+         plain hand there too"
+    );
+}
+
+#[test]
+fn the_cursor_falls_back_on_the_side_buttons() {
+    let Some(mut game) = open_raid() else {
+        return;
+    };
+    game.mouse = CHEST;
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert_eq!(game.vm.vars.get(121), 1, "the chest icon is showing");
+
+    game.mouse = SIDE_BUTTON;
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert_eq!(
+        game.vm.vars.get(121),
+        0,
+        "the side operation buttons are not body hot zones, so the cursor falls \
+         back to the plain hand"
+    );
+}
+
+#[test]
+fn the_cursor_keeps_the_icon_while_the_pointer_stays_on_the_zone() {
+    let Some(mut game) = open_raid() else {
+        return;
+    };
+    game.mouse = HEAD;
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert_eq!(
+        game.vm.vars.get(121),
+        2,
+        "the head hot zone shows the closed hand (CharaChip/hand1.png)"
+    );
+
+    for _ in 0..10 {
+        game.frame();
+    }
+    assert_eq!(
+        game.vm.vars.get(121),
+        2,
+        "the icon stays as long as the pointer is on the hot zone"
     );
 }
 

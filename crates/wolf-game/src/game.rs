@@ -3479,6 +3479,16 @@ impl Game {
         picture_ink_rect_in(&self.screen, &mut self.assets, number)
     }
 
+    /// 1 when the pointer is over the picture, 0 when not, -1 when there is no such
+    /// picture.
+    ///
+    /// This is the same test the script's `124` field 8 query runs, so a host
+    /// rule that asks "is the pointer still on this picture?" cannot disagree
+    /// with what the script sees.
+    pub(crate) fn hover_picture(&mut self, number: i32) -> i32 {
+        hover_picture(&mut self.screen, &mut self.assets, self.mouse, number)
+    }
+
     /// Exact alpha hit test for one picture layer.
     ///
     /// The standing character is assembled from body, face, eye and eyebrow slots;
@@ -4006,6 +4016,12 @@ impl Game {
             pending_return_to_title: &mut self.pending_return_to_title,
             quit: &mut self.quit_requested,
         });
+        // The cursor chain of the prank scene cannot reach its own default
+        // branch, because the raid state deletes the picture its last probe
+        // asks about. The host performs that fallback instead: a body-part icon
+        // is only valid while the pointer is over a hot zone.
+        // (crates/wolf-game/src/cursor_fallback.rs)
+        crate::cursor_fallback::sync_cursor_fallback(self);
         if had_choice && self.choices.is_none() {
             self.choice_cursor = 0;
         }
@@ -4678,60 +4694,7 @@ impl GameHost<'_> {
     /// The test is a plain axis-aligned box that includes transparent pixels, as the
     /// engine documentation says: a picture hit area is its rectangle, not its alpha.
     fn hover(&mut self, number: i32) -> i32 {
-        let Some(picture) = self.screen.get(number) else {
-            return -1;
-        };
-        if picture.hidden {
-            return 0;
-        }
-        // A side panel is a click-to-toggle drawer, not a hover-triggered one.
-        // Map events 8/11 poll this field every frame while the panel is parked
-        // and call CE238/CE239's hide page whenever it answers 0. That re-runs
-        // the whole erase animation every frame, which is both the visible handle
-        // flicker and a measurable per-frame script load. Report a stable hover
-        // for as long as the panel picture exists; opening and closing both go
-        // through `try_side_panel_handle` and the host auto-retract watchdog.
-        if matches!(number, 320 | 2300) {
-            return match self.screen.get(number) {
-                Some(picture) if !picture.hidden && picture.opacity > 0 => 1,
-                Some(_) => 0,
-                None => -1,
-            };
-        }
-        // The hit box is the same rectangle the renderer draws: text metrics, window
-        // box / native texture size, anchor, independent X/Y scale, the running 290
-        // shift/shake and the tenths UI block scale. Sharing `picture_rect` keeps a
-        // click and the pixels it lands on in one law. In particular a negative slot
-        // is *not* automatically a full-screen layer: picture -7 is the 48x48 album
-        // icon, and giving it the viewport as its box stole clicks from the data icon.
-        let dst = if matches!(number, -7 | -5 | -4 | 1108 | 1109 | 1110 | 1117) {
-            match self.picture_ink_rect(number) {
-                Some(rect) => rect,
-                None => return 0,
-            }
-        } else {
-            let screen = &self.screen;
-            let assets = &mut self.assets;
-            let Some(rect) = screen.picture_rect(number, |file| assets.texture_size(file)) else {
-                return -1;
-            };
-            rect
-        };
-        let (left, top) = (dst[0], dst[1]);
-        let (size_x, size_y) = (dst[2], dst[3]);
-        let (px, py) = (self.mouse[0] as f32, self.mouse[1] as f32);
-        let inside_screen = self.mouse[0] >= 0
-            && self.mouse[1] >= 0
-            && px < SCREEN_W as f32
-            && py < SCREEN_H as f32;
-        let over =
-            inside_screen && px >= left && px < left + size_x && py >= top && py < top + size_y;
-        i32::from(over)
-    }
-
-    /// [`Game::picture_ink_rect`] for the VM poll path.
-    fn picture_ink_rect(&mut self, number: i32) -> Option<[f32; 4]> {
-        picture_ink_rect_in(&self.screen, &mut self.assets, number)
+        hover_picture(self.screen, self.assets, self.mouse, number)
     }
 
     /// Mouse buttons as fresh key bits for this frame.
@@ -4759,6 +4722,62 @@ fn mouse_state(held: bool, held_before: bool) -> i32 {
     } else {
         2
     }
+}
+
+/// 1 when the pointer is over the picture, 0 when not, -1 when there is no such
+/// picture (docs/OPCODE_124.md field 8).
+///
+/// The test is a plain axis-aligned box that includes transparent pixels, as the
+/// engine documentation says: a picture hit area is its rectangle, not its alpha.
+///
+/// It is the same test the script's `124` field 8 query uses, so a host rule
+/// that asks "is the pointer still on this picture?" (see
+/// [`crate::cursor_fallback`]) cannot disagree with what the script sees.
+fn hover_picture(screen: &mut Screen, assets: &mut Assets, mouse: [i32; 2], number: i32) -> i32 {
+    let Some(picture) = screen.get(number) else {
+        return -1;
+    };
+    if picture.hidden {
+        return 0;
+    }
+    // A side panel is a click-to-toggle drawer, not a hover-triggered one.
+    // Map events 8/11 poll this field every frame while the panel is parked
+    // and call CE238/CE239's hide page whenever it answers 0. That re-runs
+    // the whole erase animation every frame, which is both the visible handle
+    // flicker and a measurable per-frame script load. Report a stable hover
+    // for as long as the panel picture exists; opening and closing both go
+    // through `try_side_panel_handle` and the host auto-retract watchdog.
+    if matches!(number, 320 | 2300) {
+        return match screen.get(number) {
+            Some(picture) if !picture.hidden && picture.opacity > 0 => 1,
+            Some(_) => 0,
+            None => -1,
+        };
+    }
+    // The hit box is the same rectangle the renderer draws: text metrics, window
+    // box / native texture size, anchor, independent X/Y scale, the running 290
+    // shift/shake and the tenths UI block scale. Sharing `picture_rect` keeps a
+    // click and the pixels it lands on in one law. In particular a negative slot
+    // is *not* automatically a full-screen layer: picture -7 is the 48x48 album
+    // icon, and giving it the viewport as its box stole clicks from the data icon.
+    let dst = if matches!(number, -7 | -5 | -4 | 1108 | 1109 | 1110 | 1117) {
+        match picture_ink_rect_in(screen, assets, number) {
+            Some(rect) => rect,
+            None => return 0,
+        }
+    } else {
+        let Some(rect) = screen.picture_rect(number, |file| assets.texture_size(file)) else {
+            return -1;
+        };
+        rect
+    };
+    let (left, top) = (dst[0], dst[1]);
+    let (size_x, size_y) = (dst[2], dst[3]);
+    let (px, py) = (mouse[0] as f32, mouse[1] as f32);
+    let inside_screen =
+        mouse[0] >= 0 && mouse[1] >= 0 && px < SCREEN_W as f32 && py < SCREEN_H as f32;
+    let over = inside_screen && px >= left && px < left + size_x && py >= top && py < top + size_y;
+    i32::from(over)
 }
 
 impl Host for GameHost<'_> {
