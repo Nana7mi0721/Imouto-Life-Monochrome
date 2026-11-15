@@ -186,15 +186,22 @@ const BASELINES: [Baseline; 5] = [
         // visible (21 atlas images / 27728 textured quads). The non-black count moved
         // by the cursor-blink phase; CE216 adds one coroutine.
         //
-        // Re-recorded 2026-11-15 from 576_221 to 576_228. The save grid prints the
-        // stored preview of every slot, so the pixel count follows the save files in
-        // `work/Data/Save`; the old number was recorded while a player's save sat
-        // in that folder. The shipping save is back in place and the fixture is
-        // guarded by its fingerprint now (`shipping_save_fixture`), so the count is
-        // stable again. This is a fixture change, not a rendering regression: the
-        // picture, quad, atlas and text metrics of the scene did not move, and the
-        // clock no longer moves the frame either (every scene runs against
-        // `PINNED_CLOCK`).
+        // Re-recorded 2026-11-15 from 576_221 to 576_228. The scene had been skipped
+        // for weeks because the Save/ grid held the player's extra slots
+        // (SaveData03/04), so nobody noticed that the recorded pixel count had
+        // gone stale.
+        //
+        // The three pixels are a real rendering change, not fixture drift: with the
+        // SAME shipping fixture in place, `ee808fe` renders 576_225 and every commit
+        // from `1a9fafe` on renders 576_228. `1a9fafe` ("fix: close T18 UI and
+        // runtime regressions") rewrote `picture.rs`/`atlas.rs`/`game.rs` and moved
+        // the save-slot panel's anchor, and the save grid is exactly that panel.
+        // Nothing else moved: 25 live pictures, 27728 textured quads, 13 text
+        // pictures, 54 glyphs, 21 atlas images and 9 peak coroutines are unchanged,
+        // and the frame is byte-stable under the pinned clock.
+        //
+        // The shipping save is back in place and the fixture is guarded by its
+        // fingerprint now (`shipping_save_fixture`), so the count is stable again.
         name: "saveui",
         args: &["--map", "SampleMapA", "--event", "5", "--frames", "40"],
         load_save: false,

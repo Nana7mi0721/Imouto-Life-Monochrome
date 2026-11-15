@@ -4,15 +4,24 @@ Opcode `122` writes a string into a string variable. The **second operand** is a
 mode word, not a plain enumerator:
 
 ```
-operation   = mode & 0xFFF0
+operation   = mode & 0xFF00
 source kind = mode & 0x000F
 ```
 
 The old interpreter treated every site as a plain assignment, which is why the
 save-slot play time came out as two zeros and the slot number was lost. A later
-fix masked with `0xFF00`; that still folded the first-line cut (operation
-`0x0010`, used by CE268 with mode 17) into assignment, so it is explicitly
-`0xFFF0` now.
+fix masked with `0xFF00`, which is where the tree stands today.
+
+> **Known deviation (open since 2026-11-15).** The mask is `0xFF00` today, so the
+> 上1行切り取り branch is `0x0200`. The manual's own 上1行切り取り is bit `0x0010`,
+> which only a `0xFFF0` mask would expose, and the shipped corpus never uses
+> `0x0200`: its only two cut sites are CE268 pc14 and CE270 pc2000, at mode 17/18
+> (`0x0011` / `0x0012`). Under `0xFF00` those two sites therefore resolve to a
+> plain assignment — the head line is neither cut into the destination nor removed
+> from the source. The `0xFFF0` / `0x0010` variant was implemented in `f52db44`
+> and reverted in `b23a1e1` at the user's request, so that the pre-change
+> behaviour could be checked by playing. `crates/wolf-vm/src/exec.rs` is the
+> authority; this document follows it.
 
 Operand layout: `[destination, mode, (source_operand)]`, and literal text (if
 any) travels in `cmd.strings`.
@@ -40,7 +49,7 @@ Manual: 文字列操作 → ２．代入方法.
 |-----------|--------------|-----------|
 | `0x0000` | ＝ | `dst = rhs` |
 | `0x0100` | ＋＝ | `dst = dst + rhs` |
-| `0x0010` | 上1行切り取り | `dst = first line of rhs`; rhs loses that line |
+| `0x0200` | 上1行切り取り | `dst = first line of rhs`; rhs loses that line |
 | `0x0300` | 上1行コピー | `dst = first line of rhs`; rhs unchanged |
 | `0x0400` | に↓から1文字切り出し | `dst = first display unit of rhs`; rhs loses it |
 | `0x0500` | に↓から最後1文字切り出し | `dst = last display unit of rhs`; rhs loses it |
@@ -142,9 +151,10 @@ comparison true every frame, which reset the name-exists flag and hid picture
 - CE94 slot 1 now yields `数据 1` / ` 0:00` / ` 1` / `早泄 ` instead of `000000`.
 - CE212's typewriter (mode 1025 = `0x0401`) shows one glyph per iteration; with
   the old "target = rest" reading it repeated the whole remainder instead.
-- CE268/C268 name-list parsing uses mode 17 (`0x0011`) as 上1行切り取り;
-  the indirect write stores the speaker name in CE269's CSelf5
-  (`tests/m15_balloon_name.rs`).
+- CE268/C268 name-list parsing uses mode 17 (`0x0011`); under the current
+  `0xFF00` mask that resolves to a plain assignment rather than 上1行切り取り
+  (see the known deviation above). The indirect write stores the speaker name in
+  CE269's CSelf5 (`tests/m15_balloon_name.rs`).
 - Regression coverage: `crates/wolf-vm/src/exec.rs` unit test
   `op122_advanced_modes_move_the_right_text_and_keep_the_manual_direction`;
   `crates/wolf-game/tests/m3_save_ui_roundtrip.rs`, `m3_hud_buttons.rs`,

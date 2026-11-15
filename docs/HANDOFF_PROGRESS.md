@@ -1209,9 +1209,11 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     任一侧瞬移就红（拉出 20 帧、收回 10 帧，与零售一致）。
   * **#6 文档口径订正**：`docs/M3_STRING_DECODE.md` 里那条启发式决定的 98 个 unique 串
     改写为「**wolf 引擎通用的日文标签**（引擎自带数据库列名）」，不是本作画面上的日文正文。
-  * **m14 基线**：`saveui` non-black `576_221` → `576_228`。存档格会把每个槽位的存档摘要
-    画出来，像素数跟着 `work/Data/Save` 走；旧数字录于玩家存档占位时。现在出厂存档归位，
-    并用 FNV-1a 指纹 `0x752b_4235_063a_4721` 守住夹具；画面结构数字
+  * **m14 基线**：`saveui` non-black `576_221` → `576_228`。该场景长期因 `Save/` 里多出
+    玩家的存档槽（SaveData03/04）而被跳过，旧数字已陈旧。这三个像素是**真实渲染变化**
+    而不是夹具漂移：把夹具固定成出厂存档后实测，`ee808fe` 是 576_225，从 `1a9fafe`
+    （改了存档格面板锚点）起一律 576_228。现在出厂存档归位，并用 FNV-1a 指纹
+    `0x752b_4235_063a_4721` 守住夹具；画面结构数字
     （25 pictures / 27728 quads / 13 text pics / 54 glyphs / 21 atlas / 9 peak coroutines）未动。
   * **验证**：`cargo test -q --workspace --no-fail-fast`（绝对路径 `WOLF_DATA_ROOT`）
     **8 红、0 新增**（choice×3 / db×2 / textpic×1 / m18 `hidden_and_transparent...` /
@@ -1221,3 +1223,45 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `wolf-cli verify` **PASS 64 / 1 SKIP**。
   * **空间清理**：删 `target/debug/incremental`（2.2 GB）；`target` 9.2 GB → **7.0 GB**，
     仓库合计 13 GB → **11 GB**（`work/Data` 175 MB 未动）。`work/out` 下的探针日志保留作证据。
+
+### 2026-11-15 晚 · 实机报告收尾：文档订正 + 回退残留清理
+
+* **`m14` 基线结论订正（上一轮写错了）**：上一轮把 `saveui` non-black
+  `576_221` → `576_228` 的三个像素记成「像素数跟着 `work/Data/Save` 里的存档文件走」。
+  **这是错的**。把夹具固定成出厂存档后实测：`ee808fe` 渲染出 576_225，
+  从 `1a9fafe`（"fix: close T18 UI and runtime regressions"，重写了
+  `picture.rs`/`atlas.rs`/`game.rs` 并挪了存档格面板的锚点）起一律 576_228。
+  真实原因是**这个场景长期因 `Save/` 里多出玩家的 `SaveData03/04` 被跳过**，
+  旧数字早就陈旧，没人发现。已改 `crates/wolf-cli/tests/m14_visual_regression.rs`
+  的注释、`docs/LIVE_PLAY_FIX_REPORT.md`、`docs/HANDOFF_M0.md` §11.1 与本文件。
+* **回退残留清理（`b23a1e1` 留下的文档矛盾）**：独立复核发现
+  `docs/OPCODE_122.md` 正文仍写 `operation = mode & 0xFFF0`、分支 `0x0010`，
+  而 `crates/wolf-vm/src/exec.rs:2661` 实际是 `mode & 0xFF00`、分支 `0x0200`
+  （`f52db44` 改的、`b23a1e1` 回退的）。已按**当前代码**订正文档，并把这条
+  仍开放的差异写在文件开头。`docs/REVIEW_9a817e4_FIX_REPORT.md` 的状态横幅
+  同步细化：Godot 脚本文件还在（只是新增内容被回退）、`\img` 内联贴图支持一直
+  存在（被回退的是分层/锚点/alpha 那部分）、动作键名单仍是 `5|21|22|28|30|35`、
+  `150 Move` 仍逐整数遍历；§2 各小节补「当前现状」，§0 表格标「已回退」，
+  §4 标注那批数字是 `f52db44` 那一轮的快照并给出当前实测，§5 列出因回退重新开放的五项。
+* **覆盖度独立复核**：只读代理逐条核对 `live_play_issues_and_fixes_report.md`
+  的 11 项断言（#1–#9 + E + F）——**全部有真实代码落点**，
+  32 条新增回归逐条对得上，无「只写在报告里」的情况；
+  #4 判定为零售原样且有 4 条回归钉住，未偷改引擎语义。
+* **验证**（绝对路径 `WOLF_DATA_ROOT`）：
+  `cargo test -q --workspace --no-fail-fast` → **8 红 0 新增**
+  （choice×3 / db×2 / textpic×1 / m18 `hidden_and_transparent...` /
+  m3_manual_rules `late_night_bedtime...`，与长期基线逐条一致）；
+  `cargo fmt --all -- --check` 0 差异；`wolf-cli verify` **PASS 64 / 1 SKIP**；
+  `bash tools/smoke-godot.sh` exit 0。
+* **清理**：删 `target/debug/incremental`（306 MB）与
+  `target/debug/deps`、`target/godot/deps` 下 **210 个 `.pdb`**（2.4 GB），
+  移除 3 个临时 worktree（`wt_b2b6998` / `wt_ee808fe` / `wt_target`，含 1.3 GB
+  临时 target）与本轮 60 个探针脚本/日志。
+  `target` 8.3 GB → **5.8 GB**，仓库合计 9.6 GB → **7.1 GB**
+  （`work/Data` 176 MB、`work/out` 822 MB 未动）。
+* **给用户的实机环境**：`godot/bin/wolf_gdext.dll` 已重建
+  （SHA256 `80ccf7877af4166f66f14e0c16bffd797fe038cb2edd313bee8577f612eeac4f`，
+  比所有 `.rs` 都新）；玩家存档已备份到 `work/out/player_saves_2026-11-15/`，
+  `work/Data/Save/` 已恢复出厂存档（`SaveData01` SHA256 `53e97194…`、
+  `SaveData02` `ac01c909…`，`SaveData03/04` 已删），
+  `m14` 的出厂存档指纹守卫 `0x752b_4235_063a_4721` 对得上。

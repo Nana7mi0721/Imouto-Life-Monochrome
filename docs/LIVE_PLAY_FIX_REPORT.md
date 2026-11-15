@@ -171,12 +171,15 @@
 
 ## 2. 附带改动
 
-* **`m14` 基线**：`saveui` 的 non-black 从 `576_221` 记到 `576_228`。原因是存档格会把
-  每个槽位的存档摘要画出来，像素数跟着 `work/Data/Save` 里的存档文件走；旧数字是
-  在玩家存档占着 `SaveData01.sav` 时录的。现在出厂存档归位，并用 FNV-1a 指纹
-  （`0x752b_4235_063a_4721`）守住夹具，指纹不符就跳过而不是报回归。
-  画面结构数字（25 pictures / 27728 quads / 13 text pics / 54 glyphs / 21 atlas /
-  9 peak coroutines）一个没动。
+* **`m14` 基线**：`saveui` 的 non-black 从 `576_221` 记到 `576_228`。这个场景长期被跳过
+  （`Save/` 里多出玩家的 `SaveData03/04`，存档格多一格），旧数字早就陈旧了。
+  **三个像素是真实渲染变化，不是夹具漂移**：把夹具固定成出厂存档后实测，
+  `ee808fe` 渲染出 576_225，而从 `1a9fafe`（"fix: close T18 UI and runtime
+  regressions"，重写了 `picture.rs`/`atlas.rs`/`game.rs` 并挪了存档格面板的锚点）
+  起一律是 576_228。
+  现在出厂存档归位，并用 FNV-1a 指纹（`0x752b_4235_063a_4721`）守住夹具，指纹不符就跳过
+  而不是报回归。画面结构数字（25 pictures / 27728 quads / 13 text pics / 54 glyphs /
+  21 atlas / 9 peak coroutines）一个没动。
 * **`.gitignore`**：补 `/nul`（Windows 保留名，删不掉）、`/ptr_sc/`（用户实机截图）、
   `/tools/debug/`、`/tools/.rustc_info.json` 与根目录的录制截图压缩包，避免误提交。
 

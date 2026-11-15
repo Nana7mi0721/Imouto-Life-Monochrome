@@ -4,22 +4,55 @@
 > 本报告记录**逐条核实结论**、**处置方式**、**改动文件**与**验证数字**。
 > 本作语汇与说明保持中性技术描述。
 
+> **状态说明（2026-11-15 晚）**：本报告对应的实现提交 `f52db44` 已按用户要求在 `b23a1e1`
+> 被整体回退，因此下表「已修」一栏里**除下列两项外均未落地**：
+> * 「读档后 `current_map_path` 缺 `.mps` 后缀」——已在 live-play 轮以 `map_data_path()`
+>   重新落地（见 `docs/LIVE_PLAY_FIX_REPORT.md` 的 F 项与 `crates/wolf-game/tests/m23_map_path.rs`）。
+> * 「`Sys77..Sys82` 逐帧写 UTC」——已以另一实现重新落地：宿主读 Win32 `GetLocalTime`
+>   并通过 `install_local_clock` 注入，`wolf-cli --clock` 可钉住（见 live-play 轮的 E 项）。
+>
+> 其余各项**当前代码里没有**，请勿把本报告当作它们的现状说明。逐条说明：
+> * **Opcode 122 掩码**——`crates/wolf-vm/src/exec.rs` 仍用 `mode & 0xFF00`，
+>   分支仍是 `0x0200`；`f52db44` 改成的 `0xFFF0` / `0x0010` 没有留下。
+>   `docs/OPCODE_122.md` 已按当前代码订正，并在开头记了这个仍开放的差异。
+> * **`\img` 内联贴图**——**内联贴图支持一直存在**（分词在
+>   `crates/wolf-format/src/messagetext.rs`，文字 pass 早就跳过图片，见
+>   `crates/wolf-game/src/message.rs` 的 `inline_images_are_omitted_from_the_text_pass`）。
+>   被回退的是 `f52db44` 新增的那部分：
+>   纯图片走 sprite pass、文字与图片分层、锚点/缩放/alpha 处理
+>   （`is_inline_image_only` 全仓 0 命中，`crates/wolf-game/src/atlas.rs` 仍是旧写法）。
+>   评审指控的旧 bug（整条吞文字 / 忽略 anchor·scale / 不过滤 alpha）仍然成立。
+> * **动作键绕过范围**——`crates/wolf-game/src/game.rs` 仍是
+>   `matches!(event, 5 | 21 | 22 | 28 | 30 | 35)`，没有收窄。
+> * **`150 Move` 活跃槽位遍历**——`crates/wolf-game/src/picture.rs` 仍按 `lo..=hi`
+>   逐整数遍历，没有改成活跃槽位区间查询。
+> * **Godot 回归脚本**——`godot/tests/verify_p0_fixes.gd` 与
+>   `godot/tests/verify_ui_and_interaction_fixes.gd` 两个文件都还在，只是
+>   `f52db44` 新增的回归内容被回退了。
+>
+> 本报告的**核实结论**仍然有效，尤其是「`武器スキルセット` / `防具スキルセット` 在本作不存在」
+> 这一条误报判定。
+
 ---
 
 ## 0. 结论摘要
 
+> 下表的「处置」列写的是 `f52db44` 当时的做法。**该提交已被整体回退**，
+> 逐条现状见本文开头的「状态说明」横幅；标了「已回退」的行在当前代码里并未落地。
+
 | 评审条目 | 核实结论 | 处置 |
 |---|---|---|
-| [P0] `Opcode 122` 掩码 `0xFF00` 破坏 CE268/CE270 首行截取 | **成立** | 已修（掩码回 `0xFFF0`，分支回 `0x0010`） |
-| [P2] `\img` 内联贴图：整条吞文字 / 忽略 anchor·scale / 不过滤 alpha | **成立（写法层面）** | 已修（贴图/文字分层 + 锚点缩放 + alpha 过滤） |
-| [P2] 读档后 `current_map_path` 缺 `.mps` 后缀 | **成立** | 已修 |
-| [P1] `Sys77..Sys82` 逐帧写 UTC，且破坏运行确定性 | **成立** | 已修（本地时间 + 可注入时钟） |
-| [P2] 动作键绕过范围扩到 `5\|21\|22\|28\|30\|35` | **成立** | 已修（收窄 + 只忽略交互模式变量） |
-| [P2] `PictureAction::Move` 按 `lo..=hi` 逐整数遍历 | **成立** | 已修（改为活跃槽位区间查询） |
-| [P3] Godot 回归脚本断言过空 + 硬编码绝对路径 | **路径问题成立；两处坐标前提被证伪** | 已修（路径链 + 可证伪断言 + 接入 smoke） |
+| [P0] `Opcode 122` 掩码 `0xFF00` 破坏 CE268/CE270 首行截取 | **成立** | 已修（掩码回 `0xFFF0`，分支回 `0x0010`）——**已回退** |
+| [P2] `\img` 内联贴图：整条吞文字 / 忽略 anchor·scale / 不过滤 alpha | **成立（写法层面）** | 已修（贴图/文字分层 + 锚点缩放 + alpha 过滤）——**已回退** |
+| [P2] 读档后 `current_map_path` 缺 `.mps` 后缀 | **成立** | 已修——已由 live-play 轮以 `map_data_path()` 重新落地 |
+| [P1] `Sys77..Sys82` 逐帧写 UTC，且破坏运行确定性 | **成立** | 已修（本地时间 + 可注入时钟）——已由 live-play 轮以 `install_local_clock()` 重新落地 |
+| [P2] 动作键绕过范围扩到 `5\|21\|22\|28\|30\|35` | **成立** | 已修（收窄 + 只忽略交互模式变量）——**已回退** |
+| [P2] `PictureAction::Move` 按 `lo..=hi` 逐整数遍历 | **成立** | 已修（改为活跃槽位区间查询）——**已回退** |
+| [P3] Godot 回归脚本断言过空 + 硬编码绝对路径 | **路径问题成立；两处坐标前提被证伪** | 已修（路径链 + 可证伪断言 + 接入 smoke）——**已回退** |
 | （评审原文之外的）`武器スキルセット` / `防具スキルセット` | **误报：本作不存在** | **不实现**，仅在本文留证 |
 
-评审结论「Block」的前提（Opcode 122 回归）已消除；其余 5 条缺陷同步闭环。
+评审结论「Block」的前提（Opcode 122 回归）在 `f52db44` 里已消除，**但该修复随
+`b23a1e1` 一起回退，当前代码里这个前提重新成立**；其余 5 条缺陷的处理方式见上表。
 
 ---
 
@@ -49,6 +82,11 @@
 
 ## 2. 逐条处置
 
+> **注意**：本节按 `f52db44` 当时的做法书写。该提交已被 `b23a1e1` 整体回退，
+> 因此下面的「修复」「新增回归」「单测」大多**不在当前代码里**；每节末尾标注了
+> 当前现状。只有 2.3（`.mps` 后缀）与 2.4（本地时钟）已在 live-play 轮以另一实现
+> 重新落地。
+
 ### 2.1 [P0] `Opcode 122` 掩码回归（`crates/wolf-vm/src/exec.rs`）
 
 * **核实**：CE268 `pc=14` 的 `122 [1600010, 17, 1600005]` 与 CE270 `pc=2000` 的
@@ -61,6 +99,9 @@
 * **新增回归**：`op122_first_line_cut_moves_the_head_out_of_a_numbered_source`
   （镜像 CE270 `pc2000` 的跨事件 bank 形态，断言整行搬运 + 源行被消费）。
 * **文档**：`docs/OPCODE_122.md` 末尾追加回归说明，正文未动。
+* **当前现状（2026-11-15）**：**已回退**。`crates/wolf-vm/src/exec.rs` 仍是
+  `mode & 0xFF00` 与分支 `0x0200`，`op122_first_line_cut_moves_the_head_out_of_a_numbered_source`
+  不存在；`docs/OPCODE_122.md` 已按当前代码订正，并在开头记了这条仍开放的差异。
 
 ### 2.2 [P2] `\img` 内联贴图分层（`crates/wolf-game/src/{textpic,atlas,game,message}.rs`）
 
@@ -79,6 +120,11 @@
 * **单测**：原 `inline_box_images_survive_as_box_glyphs_in_text_picture` 已失效，
   重写为 `an_image_only_text_picture_produces_no_glyphs`，
   并新增 `a_picture_that_mixes_text_and_images_keeps_its_words`。
+* **当前现状（2026-11-15）**：**已回退**。`is_inline_image_only` 全仓 0 命中，
+  `crates/wolf-game/src/atlas.rs:780` 仍是 `picture.text.contains(r"\img")`，
+  `crates/wolf-game/src/game.rs` 的 `text_quads()` 跳过条件也仍是旧写法；
+  上面两个单测都不存在，`inline_box_images_survive_as_box_glyphs_in_text_picture`
+  仍是原名（它属于长期基线红灯之一）。
 
 ### 2.3 [P2] 读档后 `.mps` 后缀（`crates/wolf-game/src/game.rs`）
 
@@ -87,6 +133,10 @@
   只有 `resume_loaded_map()` 丢了它，导致 `map_scenery_by_path()` 精确匹配落空。
 * **修复**：`self.current_map_path = Some(format!("MapData/{name}.mps"));`
 * **新增回归**：`crates/wolf-game/tests/m4_load_resume.rs::the_resumed_map_keeps_its_mps_path_and_its_scenery`。
+* **当前现状（2026-11-15）**：**已由 live-play 轮以另一实现落地**。
+  `crates/wolf-game/src/game.rs` 新增 `map_data_path()`，
+  `resume_loaded_map()` 与 `boot()` 都改用它（`boot()` 原来还有一次双前缀 bug，
+  一并修掉）；回归在 `crates/wolf-game/tests/m23_map_path.rs`。
 
 ### 2.4 [P1] `Sys77..Sys82` 本地时间与可注入时钟（`crates/wolf-game/src/game.rs`）
 
@@ -101,6 +151,12 @@
 * **单测**：`a_pinned_clock_reports_exactly_the_pinned_time`、
   `the_system_clock_reports_a_plausible_civil_time`、
   `the_frame_publishes_the_clock_into_sys77_to_sys82`。
+* **当前现状（2026-11-15）**：**已由 live-play 轮以另一实现落地**。
+  实现路线不同：`wolf-game` 保持 `#![forbid(unsafe_code)]`，本地时钟由**宿主**
+  （`crates/wolf-cli/src/localclock.rs` 与 `crates/wolf-gdext/src/localclock.rs`）
+  调 Win32 `GetLocalTime` 后经 `install_local_clock()` 注入；
+  `wolf-cli --clock YYYY-MM-DD[THH:MM:SS]` 可钉住；回归在
+  `crates/wolf-game/tests/m20_clock.rs`。
 
 ### 2.5 [P2] 动作键绕过范围（`crates/wolf-game/src/{game,map_runtime}.rs`）
 
@@ -129,6 +185,9 @@
   且 `ev35` 的并行页运行期间该事件已有实例，`action_key_event` 本来就会返回 `None`。
   因此把 35 移出绕过名单**不影响相册开启**；数据（30）同理（它的页条件就是
   `v100==0`，属于白天地图）。
+* **当前现状（2026-11-15）**：**已回退**。`crates/wolf-game/src/game.rs:3165` 仍是
+  `matches!(event, 5 | 21 | 22 | 28 | 30 | 35)`，没有收窄；
+  `action_key_event_ignoring_interaction_mode` 与 `conditions_met_except` 都不存在。
 
 ### 2.6 [P2] `PictureAction::Move` 无界遍历（`crates/wolf-game/src/picture.rs`）
 
@@ -139,6 +198,8 @@
 * **单测**：`a_move_over_a_span_reaches_the_slots_the_per_number_walk_reached`
   （与旧逐整数参照实现逐例比对）、`a_move_over_a_wide_span_reaches_only_the_live_slots`
   （`span = i32::MAX` 护栏 + 耗时上界）、`a_move_stays_inside_the_two_ends_of_its_span`。
+* **当前现状（2026-11-15）**：**已回退**。`crates/wolf-game/src/picture.rs:1421` 仍是
+  `for n in lo..=hi` 逐整数遍历，`Screen::move_targets()` 不存在，上面三条单测也不存在。
 
 ### 2.7 [P3] Godot 回归脚本（`godot/tests/*.gd`、`tools/smoke-godot.sh`）
 
@@ -157,6 +218,10 @@
   数据图标 `-4` → 事件 30（点击点由 sprite 实际矩形反推，每次点击前重新
   `load_save`，避免上一次点击的 `last_action_event` 粘连）；夜间分支断言
   `(935,505)` 不产生幽灵事件 21。两份脚本已接入 `tools/smoke-godot.sh` 末尾。
+* **当前现状（2026-11-15）**：**已回退**。两个脚本文件都还在，但
+  `godot/tests/verify_p0_fixes.gd:6` 与 `godot/tests/verify_ui_and_interaction_fixes.gd:6`
+  仍硬编码 `E:/Study/github program/Imouto Life/work/Data`，
+  `tools/smoke-godot.sh` 也没有调用它们（脚本里的断言还是旧版）。
 
 ---
 
@@ -179,6 +244,13 @@
 ---
 
 ## 4. 验证数字（2026-11-15）
+
+> 下面是 `f52db44` 那一轮的实测记录，随该提交一起回退，**不再代表当前树**。
+> 当前树（`ad7f4b6` 之后）的实测：`cargo test -q --workspace --no-fail-fast`
+> **8 红 0 新增**（choice×3 / db×2 / textpic×1 / m18 `hidden_and_transparent...` /
+> m3_manual_rules `late_night_bedtime...`，全是长期基线），
+> `m14_visual_regression` 5/5 全绿，`wolf-cli verify` PASS 64 / 1 SKIP，
+> `tools/smoke-godot.sh` exit 0。详见 `docs/LIVE_PLAY_FIX_REPORT.md`。
 
 * `cargo fmt --all -- --check`：0 差异。
 * **HEAD（`9a817e4`）基线对照**（`git stash` 取出原树实测）：
@@ -213,4 +285,7 @@
 * `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge`（面板停在 -305，
   属 `picture.rs` 相对绘制路径，待单独排查）。
 * 评审 §5 的两条原版证据缺口（其他角色头像底边、夜间姿势/相册可用性）仍需实机比对。
+* **因回退重新开放**：Opcode 122 的首行截取（`0xFFF0` 掩码）、`\img` 贴图分层、
+  动作键绕过范围收窄、`150 Move` 活跃槽位遍历、Godot 回归脚本接入 smoke。
+  这五项在当前代码里**都没落地**，需要时可以重新做。
 

@@ -283,8 +283,25 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     （m19_balloon_ui 3、m19_picture_motion 14、m20_clock 3、m21_cursor_hover 4、
     m22_raid_cleanup 5、m23_map_path 1、m24_live_play_rulings 2）；
     `wolf-cli verify` **PASS 64 / 1 SKIP**；`m14` 的 `saveui` 基线随出厂存档归位由
-    `576_221` 记到 `576_228`（夹具改指纹守卫，画面结构数字未动）。
-  - 空间：`target/debug/incremental` 已删，`target` 9.2 GB → **7.0 GB**，仓库合计 **11 GB**。
+    `576_221` 记到 `576_228`（真实渲染变化：`1a9fafe` 改了存档格面板锚点；夹具另加
+    指纹守卫，画面结构数字未动）。
+  - **文档订正（2026-11-15 晚）**：`m14` 那三个像素的成因改写为「真实渲染变化」
+    （`1a9fafe` 改了存档格面板锚点），不再是「夹具漂移」；
+    `docs/OPCODE_122.md` 按当前代码订正为 `mode & 0xFF00` / 分支 `0x0200`
+    （`f52db44` 改的 `0xFFF0` / `0x0010` 已随 `b23a1e1` 回退），并在开头记了这条
+    仍开放的差异；`docs/REVIEW_9a817e4_FIX_REPORT.md` 的状态横幅细化为逐条现状，
+    §0 表格标「已回退」，§2 各节补「当前现状」，§4 标注数字是 `f52db44` 那轮的快照，
+    §5 列出因回退重新开放的五项（Opcode 122 掩码 / `\img` 贴图分层 /
+    动作键范围收窄 / `150 Move` 活跃槽位遍历 / Godot 回归脚本接入 smoke）。
+  - **覆盖度独立复核**：只读代理逐条核对实机报告 11 项断言，全部有真实代码落点，
+    32 条新增回归逐条对得上，无「只写在报告里」的情况。
+  - 空间：删 `target/debug/incremental` 与 210 个 `.pdb`（2.4 GB），
+    `target` 8.3 GB → **5.8 GB**，仓库合计 9.6 GB → **7.1 GB**
+    （`work/Data` 176 MB、`work/out` 822 MB 未动）。
+  - 实机环境：`godot/bin/wolf_gdext.dll` 已重建
+    （SHA256 `80ccf7877af4166f66f14e0c16bffd797fe038cb2edd313bee8577f612eeac4f`，
+    比所有 `.rs` 都新）；玩家存档备份在 `work/out/player_saves_2026-11-15/`，
+    `work/Data/Save/` 已是出厂存档。
 
 * **T14 实机 UI/性能收口（2026-11-12 深夜，当前状态）**：最新冷构建下新游戏/读档
   第 `1/2/3/6/10` 帧均 `yellowish=0 / greenish=0`；读档 HUD 的 100x8 白色带框精力条
