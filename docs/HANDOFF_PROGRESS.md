@@ -1219,3 +1219,5 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     （m19_balloon_ui 3、m19_picture_motion 14、m20_clock 3、m21_cursor_hover 4、
     m22_raid_cleanup 5、m23_map_path 1、m24_live_play_rulings 2）；
     `wolf-cli verify` **PASS 64 / 1 SKIP**。
+  * **空间清理**：删 `target/debug/incremental`（2.2 GB）；`target` 9.2 GB → **7.0 GB**，
+    仓库合计 13 GB → **11 GB**（`work/Data` 175 MB 未动）。`work/out` 下的探针日志保留作证据。

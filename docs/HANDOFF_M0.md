@@ -284,6 +284,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     m22_raid_cleanup 5、m23_map_path 1、m24_live_play_rulings 2）；
     `wolf-cli verify` **PASS 64 / 1 SKIP**；`m14` 的 `saveui` 基线随出厂存档归位由
     `576_221` 记到 `576_228`（夹具改指纹守卫，画面结构数字未动）。
+  - 空间：`target/debug/incremental` 已删，`target` 9.2 GB → **7.0 GB**，仓库合计 **11 GB**。
 
 * **T14 实机 UI/性能收口（2026-11-12 深夜，当前状态）**：最新冷构建下新游戏/读档
   第 `1/2/3/6/10` 帧均 `yellowish=0 / greenish=0`；读档 HUD 的 100x8 白色带框精力条
