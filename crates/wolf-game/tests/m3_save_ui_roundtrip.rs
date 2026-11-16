@@ -421,7 +421,11 @@ fn save_ui_writes_slot3_then_loads_it_back() {
         "save header not shown: {:?}",
         text_at(&game, 12002)
     );
-    assert_eq!(text_at(&game, 12052), "数据 1", "slot 1 label");
+    assert!(
+        text_at(&game, 12052).contains("数据 1") && text_at(&game, 12052).contains("自动存档"),
+        "slot 1 label: {:?}",
+        text_at(&game, 12052)
+    );
     assert_eq!(text_at(&game, 12072), "数据 2", "slot 2 label");
     assert_eq!(text_at(&game, 12092), "数据 3", "slot 3 label");
     assert_eq!(text_at(&game, 12112), "数据 4", "slot 4 label");

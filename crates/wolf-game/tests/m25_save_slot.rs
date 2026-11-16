@@ -16,6 +16,7 @@
 use std::path::{Path, PathBuf};
 
 use wolf_game::Game;
+use wolf_save::SaveFile;
 
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/Data".to_owned());
@@ -120,6 +121,60 @@ fn a_slot_with_a_save_reports_occupied() {
     assert!(hit.occupied, "the shipped data root has a slot one");
 }
 
+#[test]
+fn the_keyboard_cursor_reports_the_same_slot_and_its_row_centre() {
+    let Some(game) = grid() else { return };
+    let hit = game
+        .selected_save_slot()
+        .expect("the keyboard cursor is on a slot");
+    assert_eq!(hit.slot, 1, "CE131 opens on the first row");
+    assert_eq!(
+        hit.center,
+        [(48.0 + 928.0 * 0.5) as i32, (86.0 + 115.0 * 0.5) as i32],
+        "the first row centre is the click a keyboard save replays"
+    );
+    assert!(game.in_submenu(), "the save grid is a secondary screen");
+}
+
+fn slot_text(game: &Game, number: i32) -> String {
+    game.text_quads()
+        .into_iter()
+        .filter(|text| text.number == number)
+        .map(|text| text.text)
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+#[test]
+fn slot_one_is_labelled_auto_save_and_the_row_shows_the_save_summary() {
+    let Some(game) = grid() else { return };
+    assert!(
+        slot_text(&game, 12052).contains("自动存档"),
+        "slot 1 label: {:?}",
+        slot_text(&game, 12052)
+    );
+
+    let bytes = std::fs::read(save_file(1)).expect("slot 1 save");
+    let save = SaveFile::parse(&bytes).expect("parse slot 1");
+    let detail = slot_text(&game, 12053);
+    let day = save.normal_var(99).unwrap_or(0);
+    let hour = save.normal_var(4).unwrap_or(0);
+    let minute = save.normal_var(5).unwrap_or(0);
+    assert!(
+        detail.contains(&format!("{day}天")),
+        "summary day missing: {detail:?}"
+    );
+    assert!(
+        detail.contains(&format!("{hour:02}:{minute:02}")),
+        "summary clock missing: {detail:?}"
+    );
+    let title = slot_text(&game, 12055);
+    assert!(
+        !title.trim().is_empty(),
+        "the slot still shows the brother title"
+    );
+}
+
 /// The title screen's grid reads saves; the in-game grid writes them.
 #[test]
 fn the_title_grid_reads_slots_instead_of_writing_them() {
@@ -171,6 +226,34 @@ fn a_queued_load_is_applied_on_the_next_frame() {
         game.screen.len() > 30,
         "the loaded bedroom is on screen: {} pictures",
         game.screen.len()
+    );
+}
+
+#[test]
+fn a_load_returns_to_the_map_and_does_not_enter_the_album() {
+    let root = data_root();
+    let save = root.join("Save").join("SaveData01.sav");
+    if !save.is_file() {
+        eprintln!("skipping: no {}", save.display());
+        return;
+    }
+    let mut game = Game::new(&root).expect("game");
+    game.request_load(&save).expect("queue load");
+    for _ in 0..20 {
+        game.frame();
+    }
+    assert!(
+        !game
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 303),
+        "a successful load must not start CE303 (the album screen)"
+    );
+    assert_eq!(
+        game.vm.vars.get(238),
+        0,
+        "the album's in-use flag stays clear"
     );
 }
 

@@ -658,6 +658,22 @@ impl WolfGame {
         }
     }
 
+    /// True while a dialog, menu or other secondary screen owns the input.
+    ///
+    /// The front end uses this to let Escape act as WOLF's cancel key on a
+    /// save/album/settings/choice screen instead of opening the "return to
+    /// title" confirmation over it.
+    #[func]
+    fn in_submenu(&self) -> bool {
+        self.game.as_ref().is_some_and(Game::in_submenu)
+    }
+
+    /// True while CE131's save/load grid owns the screen.
+    #[func]
+    fn save_ui_active(&self) -> bool {
+        self.game.as_ref().is_some_and(Game::save_grid_open)
+    }
+
     /// The save slot under the pointer, when the save/load grid is up.
     ///
     /// Answers an empty dictionary when the grid is closed or the pointer is
@@ -666,19 +682,29 @@ impl WolfGame {
     /// between a plain click and a confirmation.
     #[func]
     fn save_slot_at(&mut self, x: i32, y: i32) -> VarDictionary {
-        let mut out = VarDictionary::new();
         let Some(game) = self.game.as_mut() else {
-            return out;
+            return VarDictionary::new();
         };
         let Some(hit) = game.save_slot_at(x, y) else {
-            return out;
+            return VarDictionary::new();
         };
-        out.set("slot", hit.slot as i64);
-        let path = GString::from(hit.path.to_string_lossy().as_ref());
-        out.set("path", &path);
-        out.set("occupied", hit.occupied);
-        out.set("loading", hit.loading);
-        out
+        save_hit_dict(&hit)
+    }
+
+    /// The save slot under CE131's keyboard cursor.
+    ///
+    /// A keyboard confirm must open the same front-end confirmation as a mouse
+    /// click. The dictionary also carries the row centre so choosing "save"
+    /// can replay a click on the game's own grid.
+    #[func]
+    fn selected_save_slot(&self) -> VarDictionary {
+        let Some(game) = self.game.as_ref() else {
+            return VarDictionary::new();
+        };
+        let Some(hit) = game.selected_save_slot() else {
+            return VarDictionary::new();
+        };
+        save_hit_dict(&hit)
     }
 
     /// Asks the runtime to load a save file at the end of the current frame.
@@ -829,7 +855,22 @@ fn sprite_dict(quad: &SpriteQuad, atlas_size: [u32; 2]) -> VarDictionary {
     dict
 }
 
+fn save_hit_dict(hit: &wolf_game::SaveSlotHit) -> VarDictionary {
+    let mut out = VarDictionary::new();
+    out.set("slot", hit.slot as i64);
+    let path = GString::from(hit.path.to_string_lossy().as_ref());
+    out.set("path", &path);
+    out.set("x", hit.center[0] as i64);
+    out.set("y", hit.center[1] as i64);
+    out.set("occupied", hit.occupied);
+    out.set("loading", hit.loading);
+    out
+}
+
 fn sprite_z(number: i32) -> i64 {
+    if matches!(number, 2998 | 2999) {
+        return UI_Z + 100;
+    }
     i64::from(number)
 }
 
@@ -920,12 +961,19 @@ fn install_font_metrics(game: &mut Game, root: &Path) {
 
 #[cfg(test)]
 mod tests {
-    use super::sprite_z;
+    use super::{sprite_z, UI_Z};
 
     #[test]
     fn shared_status_frames_stay_below_the_sleeping_decoration() {
         assert!(sprite_z(1994) < sprite_z(2000));
         assert!(sprite_z(1998) < sprite_z(2000));
         assert_eq!(sprite_z(1996), 1996);
+    }
+
+    #[test]
+    fn both_pointers_stay_above_every_game_picture_and_ui_text() {
+        assert!(sprite_z(2998) > UI_Z);
+        assert!(sprite_z(2999) > UI_Z);
+        assert_eq!(sprite_z(2998), sprite_z(2999));
     }
 }

@@ -798,6 +798,42 @@ fn side_panel_handles_open_toggle_and_stay_stable() {
 }
 
 #[test]
+fn side_panel_text_labels_slide_in_lockstep_with_the_drawer() {
+    let Some(mut game) = loaded_with(&[7, 8, 10, 11]) else {
+        return;
+    };
+    for _ in 0..30 {
+        game.frame();
+    }
+    let parked: Vec<(i32, i32)> = (321..=325)
+        .filter_map(|slot| game.screen.get(slot).map(|picture| (slot, picture.x)))
+        .collect();
+    assert_eq!(parked.len(), 5, "CE238 draws all five status labels");
+
+    game.mouse = [15, 137];
+    game.frame();
+    game.mouse_buttons = 1;
+    game.frame();
+    game.mouse_buttons = 0;
+
+    let panel = game.screen.get(320).expect("status panel");
+    let offset = panel.x + 305;
+    assert!(
+        (1..305).contains(&offset),
+        "the first frame after the click must be mid-slide, panel x={}",
+        panel.x
+    );
+    for (slot, start_x) in parked {
+        let label = game.screen.get(slot).expect("status label");
+        let moved = label.x - start_x;
+        assert!(
+            (moved - offset).abs() <= 1,
+            "slot {slot} moved {moved}px while the panel moved {offset}px"
+        );
+    }
+}
+
+#[test]
 fn idle_side_panel_slots_are_frame_stable() {
     let Some(mut game) = loaded_with(&[7, 8, 10, 11]) else {
         return;

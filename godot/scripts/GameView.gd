@@ -9,6 +9,9 @@ extends Control
 ## to the faces bundled in the data root and finally to a system font.
 
 const LOGICAL_SIZE := Vector2(1024.0, 576.0)
+## The save-page notice sits above every game picture/text but below the pointer.
+const SAVE_NOTICE_Z := 99990
+const SAVE_NOTICE_RECT := Rect2(660.0, 8.0, 354.0, 56.0)
 ## Preferred UI faces on Windows.  Missing files are skipped, never assumed.
 const WINDOWS_FONT_BOLD := "C:/Windows/Fonts/msyhbd.ttc"
 const WINDOWS_FONT_REGULAR := "C:/Windows/Fonts/msyh.ttc"
@@ -41,6 +44,7 @@ const WolfKeysLib := preload("res://scripts/WolfKeys.gd")
 
 class _BlendBatch extends Node2D:
 	const LOGICAL_SIZE := Vector2(1024.0, 576.0)
+	const SAVE_NOTICE_RECT := Rect2(660.0, 8.0, 354.0, 56.0)
 
 	var items: Array = []
 	var overlays: Array = []
@@ -68,6 +72,8 @@ class _BlendBatch extends Node2D:
 				draw_texture_rect_region(atlas, sprite["rect"], sprite["src"], tint)
 			elif item.has("ap"):
 				_draw_action_points_dict(item["ap"])
+			elif item.has("save_notice"):
+				_draw_save_notice()
 			elif item.has("text"):
 				WolfTextScript.draw_text(self, item["text"], bold_font, regular_font)
 
@@ -84,21 +90,48 @@ class _BlendBatch extends Node2D:
 			return
 		var maximum := maxi(1, int(action_ap.get("max", 0)))
 		var current := clampi(int(action_ap.get("current", 0)), 0, maximum)
-		var box: Rect2 = action_ap.get("bar", Rect2(Vector2(593.0, 18.0), Vector2(100.0, 12.0)))
-		# Reference (`参照图仅参考行动力条.png`): a dark trough with a thin light
-		# border and a 1 px-inset soft grey fill, not the old 2 px-inset white slab.
-		draw_rect(box, Color(0.16, 0.16, 0.16, 0.92), true)
-		draw_rect(box, Color(0.78, 0.78, 0.78, 1.0), false, 1.0)
+		var box: Rect2 = action_ap.get("bar", Rect2(Vector2(531.0, 15.0), Vector2(165.0, 14.0)))
+		# Reference (`姊妹作体力值不满时的样式特写`): a 1 px white frame encloses
+		# the whole gauge, the consumed remainder is #646464, and the current
+		# amount is solid white.
+		draw_rect(box, Color(1.0, 1.0, 1.0, 1.0), true)
+		var inner := Rect2(
+			box.position + Vector2(1.0, 1.0),
+			Vector2(maxf(0.0, box.size.x - 2.0), maxf(0.0, box.size.y - 2.0))
+		)
+		draw_rect(inner, Color8(100, 100, 100), true)
 		var ratio := float(current) / float(maximum)
 		if ratio > 0.0:
 			draw_rect(
 				Rect2(
-					box.position + Vector2(1.0, 1.0),
-					Vector2((box.size.x - 2.0) * ratio, box.size.y - 2.0)
+					inner.position,
+					Vector2(inner.size.x * ratio, inner.size.y)
 				),
-				Color(0.82, 0.82, 0.82, 0.95),
+				Color(1.0, 1.0, 1.0, 1.0),
 				true
 			)
+
+	func _draw_save_notice() -> void:
+		draw_rect(SAVE_NOTICE_RECT, Color(0.09, 0.09, 0.11, 0.94), true)
+		draw_rect(SAVE_NOTICE_RECT, Color(0.62, 0.72, 0.86, 0.85), false, 1.0)
+		_draw_notice_line("第一栏为自动存档所使用；第一栏已有存档数据时，", 12.0)
+		_draw_notice_line("请先读取该存档，再保存至合适位置。", 31.0)
+
+	func _draw_notice_line(text: String, y: float) -> void:
+		WolfTextScript.draw_text(
+			self,
+			{
+				"text": text,
+				"rect": Rect2(Vector2(670.0, y), Vector2(334.0, 18.0)),
+				"font_px": 12.0,
+				"weight": 400,
+				"colour": Color(0.86, 0.88, 0.92, 1.0),
+				"alpha": 1.0,
+				"outline": true,
+			},
+			bold_font,
+			regular_font
+		)
 
 class _ModalLayer extends Node2D:
 	## A front-end modal dialog.
@@ -281,6 +314,10 @@ var mouse_latch: int = 0
 ## Where the latched left press happened, in logical pixels. A click must hit the
 ## hotspot under the pointer at press time, not wherever the pointer drifted to.
 var mouse_latch_pos := Vector2i(-1, -1)
+## Left-button rising edges handed to the runtime. Kept as an observability
+## counter so a modal-isolation test can prove that no synthetic click leaked.
+var runtime_left_clicks := 0
+var _last_runtime_buttons := 0
 ## Wheel notches accumulated between physics ticks: positive up, negative down.
 var wheel_notches: int = 0
 ## Set by a window/application focus-in notification and consumed by the next
@@ -303,6 +340,11 @@ var _modal_slot := {}
 var _modal_click := Vector2i(-1, -1)
 ## A click the front-end owes the runtime, replayed on the next physics frame.
 var _pending_click := Vector2i(-1, -1)
+## True from the moment a modal closes until every physical mouse button has
+## been released. Without this, the level query in `_mouse_buttons` turns the
+## still-held click that dismissed the modal into a fresh click on the screen
+## underneath it.
+var _modal_release_guard := false
 ## The slot the daily auto-save writes to, 0 when it is off.
 var _auto_save_slot := 0
 var _modal_layer: _ModalLayer
@@ -458,21 +500,37 @@ func _physics_process(_delta: float) -> void:
 	# not see the keyboard, the wheel or the pointer at all, or a click would
 	# fall through onto a map hotspot behind the panel.
 	var modal_open := not _modal_kind.is_empty()
-	var raw_keys := PackedInt32Array() if modal_open else _raw_key_codes()
 	# Consume the focus-in marker: only the first tick after a focus-in skips the
 	# level query; later ticks trust it again for genuinely held buttons.
 	var skip_level := focus_gained
 	focus_gained = false
-	var buttons := 0 if modal_open else _mouse_buttons(skip_level)
+	var release_guard := _modal_release_guard
+	if release_guard:
+		var held := mouse_down | mouse_latch
+		# A focus-in tick must not trust the OS level for the same reason
+		# `_mouse_buttons` skips it: a button can remain reported as held while
+		# the window was away, and that is not a fresh click.
+		if not skip_level:
+			held |= _mouse_level_buttons()
+		if held == 0:
+			_modal_release_guard = false
+			release_guard = false
+	var raw_keys := PackedInt32Array() if modal_open else _raw_key_codes()
+	var buttons := 0 if modal_open or release_guard else _mouse_buttons(skip_level)
 	# A modal that confirmed "save this slot" replays the click that opened it,
 	# so the game performs its own save: it also updates System.sav's last-slot
 	# row, which a front-end write could not.
-	if _pending_click.x >= 0:
+	if _pending_click.x >= 0 and not modal_open and not release_guard:
 		mouse_pos = _pending_click
 		buttons |= 1
 		_pending_click = Vector2i(-1, -1)
+	if release_guard:
+		buttons = 0
 	mouse_latch = 0
-	wolf.set_wheel(0 if modal_open else wheel_notches)
+	if buttons & 1 != 0 and _last_runtime_buttons & 1 == 0:
+		runtime_left_clicks += 1
+	_last_runtime_buttons = buttons
+	wolf.set_wheel(0 if modal_open or release_guard else wheel_notches)
 	wheel_notches = 0
 	wolf.set_input(_key_bits(raw_keys), raw_keys, mouse_pos, buttons)
 	var wolf_started := Time.get_ticks_usec()
@@ -556,6 +614,7 @@ func _input(event: InputEvent) -> void:
 	if not _modal_kind.is_empty():
 		# The modal owns the input while it is up.
 		_handle_modal_event(event)
+		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
@@ -580,13 +639,19 @@ func _input(event: InputEvent) -> void:
 	if log_input:
 		print("input: key=", identity, " pressed=", key_event.pressed, " echo=", key_event.echo, " frame=", game_frames)
 	if identity == KEY_ESCAPE:
-		# Escape opens the front-end "back to the title" confirmation. The
-		# runtime treats Escape as an alias for Backspace, so the key never
-		# reaches it: the manual binds cancel to Backspace / X / right click,
-		# and those keep working.
+		# On the free map Escape opens the front-end "back to the title"
+		# confirmation. On a secondary screen it is WOLF's cancel alias, so it
+		# must fall through to the runtime instead of stacking a title dialog
+		# over the save/album/settings screen.
 		if key_event.pressed and not key_event.echo:
-			_open_return_modal()
-		return
+			if wolf == null:
+				return
+			if wolf.at_title() and not wolf.save_ui_active():
+				return
+			if not wolf.in_submenu():
+				_open_return_modal()
+				return
+		# In a submenu Escape continues into the regular key path below.
 	if key_event.pressed:
 		# OS auto-repeat echoes the key; the held set already has it.
 		if key_event.echo or held_keys.has(identity):
@@ -595,6 +660,11 @@ func _input(event: InputEvent) -> void:
 		# consumes its hotkeys before recording raw keys.
 		if identity == KEY_F11:
 			return
+		if wolf != null and wolf.save_ui_active() and _is_confirm_key(identity):
+			# A keyboard confirm on a used slot must ask before overwriting. An
+			# empty slot still passes through and the game writes it directly.
+			if _open_save_slot_modal_for_keyboard():
+				return
 		held_keys[identity] = true
 		held_order.append(identity)
 	else:
@@ -670,6 +740,16 @@ func _handle_modal_event(event: InputEvent) -> void:
 			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
 				_activate_modal_focus()
 		return
+	if event is InputEventMouseMotion:
+		var motion := event as InputEventMouseMotion
+		var motion_local := get_global_transform_with_canvas().affine_inverse() * motion.position
+		var motion_point := Vector2(motion_local.x, motion_local.y)
+		var motion_rects := _modal_layer.button_rects()
+		for index in range(motion_rects.size()):
+			if motion_rects[index].has_point(motion_point):
+				_set_modal_focus(index)
+				return
+		return
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
@@ -691,9 +771,9 @@ func _handle_modal_event(event: InputEvent) -> void:
 func _open_return_modal() -> void:
 	if wolf == null or not _modal_kind.is_empty():
 		return
-	if wolf.at_title():
+	if wolf.at_title() or wolf.in_submenu():
 		# The session already sits on the title screen, so a reset would only
-		# replay the opening.
+		# replay the opening. A secondary screen must cancel first.
 		return
 	_modal_kind = "return_title"
 	_modal_actions = ["title", "cancel"]
@@ -721,6 +801,20 @@ func _open_save_slot_modal(event: InputEventMouseButton) -> bool:
 		return false
 	var local := get_global_transform_with_canvas().affine_inverse() * event.position
 	var hit: Dictionary = wolf.save_slot_at(int(local.x), int(local.y))
+	return _open_save_slot_modal_for_hit(hit, Vector2i(int(local.x), int(local.y)))
+
+
+## Opens the same confirmation for CE131's keyboard cursor.
+func _open_save_slot_modal_for_keyboard() -> bool:
+	if wolf == null:
+		return false
+	var hit: Dictionary = wolf.selected_save_slot()
+	var click := Vector2i(int(hit.get("x", -1)), int(hit.get("y", -1)))
+	return _open_save_slot_modal_for_hit(hit, click)
+
+
+## Shared entry for mouse and keyboard confirmation.
+func _open_save_slot_modal_for_hit(hit: Dictionary, click: Vector2i) -> bool:
 	if hit.is_empty():
 		return false
 	if not bool(hit.get("occupied", false)):
@@ -728,7 +822,7 @@ func _open_save_slot_modal(event: InputEventMouseButton) -> bool:
 		return false
 	_modal_kind = "save_slot"
 	_modal_slot = hit
-	_modal_click = Vector2i(int(local.x), int(local.y))
+	_modal_click = click
 	_modal_layer.title = "存档槽 %d" % int(hit.get("slot", 0))
 	_modal_layer.body = "该槽位已有存档。"
 	if bool(hit.get("loading", false)):
@@ -748,10 +842,27 @@ func _open_save_slot_modal(event: InputEventMouseButton) -> bool:
 	return true
 
 
+## True when a physical key is the game's decision key.
+##
+## Enter and keypad Enter are the manual's fixed aliases; the configurable
+## decide scancode comes from Sys52 through `WolfGame.key_config()`.
+func _is_confirm_key(identity: int) -> bool:
+	if identity == KEY_ENTER or identity == KEY_KP_ENTER:
+		return true
+	if wolf == null:
+		return false
+	var raw := WolfKeysLib.wolf_code(identity)
+	if raw < 0:
+		return false
+	var config: PackedInt32Array = wolf.key_config()
+	return config.size() >= 1 and int(config[0]) == raw
+
+
 ## Closes the modal without acting on it.
 func _close_modal() -> void:
 	if _modal_kind.is_empty():
 		return
+	_modal_release_guard = true
 	_modal_kind = ""
 	_modal_actions = []
 	_modal_slot = {}
@@ -850,6 +961,7 @@ func _notification(what: int) -> void:
 		mouse_latch_pos = Vector2i(-1, -1)
 		wheel_notches = 0
 		focus_gained = false
+		_modal_release_guard = false
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -980,6 +1092,9 @@ func _draw() -> void:
 	if not ap.is_empty():
 		items.append({"ap": ap, "z": 230, "seq": seq})
 		seq += 1
+	if wolf != null and wolf.save_ui_active():
+		items.append({"save_notice": true, "z": SAVE_NOTICE_Z, "seq": seq})
+		seq += 1
 	items.sort_custom(_draw_item_before)
 
 	if not has_blends:
@@ -999,6 +1114,8 @@ func _draw() -> void:
 				draw_texture_rect_region(atlas_texture, sprite["rect"], sprite["src"], tint)
 			elif item.has("ap"):
 				_draw_action_points(item["ap"])
+			elif item.has("save_notice"):
+				_draw_save_notice()
 			else:
 				_draw_text(item["text"])
 
@@ -1119,21 +1236,49 @@ func _draw_action_points(ap: Dictionary) -> void:
 		return
 	var maximum := maxi(1, int(ap.get("max", 0)))
 	var current := clampi(int(ap.get("current", 0)), 0, maximum)
-	var box: Rect2 = ap.get("bar", Rect2(Vector2(593.0, 18.0), Vector2(100.0, 12.0)))
-	# Reference (`参照图仅参考行动力条.png`): a dark trough with a thin light
-	# border and a 1 px-inset soft grey fill, not the old 2 px-inset white slab.
-	draw_rect(box, Color(0.16, 0.16, 0.16, 0.92), true)
-	draw_rect(box, Color(0.78, 0.78, 0.78, 1.0), false, 1.0)
+	var box: Rect2 = ap.get("bar", Rect2(Vector2(531.0, 15.0), Vector2(165.0, 14.0)))
+	# A 1 px white frame and a #646464 empty section stay visible when the
+	# action points are not full; the current section is solid white.
+	draw_rect(box, Color(1.0, 1.0, 1.0, 1.0), true)
+	var inner := Rect2(
+		box.position + Vector2(1.0, 1.0),
+		Vector2(maxf(0.0, box.size.x - 2.0), maxf(0.0, box.size.y - 2.0))
+	)
+	draw_rect(inner, Color8(100, 100, 100), true)
 	var ratio := float(current) / float(maximum)
 	if ratio > 0.0:
 		draw_rect(
 			Rect2(
-				box.position + Vector2(1.0, 1.0),
-				Vector2((box.size.x - 2.0) * ratio, box.size.y - 2.0)
+				inner.position,
+				Vector2(inner.size.x * ratio, inner.size.y)
 			),
-			Color(0.82, 0.82, 0.82, 0.95),
+			Color(1.0, 1.0, 1.0, 1.0),
 			true
 		)
+
+
+func _draw_save_notice() -> void:
+	draw_rect(SAVE_NOTICE_RECT, Color(0.09, 0.09, 0.11, 0.94), true)
+	draw_rect(SAVE_NOTICE_RECT, Color(0.62, 0.72, 0.86, 0.85), false, 1.0)
+	_draw_save_notice_line("第一栏为自动存档所使用；第一栏已有存档数据时，", 12.0)
+	_draw_save_notice_line("请先读取该存档，再保存至合适位置。", 31.0)
+
+
+func _draw_save_notice_line(text: String, y: float) -> void:
+	WolfTextScript.draw_text(
+		self,
+		{
+			"text": text,
+			"rect": Rect2(Vector2(670.0, y), Vector2(334.0, 18.0)),
+			"font_px": 12.0,
+			"weight": 400,
+			"colour": Color(0.86, 0.88, 0.92, 1.0),
+			"alpha": 1.0,
+			"outline": true,
+		},
+		bold_font,
+		regular_font
+	)
 
 
 func _gain_to_db(gain: float) -> float:
@@ -1579,6 +1724,13 @@ func _mouse_buttons(skip_level: bool = false) -> int:
 	var buttons := mouse_down | mouse_latch
 	if skip_level:
 		return buttons
+	return buttons | _mouse_level_buttons()
+
+
+## The OS-level mouse state, separated so the modal release guard can query it
+## without adding event-tracked state from before the dialog opened.
+func _mouse_level_buttons() -> int:
+	var buttons := 0
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		buttons |= 1
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):

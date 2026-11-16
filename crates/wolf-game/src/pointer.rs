@@ -4,14 +4,13 @@
 //! apart:
 //!
 //! * The **system pointer** is the hand the WOLF engine draws over the map.
-//!   Whether it shows is a game variable: system variable 74
-//!   ("マウスポインタ表示する?" - 1 = show). `CE 224` (フィールド上処理) is the
-//!   parallel event that owns it: it clears the flag while a field action runs
-//!   and sets it again once the field is free. That is exactly the pattern the
-//!   retail captures show - a hand in the free-play scenes
-//!   (`ptr_sc/卧室1.png`, `ptr_sc/白天_出门_妹妹对话.png`, `ptr_sc/对话_妹妹1.png`)
-//!   and no hand in the cut scenes (`ptr_sc/白天_起床_妹妹对话.png`,
-//!   `ptr_sc/洗澡_一个人洗_去偷窥_浴室.png`, `ptr_sc/中央消息.png`).
+//!   In the retail build its visibility is system variable 74
+//!   ("マウスポインタ表示する?"), owned by `CE 224`: a hand in free-play and no
+//!   hand during some dialogues/cut scenes. The project deliberately deviates
+//!   from that rule: every mouse-driven gameplay surface gets the hand, including
+//!   choices, balloons, the save grid, album, data and settings. The front-end
+//!   hides the engine sprite only for its own modal dialogs, where the OS cursor
+//!   takes over.
 //! * The **game pointer** is `Picture 2999`, painted by `SampleMapA` event 14
 //!   (マウス追従) in the night raid, with the icon picked by variable 121.
 //!   The retail engine hides the system arrow while that slot is alive.
@@ -53,19 +52,14 @@ pub const POINTER_FILE: &str = "CharaChip/hand3.png";
 /// mouse position instead of being centred on it.
 pub const POINTER_HOTSPOT: [i32; 2] = [4, 1];
 
-/// System variable 74: "マウスポインタ表示する?" (1 = show the pointer).
-///
-/// `CE 224` (フィールド上処理) is the only writer in the whole game: it
-/// clears the flag while a field action runs and sets it again afterwards.
-pub const POINTER_VISIBLE_VAR: usize = 74;
-
 /// Paints or removes the engine's pointer.
-///
-/// The pointer follows the rules the retail data describes:
 ///
 /// * the game script's own pointer (slot 2999) wins - the engine removes its
 ///   own sprite so the two never overlap;
-/// * system variable 74 decides whether the pointer is on screen at all;
+/// * the pointer appears on every playable map, not just when retail's Sys74
+///   says so;
+/// * the title menu keeps the OS cursor, because it is front-end chrome, but its
+///   load grid still gets the hand because choosing a slot is mouse-driven;
 /// * the pointer sits on the mouse position, hotspot first.
 ///
 /// Returns true when the screen changed.
@@ -77,7 +71,7 @@ pub fn sync_pointer(game: &mut Game) -> bool {
     if game_pointer {
         return erase_pointer(game);
     }
-    if game.vm.vars.get_sys(POINTER_VISIBLE_VAR) == 0 {
+    if game.on_title_screen() && !game.save_grid_open() {
         return erase_pointer(game);
     }
     draw_pointer(game)

@@ -261,7 +261,27 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 > **[HANDOFF_PROGRESS.md](HANDOFF_PROGRESS.md)**。本节只保留**当前状态摘要**；
 > 新会话判断“现在是什么状态”以本节 + 各专题文档为准，查历史细节再翻日志。
 
-### 11.1 当前状态（2026-11-15）
+### 11.1 当前状态（2026-11-16）
+
+* **2026-11-16 实机复审收口（当前状态）**：按 `review_46de4eb_and_ux_bugs_report.md`
+  与用户新截图继续收口。
+  - **侧拉栏文字**：`CE238/CE239` 的 `321..325` / `2301..2319` 文本 `Move` 指令
+    没有动画尾参，宿主只在 `owner_event == 238/239` 时用首参（20 帧）作为滑动时长，
+    文字和底板同步；`m17_ui_regressions::side_panel_text_labels_slide_in_lockstep_with_the_drawer`
+    通过。
+  - **指针**：不再跟随 Sys74；白天、选项、气泡、存单格、相册/数据/设置等鼠标页面
+    都显示引擎手型指针，仅前端弹窗让位给系统箭头；标题菜单保持箭头，**标题读档格
+    显示手**。指针 z 提到 `UI_Z + 100`。`m25_cursor_follow` **10/10**。
+  - **存单弹窗**：鼠标移动更新按钮高亮；关闭弹窗加 `_modal_release_guard`，物理
+    键未全部松开前强制 `buttons=0` 并清 latch，避免“按下取消”在下一物理帧穿透成
+    底层读档/覆盖保存；弹窗事件统一 `set_input_as_handled()`。`save_slot_modal.gd`
+    覆盖悬停、按住取消不穿透、读档成功，并校验 `SaveData01` 字节不变。
+  - **顶栏行动力条**：按姊妹作不满值特写改为 `165×14`、`[531,15,165,14]`；1 px
+    纯白外框，当前值纯白，已消耗部分 `#646464`。文字与条墨迹均 `y=15..28`，
+    中轴 `y=21.5`；数值仍右对齐 `x=750`。
+  - **验证**：`cargo fmt --all --check` 干净；`m14_visual_regression` 5/5；
+    `bash tools/smoke-godot.sh` exit 0（`pictures=4 sprites=4`）。用户实机存档已被
+    覆盖为第 2 天 19:00，依赖出厂 `SaveData01` 的旧用例会漂移，**不得回滚玩家存档**。
 
 * **实机报告 11 项全部收口（2026-11-15，当前状态）**：详见 `docs/LIVE_PLAY_FIX_REPORT.md`。
   - 核实结论：`live_play_issues_and_fixes_report.md` 的 11 项断言里 **7 项是宿主 bug**
@@ -323,10 +343,11 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     条件 `var120 == 1`，图标由 Ev 18 按 `var121` 选）。零售存档佐证：`SaveData01`
     （第 1 天 19:30 周一）`var120 = 0`、`var121 = 0`，而同一时刻截图里有手。
     **落地（引擎侧）**：新增 `crates/wolf-game/src/pointer.rs`——引擎自己画系统指针
-    （`CharaChip/hand3.png` 第 0 格，按热点把指尖放在鼠标上，可见性完全跟随 Sys74），
+    （`CharaChip/hand3.png` 第 0 格，按热点把指尖放在鼠标上；后续用户复审改为
+    所有鼠标页面显示，标题菜单除外、标题读档格显示），
     落在独立的单槽"屏幕" `Game::pointer`，**不进游戏图集**（脚本图片计数与存档不受影响）；
     脚本画了 2999 时引擎指针让位；前端 `GameView.gd` 在 2998/2999 在屏时隐藏系统箭头。
-    回归 `m25_cursor_follow` **8 条**；`m14_visual_regression` 两个地图场景重录基线。
+    回归 `m25_cursor_follow` **10 条**；`m14_visual_regression` 两个地图场景重录基线。
   - **§一 RNG（opt-in）**：`WOLF_LIVE_RNG=1` 时新档/读档的随机游标加时间基扰动；
     环境变量没设时**逐位等价**（回归基线不受影响）。回归 `m25_live_rng` 15 条。
   - **§三 睡姿热区**：报告的"pose 5 没有 CE240 槽位"因果是错的；真因是宿主
@@ -340,12 +361,13 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     共 12 槽 3 页（第 1/2/3 页第三行写 `SaveData03/07/11`，已写盘实测）。
     **存单弹窗**：零售存档格单击即覆盖（误点毁档），本轮在 Godot `_input` 最顶部拦截，
     非空槽弹「保存到此槽 / 读取此存档 / 取消」，保存按钮**重放原点击**让游戏自己写。
-    **返回标题入口**：`Esc` → 自绘确认面板（是/否，默认"否"）；Esc 不再是运行时取消别名。
+    **返回标题入口**：自由地图 `Esc` → 自绘确认面板（是/否，默认"否"）；在存单/
+    相册/数据等二级界面 `Esc` 继续作为运行时的取消别名，不叠返回标题框。
     **晚饭后槽 1 自动存档**：`CE258` 正常结束那帧写 `SaveData01`，**宿主开关
     `set_auto_save_slot`，默认关**；Godot 只在真窗口非 capture 会话打开。
   - **回归状态**：`cargo test -q --workspace --no-fail-fast` **与长期基线逐条一致、
     0 条新增**；本轮新增 **35 条**（m25_cursor_follow 4、m25_live_rng 15、
-    m25_sister_pose5 4、m25_return_to_title 2、m25_save_slot 10）+ Godot 端到端
+    m25_sister_pose5 4、m25_return_to_title 2、m25_save_slot 13）+ Godot 端到端
     `godot/tests/save_slot_modal.gd`（已接入 `tools/smoke-godot.sh`）；
     `cargo fmt --all --check` 干净；`wolf-cli verify` PASS 64 / 1 SKIP；
     `bash tools/smoke-godot.sh` exit 0。

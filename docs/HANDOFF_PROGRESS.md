@@ -1408,3 +1408,39 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   `bash tools/smoke-godot.sh` exit 0（P0 基线 `pictures=4 sprites=4` 不动）。
   * **空间**：删 `target/debug/incremental` 与 `work/out` 下 43 个探针产物，
     `target` 10.9 GB → **9.1 GB**，仓库合计 **11 GB**。
+
+### 2026-11-16 实机复审：弹窗悬停/取消穿透、指针覆盖与行动力条边框
+
+* **触发**：继续收口 `review_46de4eb_and_ux_bugs_report.md` 的 Bug 9/10，并按用户新截图
+  复核顶栏行动力条。用户实机存档已经覆盖 `work/Data/Save/SaveData01.sav`（第 2 天 19:00），
+  本轮**没有回滚或删除玩家存档**。
+* **侧拉栏文字同步**：`CE238/CE239` 对 `321..325 / 2301..2319` 的 `150 Move` 没有动画尾参。
+  宿主仅在 `owner_event == 238/239` 时用该指令 `args[0]`（20 帧）作为滑动时长，文字与底板
+  同帧滑出。新增 `m17_ui_regressions::side_panel_text_labels_slide_in_lockstep_with_the_drawer`。
+* **Bug 9 弹窗悬停**：`GameView._handle_modal_event` 新增 `InputEventMouseMotion`，按模态层
+  `button_rects()` 命中更新 `focus_index`；模态分支统一 `get_viewport().set_input_as_handled()`，
+  键盘与鼠标共用同一套高亮。
+* **Bug 10 取消穿透**：`_close_modal()` 置 `_modal_release_guard`。物理左/右/中键未全部松开时，
+  `_physics_process` 强制 `buttons=0` 并清 `mouse_latch`；guard 解除后才补发“保存”的
+  `_pending_click`。失焦立即清 guard；焦点恢复首帧不查询系统电平，避免陈旧按键延长吞点击。
+  新增 `runtime_left_clicks` 观测计数，`save_slot_modal.gd` 用“取消按钮坐标 + 仍按住”的合成
+  状态断言没有左键沿到达运行时，并校验全程 `SaveData01` 字节不变。
+* **指针覆盖**：`sync_pointer` 不再跟随 Sys74 隐藏；白天、选项、气泡、存单格、相册/数据/设置
+  都显示 `hand3`。标题菜单保持 OS 箭头，标题读档格显示手；2998/2999 的 `sprite_z = UI_Z+100`。
+  `m25_cursor_follow` 扩到 **10/10**（含标题菜单隐藏/读档格显示、选项/存单格状态断言）。
+* **存单界面**：键盘确认已占用槽也走同一确认框；`SaveSlotHit` 增加行中心坐标，保存按钮重放
+  游戏自己的点击。CE131 的槽位摘要缓存读取天数/星期/时间/称号/游玩时长，槽 1 标“自动存档”，
+  右侧注意事项框置顶；读档成功清 `pending_mouse/reserved_events` 和旧鼠标边沿。Bug 1 的
+  “读档即相册”未能复现（CE35 需鼠标/图标触发），已加读档不得启动 CE303 的回归。
+* **行动力条定稿**：框体 `165×14`、`[531,15,165,14]`，标签 `x=482`，数值右对齐 `x=750`。
+  1 px 纯白外框；内部当前值纯白，已消耗部分 `#646464`；比例只作用在内框 163 px 上。
+  实测文字墨迹与条均 `y=15..28`，中轴 `y=21.5`；65/75 时白条 `x=531..672`、灰槽
+  `x=673..694`、右框 `x=695`，不碰 `65/75` 的 `x=710..749`。
+* **验证**：`cargo fmt --all --check` 干净；`m14_visual_regression` **5/5**；
+  `m25_cursor_follow` **10/10**；HUD 三位数约束单测通过；`save_slot_modal.gd` 通过；
+  `bash tools/smoke-godot.sh` exit 0（P0 `pictures=4 sprites=4`）。
+  `m25_save_slot` **12/13**、`m17_ui_regressions` **21/22**，唯一失败分别来自用户已覆盖的
+  `SaveData03` / `SaveData01` 夹具漂移，不是本轮新增回归；不得按这些失败改代码或回滚存档。
+* **空间**：删 3 个 `zz_probe_*.rs`、3 张中间对照图、`target/debug/incremental`；
+  `target` 8.4 GB、`work/Data` 177 MB、`work/out` 1.5 GB，仓库合计 **11 GB**。
+  保留 `work/out/bug9_10_hud_bordered.png` 与 `work/out/action_bar_final_crop.png` 作本轮视觉证据。

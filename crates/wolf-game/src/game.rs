@@ -18,6 +18,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use std::sync::{Arc, OnceLock};
 
@@ -231,13 +232,15 @@ const HUD_ACTION_PICTURE: i32 = 230;
 /// The retail top bar paints slot 230 as one text picture. The gauge is a
 /// project-specific addition, so the host splits that picture into a label and
 /// a value and leaves a hollow gap for the bar between them. The coordinates
-/// are logical pixels on the 1024x576 canvas. The bar is 100x12, matching the
-/// wider, thin-bordered bar in `参照图仅参考行动力条.png`; the value run is
-/// right-anchored at 750 so `8/40`, `70/75` and a three-digit `100/120` all
-/// end at the same edge and still clear slot 240 (`精力`) at x = 760.
-const HUD_ACTION_LABEL_X: f32 = 545.0;
+/// are logical pixels on the 1024x576 canvas. The 165x14 gauge matches the
+/// thickness and visual length of the white bar in the sibling-game reference
+/// (`姊妹作顶部状态栏特写.png`). Its right edge stays just before the widest
+/// possible value, while the value run remains right-anchored at 750. Thus
+/// `8/40`, `70/75` and a three-digit `100/120` all end at the same edge and
+/// still clear slot 240 (`精力`) at x = 760.
+const HUD_ACTION_LABEL_X: f32 = 482.0;
 const HUD_ACTION_VALUE_X: f32 = 750.0;
-const HUD_ACTION_BAR: [f32; 4] = [593.0, 18.0, 100.0, 12.0];
+const HUD_ACTION_BAR: [f32; 4] = [531.0, 15.0, 165.0, 14.0];
 
 /// Height of the retail top bar band, in logical pixels.
 ///
@@ -773,6 +776,12 @@ pub struct SaveSlotHit {
     pub slot: i32,
     /// The file the slot maps to.
     pub path: PathBuf,
+    /// Centre of the visible slot row, in the runtime's logical pixels.
+    ///
+    /// A keyboard confirm opens the same front-end modal as a mouse click; the
+    /// modal replays a click on the game's own grid when "save" is chosen, so it
+    /// needs the row's coordinates rather than the pointer's old position.
+    pub center: [i32; 2],
     /// True when the slot already holds a save.
     pub occupied: bool,
     /// True when the grid reads saves (the title screen's load path) instead of
@@ -798,6 +807,44 @@ impl SaveGridState {
     fn slot_of_row(&self, row: i32) -> i32 {
         self.page * self.per_page + row + 1
     }
+}
+
+/// The fields the save grid prints for one occupied slot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SaveSummary {
+    day: i32,
+    weekday: i32,
+    hour: i32,
+    minute: i32,
+    title: String,
+    playtime_frames: u32,
+}
+
+impl SaveSummary {
+    fn detail(&self) -> String {
+        const WEEKDAYS: [&str; 7] = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+        let weekday = WEEKDAYS
+            .get(self.weekday.rem_euclid(7) as usize)
+            .copied()
+            .unwrap_or("周一");
+        let total_minutes = self.playtime_frames / 3600;
+        format!(
+            "{}:{:02}  {}天 {} {:02}:{:02}",
+            total_minutes / 60,
+            total_minutes % 60,
+            self.day,
+            weekday,
+            self.hour,
+            self.minute
+        )
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CachedSaveSummary {
+    len: u64,
+    modified: Option<SystemTime>,
+    summary: Option<SaveSummary>,
 }
 
 /// The running game.
@@ -835,6 +882,12 @@ pub struct Game {
     /// Per-picture text layout cache for [`Self::text_quads`]. Interior mutability keeps
     /// that method `&self`, which every caller and test already relies on.
     text_cache: RefCell<TextQuadCache>,
+    /// Parsed summaries of the save files the grid is showing, keyed by slot.
+    ///
+    /// `text_quads` is called every frame, and rebuilding four `.sav` files at
+    /// 60 Hz would be wasteful. A size + modification time stamp keeps the cache
+    /// correct when the player overwrites a slot while the grid is open.
+    save_summary_cache: RefCell<HashMap<i32, CachedSaveSummary>>,
     /// Optional M5-D content catalog: exact runtime strings to replacement text. Empty by
     /// default, which leaves the shipped script untouched.
     translator: Translator,
@@ -1128,6 +1181,7 @@ impl Game {
                 }
             }),
             text_cache: RefCell::new(TextQuadCache::default()),
+            save_summary_cache: RefCell::new(HashMap::new()),
             translator,
             tilemap: None,
             current_map: None,
@@ -1724,12 +1778,7 @@ impl Game {
     pub fn save_slot_at(&mut self, x: i32, y: i32) -> Option<SaveSlotHit> {
         let grid = self.save_grid_state()?;
         for row in 0..grid.per_page {
-            let rect = {
-                let screen = &self.screen;
-                let assets = &mut self.assets;
-                screen.picture_rect(12050 + 20 * row, |file| assets.texture_size(file))
-            };
-            let Some(rect) = rect else {
+            let Some(rect) = self.save_grid_row_rect(row) else {
                 continue;
             };
             if (x as f32) >= rect[0]
@@ -1738,7 +1787,11 @@ impl Game {
                 && (y as f32) < rect[1] + rect[3]
             {
                 let slot = grid.slot_of_row(row);
-                return Some(self.save_slot(grid, slot));
+                let center = [
+                    (rect[0] + rect[2] * 0.5) as i32,
+                    (rect[1] + rect[3] * 0.5) as i32,
+                ];
+                return Some(self.save_slot(grid, slot, center));
             }
         }
         None
@@ -1753,11 +1806,16 @@ impl Game {
     pub fn selected_save_slot(&self) -> Option<SaveSlotHit> {
         let grid = self.save_grid_state()?;
         let slot = grid.slot_of_row(grid.row);
-        Some(self.save_slot(grid, slot))
+        let rect = self.save_grid_row_rect(grid.row)?;
+        let center = [
+            (rect[0] + rect[2] * 0.5) as i32,
+            (rect[1] + rect[3] * 0.5) as i32,
+        ];
+        Some(self.save_slot(grid, slot, center))
     }
 
     /// Fills in the file and the occupancy of one slot.
-    fn save_slot(&self, grid: SaveGridState, slot: i32) -> SaveSlotHit {
+    fn save_slot(&self, grid: SaveGridState, slot: i32, center: [i32; 2]) -> SaveSlotHit {
         let path = self
             .root
             .join("Save")
@@ -1766,8 +1824,60 @@ impl Game {
             slot,
             occupied: path.is_file(),
             path,
+            center,
             loading: grid.loading,
         }
+    }
+
+    /// The visible rectangle of one slot row in CE131's grid.
+    ///
+    /// `Screen::picture_rect` is the same geometry the renderer uses. The texture
+    /// is usually already cached while the grid is up; the window box is still
+    /// available for the first frame before the atlas decode.
+    fn save_grid_row_rect(&self, row: i32) -> Option<[f32; 4]> {
+        let assets = &self.assets;
+        self.screen.picture_rect(12050 + 20 * row, |file| {
+            assets.cached(file).map(|image| (image.width, image.height))
+        })
+    }
+
+    /// True while the save/load grid (CE131) owns the screen.
+    #[must_use]
+    pub fn save_grid_open(&self) -> bool {
+        self.save_grid_active()
+    }
+
+    /// True while a dialog, menu or other secondary screen owns the input.
+    ///
+    /// The front-end uses this to route Escape to WOLF's cancel key instead of
+    /// opening the "return to title" confirmation over a save/album/settings
+    /// screen. Free exploration has no choice, message or active action-key page.
+    #[must_use]
+    pub fn in_submenu(&self) -> bool {
+        if self.choices.is_some() || !self.messages.is_empty() || self.save_grid_active() {
+            return true;
+        }
+        if self
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| matches!(instance.event, 14 | 95 | 132 | 301 | 303))
+        {
+            return true;
+        }
+        self.runtime
+            .slots()
+            .iter()
+            .any(|slot| slot.trigger == crate::map_runtime::Trigger::ActionKey)
+    }
+
+    /// True while the game is on the title screen rather than in a playable map.
+    ///
+    /// The original title map is the boot surface; a direct CE42 start has no map
+    /// at all. Both are title, and neither should paint the in-game hand pointer.
+    #[must_use]
+    pub fn on_title_screen(&self) -> bool {
+        self.boot_map_active || self.current_map.is_none()
     }
 
     /// CE131's own grid state, or `None` when the grid is not up.
@@ -1783,6 +1893,96 @@ impl Game {
             per_page: instance.self_vars.get(627).clamp(1, 10),
             row: instance.self_vars.get(610).max(0),
         })
+    }
+
+    /// Reads and caches the display fields of one save slot.
+    fn save_summary(&self, slot: i32) -> Option<SaveSummary> {
+        let path = self
+            .root
+            .join("Save")
+            .join(format!("SaveData{slot:02}.sav"));
+        let metadata = match std::fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(_) => {
+                self.save_summary_cache.borrow_mut().remove(&slot);
+                return None;
+            }
+        };
+        let len = metadata.len();
+        let modified = metadata.modified().ok();
+        if let Some(entry) = self.save_summary_cache.borrow().get(&slot) {
+            if entry.len == len && entry.modified == modified {
+                return entry.summary.clone();
+            }
+        }
+
+        let summary = std::fs::read(&path)
+            .ok()
+            .and_then(|bytes| wolf_save::SaveFile::parse(&bytes).ok())
+            .map(|save| {
+                let mut title = String::new();
+                for field in [0usize, 1] {
+                    let Some(bytes) = save.vardb.string(0, 12, field) else {
+                        continue;
+                    };
+                    let text =
+                        wolf_format::bytes::decode_wolf_str(crate::savegame::strip_nul(bytes));
+                    title.push_str(text.trim());
+                }
+                SaveSummary {
+                    day: save.normal_var(99).unwrap_or(0),
+                    weekday: save.normal_var(6).unwrap_or(0),
+                    hour: save.normal_var(4).unwrap_or(0),
+                    minute: save.normal_var(5).unwrap_or(0),
+                    title,
+                    playtime_frames: save.playtime_frames().unwrap_or(0),
+                }
+            });
+        self.save_summary_cache.borrow_mut().insert(
+            slot,
+            CachedSaveSummary {
+                len,
+                modified,
+                summary: summary.clone(),
+            },
+        );
+        summary
+    }
+
+    /// Replaces one script-drawn save-grid string with the project's added detail.
+    ///
+    /// The grid's original labels remain the source of truth for placement. This
+    /// only changes the two text pictures that carry the slot title and metadata:
+    ///
+    /// * slot 1 is labelled `数据 1 自动存档`;
+    /// * the playtime row also carries day, weekday, game time and (on the existing
+    ///   right-hand block) the brother's title.
+    fn save_slot_text_override(&self, number: i32) -> Option<String> {
+        let grid = self.save_grid_state()?;
+        for row in 0..grid.per_page {
+            let label = 12052 + 20 * row;
+            let detail = 12053 + 20 * row;
+            let slot = grid.slot_of_row(row);
+            if number == label && slot == 1 {
+                return Some("\\f[19]数据 1 自动存档".to_owned());
+            }
+            if number == detail {
+                if let Some(summary) = self.save_summary(slot) {
+                    return Some(format!("\\f[19] {}", summary.detail()));
+                }
+            }
+            if number == 12055 + 20 * row {
+                if let Some(summary) = self.save_summary(slot) {
+                    if !summary.title.is_empty() {
+                        return Some(format!(
+                            "<R>\\space[0]\\f[14]\\-[1]\\E\\A- 1\n{}",
+                            summary.title
+                        ));
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// Writes the daily auto-save when the evening meal ends.
@@ -2905,6 +3105,8 @@ impl Game {
             {
                 continue;
             }
+            let override_text = self.save_slot_text_override(picture.number);
+            let text = override_text.as_deref().unwrap_or(&picture.text);
             let owner_event = self.screen.get(picture.number).and_then(|p| p.owner_event);
             let vars = PictureVars {
                 vars: &self.vm.vars,
@@ -2956,7 +3158,7 @@ impl Game {
             // shape of the quad list comes from the base position, anchor, alpha and the
             // font generation.
             let key = TextQuadKey {
-                fingerprint: crate::textpic::fingerprint(&picture.text, &ctx),
+                fingerprint: crate::textpic::fingerprint(text, &ctx),
                 x_bits: x.to_bits(),
                 y_bits: y.to_bits(),
                 anchor: picture.anchor,
@@ -2977,6 +3179,7 @@ impl Game {
             } else {
                 let built = self.build_text_picture(
                     picture,
+                    text,
                     x,
                     y,
                     layout_anchor,
@@ -3013,6 +3216,7 @@ impl Game {
     fn build_text_picture(
         &self,
         picture: &crate::picture::Picture,
+        text: &str,
         x: f32,
         y: f32,
         anchor: u8,
@@ -3051,13 +3255,10 @@ impl Game {
         } else {
             0.0
         };
-        let runs = if picture.number == HUD_ACTION_PICTURE
-            && split_action_readout(&picture.text).is_some()
-        {
+        let runs = if picture.number == HUD_ACTION_PICTURE && split_action_readout(text).is_some() {
             // Keep the retail "行动力 current/max" text but reserve the middle
             // for the host-drawn gauge: 行动力 [bar] 60/65.
-            let (label, value) =
-                split_action_readout(&picture.text).expect("checked action readout");
+            let (label, value) = split_action_readout(text).expect("checked action readout");
             let mut runs =
                 crate::textpic::layout_with(&label, HUD_ACTION_LABEL_X, y, anchor, ctx, &advance);
             // Right-anchor the value at its reserved column. The label/bar stay
@@ -3073,9 +3274,9 @@ impl Game {
             ));
             runs
         } else if balloon {
-            crate::textpic::layout_message_with(&picture.text, x, y, anchor, ctx, &advance)
+            crate::textpic::layout_message_with(text, x, y, anchor, ctx, &advance)
         } else {
-            crate::textpic::layout_with(&picture.text, x, y, anchor, ctx, &advance)
+            crate::textpic::layout_with(text, x, y, anchor, ctx, &advance)
         };
         let mut quads = Vec::new();
         for run in runs {
@@ -4319,6 +4520,15 @@ impl Game {
                             // this the grid stays alive and owns the pointer, so the
                             // loaded bedroom's icon clicks are ignored (BUG-08).
                             self.retire_load_ui_chain();
+                            // A load replaces the whole session. Any click that was
+                            // still travelling through the old grid must not become a
+                            // synthetic edge on the newly installed map (the reported
+                            // "load opens the album" path).
+                            self.pending_mouse = 0;
+                            self.pending_mouse_age = 0;
+                            self.mouse_consumed = true;
+                            self.reserved_events.clear();
+                            self.previous_mouse_buttons = self.mouse_buttons;
                             self.diagnostics.insert(
                                 format!(
                                     "220 SaveLoad: loaded {} picture(s), {} variable(s)",
@@ -7598,6 +7808,13 @@ mod tests {
         assert!(
             right > HUD_ACTION_VALUE_X - 1.0,
             "the value must stay right-anchored at its reserved column: {:?}",
+            value.rect
+        );
+        let bar = Game::hud_action_bar_rect();
+        assert_eq!(bar, [531.0, 15.0, 165.0, 14.0]);
+        assert!(
+            bar[0] + bar[2] <= value.rect[0],
+            "the widened gauge must end before a three-digit value: bar={bar:?} value={:?}",
             value.rect
         );
     }

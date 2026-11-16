@@ -248,7 +248,9 @@ fn save_icon_left_click_routes_to_save_menu_without_writing_a_save() {
         "CE14 must reach CE131 save/load panel"
     );
     assert!(slot_text(&game, 12002).contains("选择要保存的数据。"));
-    assert_eq!(slot_text(&game, 12052), "数据 1");
+    assert!(
+        slot_text(&game, 12052).contains("数据 1") && slot_text(&game, 12052).contains("自动存档")
+    );
     assert_eq!(game.stats.warnings, 0);
     assert_eq!(
         before,

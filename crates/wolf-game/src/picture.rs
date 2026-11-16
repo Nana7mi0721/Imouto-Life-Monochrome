@@ -728,9 +728,21 @@ impl Transition {
     /// `animate` is the instruction tail the interpreter copies out of `args[11..]`, so slot 0
     /// is the frame count. A missing tail, a literal 0 (168 moves), a self-variable reference
     /// (1,600,0xx, 52 moves) and anything past [`MAX_TRANSITION_FRAMES`] all mean "no
-    /// duration": the move teleports, which is what the 2,817 duration-less moves already do.
+    /// duration": the move teleports, which is what most duration-less moves already do.
+    ///
+    /// CE238/CE239 are the measured exception. Their side-panel labels are `150 Move`
+    /// commands with no tail; the frame count is the instruction's wait/fade word
+    /// (`args[0]`), the same 20 frames the panel's own relative `Draw` uses. Without
+    /// this fallback the panel slides while every number/text label jumps to its final
+    /// x immediately.
     fn from_command(cmd: &PictureCmd, from: Pose, to: Pose) -> Option<Self> {
-        let frames = u32::try_from(*cmd.animate.first()?).ok()?;
+        let raw_frames = cmd.animate.first().copied().or_else(|| {
+            (matches!(cmd.owner_event, Some(238 | 239))
+                && matches!(cmd.number, 321..=325 | 2301..=2319))
+            .then(|| cmd.args.first().copied())
+            .flatten()
+        })?;
+        let frames = u32::try_from(raw_frames).ok()?;
         if frames == 0 || frames > MAX_TRANSITION_FRAMES {
             return None;
         }

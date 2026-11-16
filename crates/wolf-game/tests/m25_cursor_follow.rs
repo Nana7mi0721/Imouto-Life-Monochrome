@@ -32,6 +32,7 @@ use std::path::PathBuf;
 
 use wolf_format::mps::Map;
 use wolf_game::atlas::Atlas;
+use wolf_game::game::Choices;
 use wolf_game::key;
 use wolf_game::pointer::{GAME_POINTER_SLOT, POINTER_HOTSPOT, POINTER_SLOT};
 use wolf_game::Game;
@@ -69,6 +70,32 @@ fn open_bedroom() -> Option<Game> {
     };
     game.start_pages(&map, None);
     Some(game)
+}
+
+/// Boots the title screen and runs to its three-option prompt.
+fn open_title() -> Option<Game> {
+    let root = data_root()?;
+    let Ok(mut game) = Game::new(&root) else {
+        eprintln!("skipping: cannot open the game");
+        return None;
+    };
+    game.auto_advance = true;
+    game.auto_choice = false;
+    if let Err(err) = game.boot() {
+        eprintln!("skipping: title boot failed: {err}");
+        return None;
+    }
+    for _ in 0..240 {
+        game.frame();
+        if game.choices.is_some() {
+            for _ in 0..3 {
+                game.frame();
+            }
+            return Some(game);
+        }
+    }
+    eprintln!("skipping: the title prompt never opened");
+    None
 }
 
 /// The rendered rectangle of one picture slot, in logical pixels.
@@ -241,20 +268,88 @@ fn the_engine_paints_the_hand_pointer_while_the_game_asks_for_it() {
 }
 
 #[test]
-fn the_pointer_is_gone_while_the_game_hides_it() {
+fn the_pointer_stays_visible_when_retail_hides_it() {
     let Some(mut game) = open_bedroom() else {
         return;
     };
-    // CE 224 clears system variable 74 while a field action runs: the retail
-    // shows no pointer there either (ptr_sc/洗澡_一个人洗_去偷窥_浴室.png).
+    // CE 224 clears Sys74 while a field action runs. The project deliberately
+    // overrides that hide rule: any playable mouse surface keeps the hand.
     game.vm.vars.set_sys(74, 0);
     game.mouse = POINTER;
     for _ in 0..5 {
         game.frame();
     }
     assert!(
+        game.pointer.get(POINTER_SLOT).is_some(),
+        "Sys74 must not hide the engine pointer in gameplay"
+    );
+}
+
+#[test]
+fn the_pointer_is_visible_on_choices_and_the_save_grid() {
+    let Some(mut game) = open_bedroom() else {
+        return;
+    };
+    game.mouse = POINTER;
+    game.vm.vars.set_sys(74, 0);
+    game.choices = Some(Choices {
+        options: vec!["继续".to_owned(), "取消".to_owned()],
+        sources: vec![0, 1],
+        frames: 0,
+    });
+    assert!(game.choices.is_some(), "the test choice prompt is active");
+    game.frame();
+    assert!(
+        game.pointer.get(POINTER_SLOT).is_some(),
+        "a choice prompt is a mouse-driven page"
+    );
+
+    game.choices = None;
+    assert!(game.start_event(131), "save grid starts");
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert!(game.save_grid_open(), "the save grid is really up");
+    assert!(
+        game.pointer.get(POINTER_SLOT).is_some(),
+        "the save grid is a mouse-driven page"
+    );
+}
+
+#[test]
+fn the_pointer_appears_on_the_title_load_grid_but_not_the_title_menu() {
+    let Some(mut game) = open_title() else {
+        return;
+    };
+    game.mouse = POINTER;
+    game.frame();
+    assert!(
+        game.on_title_screen(),
+        "the title prompt is still the boot surface"
+    );
+    assert!(
         game.pointer.get(POINTER_SLOT).is_none(),
-        "system variable 74 hides the pointer"
+        "the title menu keeps the OS cursor"
+    );
+
+    game.set_choice_cursor(1);
+    game.auto_choice = true;
+    game.auto_choice_delay = 2;
+    let mut opened = false;
+    for _ in 0..600 {
+        game.frame();
+        if game.save_grid_open() {
+            opened = true;
+            break;
+        }
+    }
+    assert!(opened, "the title load grid opens");
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert!(
+        game.pointer.get(POINTER_SLOT).is_some(),
+        "the title load grid is mouse-driven and must show the hand"
     );
 }
 
