@@ -1,18 +1,16 @@
 //! The bedroom sister's click target in the sleeping pose (`v14 == 5`).
 //!
 //! `Game::sister_body_action_event_at` resolves the pose through `v14` to the
-//! map event the player is clicking, and it has two rules:
+//! map event the player is clicking:
 //!
-//! * the visible silhouette wins - CE 240 draws the body, eyes, mouth and
-//!   eyebrows as slots 900..903, and a click on their ink is a click on the
-//!   sister. CE 240 runs on the day-time parallel page regardless of the
-//!   pose, so those slots can be on screen while `v14` is 5.
-//! * the map event rectangle is the fallback - the sleeping pose has no
-//!   standing art of its own, so the 就寝妹 event rectangle is all the game
-//!   data offers there.
+//! * CE 240's slots 900..903 are presentation only. The retail game uses them
+//!   for dialogue portraits and the stats screen, never as a second sister
+//!   hotspot; messages/menus or the `v176` gate own those scenes.
+//! * In the normal room, the sleeping pose uses its full-body CG rectangle.
+//!   The map's own 就寝妹 rectangle only covers the lower-right corner.
 //!
 //! The sleeping pose used to return the map rectangle and nothing else, which
-//! threw the silhouette away on the day-time parallel page.
+//! made clicks on most of the body miss.
 
 use std::path::PathBuf;
 
@@ -111,64 +109,52 @@ fn art_rect(game: &mut Game) -> [i32; 4] {
 }
 
 #[test]
-fn the_sleeping_pose_answers_on_the_visible_silhouette() {
+fn standing_art_is_presentation_only() {
+    for pose in [0, 5] {
+        let Some(mut game) = bedroom_with_standing_art() else {
+            return;
+        };
+        set_daytime_pose(&mut game, pose);
+        let rect = art_rect(&mut game);
+        let points = [
+            (rect[0] + rect[2] / 2, rect[1] + rect[3] / 2),
+            (rect[0] - 1, 300),
+        ];
+        for (x, y) in points {
+            click_at(&mut game, x, y);
+            assert_eq!(
+                game.last_action_event, None,
+                "v14={pose}: the standing art at ({x},{y}) must not start a sister event"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_stats_screen_blocks_sister_clicks_over_both_layers() {
     let Some(mut game) = bedroom_with_standing_art() else {
         return;
     };
     set_daytime_pose(&mut game, 5);
-    let rect = art_rect(&mut game);
-    let (left, top, width, height) = game
-        .runtime
-        .action_key_rect(&game.vm, 12)
-        .expect("就寝妹 action rectangle");
-    assert_eq!(
-        (left, top, width, height),
-        (144, 320, 144, 64),
-        "SampleMapA event 12 must stay at tile (9,20) with a 9x4 hit rectangle"
-    );
+    game.vm.vars.set(176, 1);
+    for _ in 0..2 {
+        game.frame();
+    }
 
-    let x = rect[0] + rect[2] / 2;
-    let y = rect[1] + rect[3] / 2;
-    // 就寝妹 is the only map rectangle this room has, so a click that misses it
-    // can only be answered by the silhouette rule.
-    for event in [1u32, 2, 3, 4, 25] {
-        assert!(
-            game.runtime.action_key_rect(&game.vm, event).is_none(),
-            "event {event} must not own a map rectangle that could answer this click"
+    let rect = art_rect(&mut game);
+    let art_x = rect[0] + rect[2] / 2;
+    let art_y = rect[1] + rect[3] / 2;
+    for (x, y) in [(art_x, art_y), (253, 344)] {
+        click_at(&mut game, x, y);
+        assert_eq!(
+            game.last_action_event, None,
+            "the stats screen must keep both the standing art and the room behind it inert ({x},{y})"
         );
     }
-    assert!(
-        x < left - 16 || x >= left + width + 16 || y < top - 16 || y >= top + height + 16,
-        "the standing art must sit outside the 就寝妹 map rectangle for this test"
-    );
-
-    click_at(&mut game, x, y);
-    assert_eq!(
-        game.last_action_event,
-        Some(12),
-        "the sleeping pose must answer a click on the visible silhouette with 就寝妹"
-    );
 }
 
 #[test]
-fn the_sleeping_pose_ignores_pixels_outside_both_targets() {
-    let Some(mut game) = bedroom_with_standing_art() else {
-        return;
-    };
-    set_daytime_pose(&mut game, 5);
-    let rect = art_rect(&mut game);
-
-    // One pixel left of the standing art: no ink within the forgiveness radius,
-    // and far away from the 就寝妹 map rectangle.
-    click_at(&mut game, rect[0] - 1, 300);
-    assert_eq!(
-        game.last_action_event, None,
-        "the sleeping pose must not answer pixels that are neither ink nor map"
-    );
-}
-
-#[test]
-fn the_sleeping_pose_keeps_the_map_rectangle_fallback() {
+fn the_sleeping_pose_uses_its_full_body_rect_without_standing_art() {
     let Some(mut game) = loaded_with(&[12, 13]) else {
         return;
     };
@@ -183,45 +169,16 @@ fn the_sleeping_pose_keeps_the_map_rectangle_fallback() {
         "SampleMapA event 12 must stay at tile (9,20) with a 9x4 hit rectangle"
     );
 
-    click_at(&mut game, left - 17, top + height / 2);
+    click_at(&mut game, 71, top + height / 2);
     assert_eq!(
         game.last_action_event, None,
-        "the sleeping-sister target must not grow without bound"
+        "one pixel left of the sleeping body must not trigger the sister"
     );
 
-    click_at(&mut game, left - 14, top + height / 2);
+    click_at(&mut game, 72, top + height / 2);
     assert_eq!(
         game.last_action_event,
         Some(12),
-        "the sleeping pose must route a near-edge click to 就寝妹"
-    );
-}
-
-#[test]
-fn the_awake_poses_keep_answering_on_the_art_only() {
-    let Some(mut game) = bedroom_with_standing_art() else {
-        return;
-    };
-    set_daytime_pose(&mut game, 0);
-    let rect = art_rect(&mut game);
-    let x = rect[0] + rect[2] / 2;
-    let y = rect[1] + rect[3] / 2;
-    click_at(&mut game, x, y);
-    assert_eq!(
-        game.last_action_event,
-        Some(1),
-        "v14=0 must route the standing-art click to ev1"
-    );
-
-    // A fresh room: the click above already started event 1 and changed the
-    // screen, so the negative case needs its own state.
-    let Some(mut outside) = bedroom_with_standing_art() else {
-        return;
-    };
-    set_daytime_pose(&mut outside, 0);
-    click_at(&mut outside, rect[0] - 1, 300);
-    assert_eq!(
-        outside.last_action_event, None,
-        "one pixel left of the standing art must not trigger the sister"
+        "the sleeping pose must answer from the left edge of its visible body"
     );
 }

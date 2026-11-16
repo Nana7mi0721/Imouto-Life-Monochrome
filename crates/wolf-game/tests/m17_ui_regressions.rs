@@ -1082,7 +1082,7 @@ fn every_visible_part_of_the_side_handle_is_clickable() {
 }
 
 fn bedroom_with_standing_art() -> Option<Game> {
-    let mut game = loaded_with(&[1, 2, 3, 4, 25])?;
+    let mut game = loaded_with(&[1, 2, 3, 4, 12, 25])?;
     game.vm.vars.common_self.remove(&240);
     assert!(game.start_event(240), "CE240 must start");
     for _ in 0..30 {
@@ -1093,8 +1093,8 @@ fn bedroom_with_standing_art() -> Option<Game> {
 }
 
 #[test]
-fn bedroom_standing_art_maps_v14_to_the_action_events() {
-    for (pose, event) in [(0, 1), (1, 2), (2, 3), (3, 4), (6, 25)] {
+fn bedroom_standing_art_is_presentation_only() {
+    for pose in [0, 1, 2, 3, 5, 6] {
         let Some(mut game) = bedroom_with_standing_art() else {
             return;
         };
@@ -1116,15 +1116,14 @@ fn bedroom_standing_art_maps_v14_to_the_action_events() {
         let y = (rect[1] + rect[3] / 2.0) as i32;
         click_at(&mut game, x, y);
         assert_eq!(
-            game.last_action_event,
-            Some(event),
-            "v14={pose} must route the standing-art click to ev{event}"
+            game.last_action_event, None,
+            "v14={pose}: the standing art must not start a map sister event"
         );
     }
 }
 
 #[test]
-fn sleeping_sister_uses_the_night_pose_rectangle_and_forgiveness() {
+fn sleeping_sister_uses_her_full_body_rect_without_standing_art() {
     let Some(mut game) = loaded_with(&[12, 13]) else {
         return;
     };
@@ -1141,18 +1140,18 @@ fn sleeping_sister_uses_the_night_pose_rectangle_and_forgiveness() {
         "SampleMapA event 12 must stay at tile (9,20) with a 9x4 hit rectangle"
     );
 
-    let (left, top, _, height) = rect;
-    click_at(&mut game, left - 17, top + height / 2);
+    let (_, top, _, height) = rect;
+    click_at(&mut game, 71, top + height / 2);
     assert_eq!(
         game.last_action_event, None,
-        "the sleeping-sister target must not grow without bound"
+        "one pixel left of the sleeping body must not trigger the sister"
     );
 
-    click_at(&mut game, left - 14, top + height / 2);
+    click_at(&mut game, 72, top + height / 2);
     assert_eq!(
         game.last_action_event,
         Some(12),
-        "the sleeping pose must route a near-edge click to 就寝妹"
+        "the sleeping pose must answer from the left edge of its visible body"
     );
 }
 

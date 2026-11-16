@@ -550,13 +550,28 @@ const SIDE_PANEL_PARKED_ALPHA: f32 = 0.2;
 /// Left edge of the parked position: a drawer at or past this x is off screen.
 const SIDE_PANEL_PARKED_X: i32 = -300;
 
-/// Screen-space forgiveness around the sister's alpha silhouette.
+/// Full-body click surfaces for the bedroom sister when she is drawn as part of
+/// the room CG rather than through CE 240's standing-art slots.
 ///
-/// The shipped map's own action rectangle is only 16x16 tiles around the pose,
-/// which makes a click on the visible shoulders or hair miss. The alpha test
-/// already follows the character outline; this radius gives the outline a small
-/// mouse-friendly margin without turning the transparent room into a hotspot.
-const SISTER_HIT_RADIUS: i32 = 16;
+/// The shipped map only stores a 16x16-tile action box for each pose, which sits
+/// on the lower-right part of the body and makes clicks on the head, hair or
+/// outstretched legs miss. These rectangles were measured from the retail
+/// screenshots on the 1024x576 logical canvas and cover the entire visible pose.
+const SISTER_BODY_RECTS: &[(i32, [i32; 4])] = &[
+    (0, [100, 246, 258, 118]),
+    (1, [68, 238, 116, 200]),
+    (2, [384, 292, 198, 280]),
+    (3, [276, 292, 80, 206]),
+    (5, [72, 284, 363, 121]),
+    (6, [445, 265, 197, 305]),
+];
+
+/// Visible body rectangle for one `v14` bedroom pose.
+fn sister_body_rect(pose: i32) -> Option<[i32; 4]> {
+    SISTER_BODY_RECTS
+        .iter()
+        .find_map(|(known, rect)| (*known == pose).then_some(*rect))
+}
 
 /// A pending choice prompt.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3812,24 +3827,20 @@ impl Game {
         let _ = self.vm.start_event_with_args(event, &[show], &[]);
     }
 
-    /// The bedroom standing-art slot is the sister's click target.
+    /// The bedroom sister's pose CG is her click target.
     ///
     /// The shipped map keeps only a 16x16 tile box per pose, far smaller than
-    /// the visible character. CE240 draws the body and face as slots 900..903
-    /// at the same origin, so their visible rectangles form the natural target.
+    /// the visible character. The retail room draws the sister directly into the
+    /// scenery, so the measured full-body rectangles above are the click surface.
     /// Resolve the pose through v14 to the same action-key event the map data
     /// defines; that event still owns its v23/v176/v238 conditions.
     ///
-    /// Two rules, in this order:
-    ///
-    /// * The visible silhouette wins. Every pose that has standing art on screen
-    ///   is clicked on the art itself, including the sleeping pose: CE240 can
-    ///   draw 900..903 while v14 is 5 (the day-time parallel page ev30 calls it
-    ///   regardless of the pose), so the art is a real target there too.
-    /// * The map event rectangle is the fallback. It is the only target the game
-    ///   data offers for the sleeping pose, whose body lies in a full-screen CG
-    ///   rather than in a standing-art slot. Keeping it means "click the bed"
-    ///   still works wherever the silhouette does not reach.
+    /// CE240's slots 900..903 are presentation only. The original engine uses
+    /// them for dialogue portraits and the stats screen, and never treats them as
+    /// a second sister hotspot: dialogue/menu input owns those scenes, while the
+    /// stats screen sets `v176` and the sister map events require `v176 == 0`.
+    /// Returning early while any standing layer is visible keeps the port from
+    /// inventing an interaction the retail game does not have.
     fn sister_body_action_event_at(&mut self, x: i32, y: i32) -> Option<u32> {
         if self.vm.vars.get(100) != 0 {
             return None;
@@ -3845,45 +3856,18 @@ impl Game {
             _ => return None,
         };
 
-        // Slot 900 is the guard: without the standing art there is no silhouette
-        // to hit, and the awake poses have no other target at all.
-        let has_standing_art = match self.screen.get(900) {
-            Some(body) => {
-                !body.hidden && body.opacity > 0 && body.file.starts_with("Picture/stand_")
-            }
-            None => false,
-        };
-        let mut silhouette_hit = false;
+        let has_standing_art = (900..=903).any(|slot| {
+            self.screen.get(slot).is_some_and(|picture| {
+                !picture.hidden && picture.opacity > 0 && picture.file.starts_with("Picture/stand_")
+            })
+        });
         if has_standing_art {
-            for slot in 900..=903 {
-                let Some(picture) = self.screen.get(slot) else {
-                    continue;
-                };
-                if picture.hidden || picture.opacity <= 0 || picture.file.is_empty() {
-                    continue;
-                }
-                if self.picture_alpha_hit(slot, x, y, SISTER_HIT_RADIUS) {
-                    silhouette_hit = true;
-                    break;
-                }
-            }
+            return None;
         }
 
-        // The visible silhouette wins for every pose, the sleeping one included.
-        if silhouette_hit {
-            return Some(event);
-        }
-        if pose == 5 {
-            // The sleeping pose keeps the 就寝妹 action rectangle as its
-            // fallback; expand that rectangle by the same forgiveness used
-            // around the alpha silhouette.
-            let (left, top, width, height) = self.runtime.action_key_rect(&self.vm, event)?;
-            let radius = SISTER_HIT_RADIUS;
-            let inside = (left - radius..left + width + radius).contains(&x)
-                && (top - radius..top + height + radius).contains(&y);
-            return inside.then_some(event);
-        }
-        None
+        let [left, top, width, height] = sister_body_rect(pose)?;
+        let inside = (left..left + width).contains(&x) && (top..top + height).contains(&y);
+        inside.then_some(event)
     }
 
     /// Action-key events whose only valid click target is their picture control.
@@ -3945,80 +3929,6 @@ impl Game {
     /// with what the script sees.
     pub(crate) fn hover_picture(&mut self, number: i32) -> i32 {
         hover_picture(&mut self.screen, &mut self.assets, self.mouse, number)
-    }
-
-    /// Exact alpha hit test for one picture layer.
-    ///
-    /// The standing character is assembled from body, face, eye and eyebrow slots;
-    /// their canvases are much wider than the visible pose. Sampling the decoded cell
-    /// at the clicked source pixel makes the clickable area follow the actual
-    /// silhouette, including transparent shoulders and gaps between layers.
-    fn picture_alpha_hit(&mut self, number: i32, x: i32, y: i32, radius: i32) -> bool {
-        let picture = match self.screen.get(number) {
-            Some(picture) => picture.clone(),
-            None => return false,
-        };
-        if picture.file.is_empty() {
-            return false;
-        }
-        let screen = &self.screen;
-        let assets = &mut self.assets;
-        let Some(destination) = screen.picture_rect(number, |name| assets.texture_size(name))
-        else {
-            return false;
-        };
-        let Some((source, _)) =
-            crate::picture::picture_frame(&picture, &mut |name| assets.texture_size(name))
-        else {
-            return false;
-        };
-        let px = x as f32;
-        let py = y as f32;
-        let radius = radius.max(0) as f32;
-        if px < destination[0] - radius
-            || px >= destination[0] + destination[2] + radius
-            || py < destination[1] - radius
-            || py >= destination[1] + destination[3] + radius
-            || destination[2] <= 0.0
-            || destination[3] <= 0.0
-        {
-            return false;
-        }
-        let Ok(image) = assets.load(&picture.file) else {
-            return false;
-        };
-        // A pure per-pixel test made the sister's already narrow standing pose
-        // feel like a pixel hunt. Expand the silhouette by a small screen-space
-        // radius (10 px by default), mapping each sample through the same
-        // destination rectangle. This keeps transparent shoulders/background
-        // dead while giving the visible outline a forgiving edge.
-        let sx_radius = (radius / destination[2] * source[2] as f32).ceil() as i32;
-        let sy_radius = (radius / destination[3] * source[3] as f32).ceil() as i32;
-        for dy in -sy_radius..=sy_radius {
-            for dx in -sx_radius..=sx_radius {
-                let sample_x = px + dx as f32;
-                let sample_y = py + dy as f32;
-                let u = (sample_x - destination[0]) / destination[2];
-                let v = (sample_y - destination[1]) / destination[3];
-                let sx = (u * source[2] as f32).floor() as i32;
-                let sy = (v * source[3] as f32).floor() as i32;
-                if sx < 0 || sy < 0 || sx >= source[2] as i32 || sy >= source[3] as i32 {
-                    continue;
-                }
-                let sx = if picture.scale < 0 {
-                    source[2] as i32 - 1 - sx
-                } else {
-                    sx
-                };
-                if image
-                    .pixel(source[0] + sx as u32, source[1] + sy as u32)
-                    .is_some_and(|rgba| rgba[3] > 16)
-                {
-                    return true;
-                }
-            }
-        }
-        false
     }
 
     /// Applies this frame's key state to the open choice prompt, if there is one.

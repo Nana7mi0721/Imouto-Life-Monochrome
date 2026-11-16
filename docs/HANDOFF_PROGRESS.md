@@ -1444,3 +1444,17 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
 * **空间**：删 3 个 `zz_probe_*.rs`、3 张中间对照图、`target/debug/incremental`；
   `target` 8.4 GB、`work/Data` 177 MB、`work/out` 1.5 GB，仓库合计 **11 GB**。
   保留 `work/out/bug9_10_hud_bordered.png` 与 `work/out/action_bar_final_crop.png` 作本轮视觉证据。
+
+### 2026-11-16 站立立绘非交互与卧室全身热区
+
+* **结论**：`CE240` 的 `900..903` 是纯显示层，原版没有站立立绘点击交互。`CE240`
+  没有 `op123/op124` 鼠标轮询；统计页 `ev30` 置 `v176=1`，妹妹事件 1/2/3/4/12/25
+  都要求 `v176==0`；对话场景则由消息/选项先行消费点击。
+* **落地**：`sister_body_action_event_at()` 在任一可见 `Picture/stand_*` 时返回
+  `None`；普通卧室改用 `SISTER_BODY_RECTS`（`ptr_sc` 截图量出的 6 个 1024×576
+  全身矩形）命中 `v14` 对应事件。删除 `picture_alpha_hit`、`SISTER_HIT_RADIUS`
+  与 16 px 地图矩形兜底。
+* **回归**：新增 `m25_sister_body_rects` 3 条（6 姿态四角/中心、矩形外负例、
+  `v14=4` 无目标）；`m25_sister_pose5` 改为 3 条（站立立绘不可点、统计页双层门控、
+  睡姿全身矩形）；`m17_ui_regressions` 站立立绘用例改为断言 `None`。
+  `m17_ui_regressions` 仍为 21/22，唯一失败是既有 `SaveData01` 夜间提示夹具漂移。
