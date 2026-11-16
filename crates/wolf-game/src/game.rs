@@ -1865,10 +1865,9 @@ impl Game {
         {
             return true;
         }
-        self.runtime
-            .slots()
-            .iter()
-            .any(|slot| slot.trigger == crate::map_runtime::Trigger::ActionKey)
+        self.runtime.slots().iter().any(|slot| {
+            slot.trigger == crate::map_runtime::Trigger::ActionKey && slot.instance().is_some()
+        })
     }
 
     /// True while the game is on the title screen rather than in a playable map.
