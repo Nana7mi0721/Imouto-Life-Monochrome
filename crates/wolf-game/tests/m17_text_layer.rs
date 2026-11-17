@@ -475,11 +475,39 @@ fn three_line_balloon_keeps_every_row_on_screen() {
             .iter()
             .map(|quad| quad.rect[1] + quad.rect[3])
             .fold(f32::NEG_INFINITY, f32::max);
+        let left = frame_quads
+            .iter()
+            .map(|quad| quad.rect[0])
+            .fold(f32::INFINITY, f32::min);
         assert!(
             bottom - top >= 79.0,
             "the three-line balloon must render above the 60 px one-line size: {}..{}",
             top,
             bottom
+        );
+        let body_left = runs
+            .iter()
+            .map(|run| run.rect[0])
+            .fold(f32::INFINITY, f32::min);
+        let body_top = runs
+            .iter()
+            .map(|run| run.rect[1])
+            .fold(f32::INFINITY, f32::min);
+        let body_bottom = runs
+            .iter()
+            .map(|run| run.rect[1] + run.rect[3])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            body_left - left >= 10.0,
+            "the body needs the requested right inset: frame left {left}, body left {body_left}"
+        );
+        assert!(
+            body_top - top >= 10.0,
+            "the body needs the requested lower inset: frame top {top}, body top {body_top}"
+        );
+        assert!(
+            bottom - body_bottom >= 3.0,
+            "the grown frame must keep a bottom margin: body bottom {body_bottom}, frame bottom {bottom}"
         );
         assert_eq!(
             game.screen

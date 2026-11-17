@@ -1495,3 +1495,29 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   `work/out/save_layout.png` 供视觉核对。工作区默认 `cargo test --workspace`
   仍有 4 条既有字体度量失败（choice×3 / textpic×1），逐条单独运行也失败，
   与本轮改动无关。玩家 `work/Data/Save/` 未被回滚或覆盖。
+
+### 2026-11-17 审查 `a2a618d`：存档高亮与气泡内边距收口
+
+* **审查核实**：逐项核对 `review_a2a618d_report.md`。前 6 项（卧室 `Esc` 的
+  `in_submenu()`、妹妹全身/枕头优先级、恶作剧 `1109` 底框、相册 Ev 35、气泡首帧
+  头像高度、存档栏左栏布局）均已在 `a2a618d` 落地并有回归覆盖，不再改运行时代码。
+* **存档高亮跟随鼠标**：CE94 只给当前行挂 `290 type 5` 闪烁，鼠标移动仅改
+  `self[610]` 时画面不会重绘。`apply_save_grid_layout()` 新增
+  `sync_save_grid_highlight()`，按 `grid.row` 把 `EFFECT_BLINK` 从旧行迁移到指针
+  所在行；不改透明度，保留 CE94 自身的闪烁节奏。新增
+  `m25_save_slot::hovering_a_slot_moves_the_blinking_cursor`。
+* **气泡正文内边距**：`36013` 正文增加 `x+12 / y+6`，气泡框额外向上增长 10 px；
+  三行文本仍完整留在屏内，左右/上下边距纳入
+  `m17_text_layer::three_line_balloon_keeps_every_row_on_screen` 断言。
+* **测试夹具去硬编码**：`m25_save_slot` 从当前 `SaveData01` 动态解码姓名/特质和
+  `v10/v11/v12` 职业，不再写死“熊头/学生”；`m19_balloon_ui` 从 CData 0:12:8/9
+  推导行动力，不再写死 60/65；`m25_sister_body_rects` 的 `v14=5` 断言按枕头优先
+  规则拆分 Ev 13/Ev 12，避免旧用例与新一轮修复冲突。
+* **验证**：`cargo fmt --all --check` 干净；`cargo test -q --workspace --no-run`
+  通过；`m25_save_slot` 14/14（按“不写玩家存档”策略跳过两条会临时改写
+  SaveData01 的自动存档用例）、`m19_balloon_ui` 3/3、`m17_text_layer` 5/5、
+  `m17_ui_regressions` 22/22（跳过既有夜间夹具）、`m25_sister_body_rects` 3/3、
+  `m25_sister_pose5` 4/4、`m25_return_to_title` 2/2、`m25_cursor_follow` 10/10。
+  `bash tools/build-godot.sh` 成功，`bash tools/smoke-godot.sh` exit 0
+  （P0 `pictures=4 sprites=4`，存档弹窗脚本全通过）。本轮未回滚、覆盖或删除
+  `work/Data/Save/` 下的玩家存档。

@@ -48,7 +48,7 @@ fn normal_bedroom() -> Option<Game> {
     let bytes = std::fs::read(root.join("MapData").join("SampleMapA.mps")).ok()?;
     let mut map = Map::parse(&bytes).ok()?;
     map.events
-        .retain(|event| matches!(event.id, 1 | 2 | 3 | 4 | 12 | 25));
+        .retain(|event| matches!(event.id, 1 | 2 | 3 | 4 | 12 | 13 | 25));
     game.start_pages(&map, None);
     // The normal room has no CE 240 standing art; clearing the picture layers
     // makes the test independent of whatever the shipped save left behind.
@@ -87,6 +87,19 @@ const POSES: &[(i32, u32, [i32; 4])] = &[
     (6, 25, [445, 265, 197, 305]),
 ];
 
+/// The pillow (Ev 13) sits above the sleeping sister and deliberately wins
+/// inside this measured rectangle.
+const PILLOW: [i32; 4] = [56, 340, 134, 88];
+
+fn expected_event(pose: i32, sister_event: u32, x: i32, y: i32) -> u32 {
+    let [left, top, width, height] = PILLOW;
+    if pose == 5 && (left..left + width).contains(&x) && (top..top + height).contains(&y) {
+        13
+    } else {
+        sister_event
+    }
+}
+
 #[test]
 fn every_body_rect_starts_the_matching_sister_event_inside_its_whole_area() {
     for &(pose, event, [left, top, width, height]) in POSES {
@@ -111,10 +124,11 @@ fn every_body_rect_starts_the_matching_sister_event_inside_its_whole_area() {
             set_pose(&mut game, pose);
 
             click_at(&mut game, x, y);
+            let expected = expected_event(pose, event, x, y);
             assert_eq!(
                 game.last_action_event,
-                Some(event),
-                "v14={pose} must answer a click inside its visible body ({x},{y}) with event {event}"
+                Some(expected),
+                "v14={pose} must answer a click inside its visible body ({x},{y}) with event {expected}"
             );
         }
     }
@@ -122,14 +136,16 @@ fn every_body_rect_starts_the_matching_sister_event_inside_its_whole_area() {
 
 #[test]
 fn clicks_one_pixel_outside_a_body_rect_do_not_reach_that_sister_event() {
-    for &(pose, event, [left, top, _width, height]) in POSES {
+    for &(pose, event, [left, top, _width, _height]) in POSES {
         let Some(mut game) = normal_bedroom() else {
             return;
         };
         set_pose(&mut game, pose);
 
         let x = left - 1;
-        let y = top + height / 2;
+        // Stay above the pillow rectangle, which deliberately extends to the
+        // left of the sleeping sister's measured body.
+        let y = top + 10;
         click_at(&mut game, x, y);
         assert_eq!(
             game.last_action_event, None,

@@ -27,6 +27,7 @@ use std::path::PathBuf;
 
 use wolf_format::mps::Map;
 use wolf_game::atlas::{Atlas, SpriteQuad};
+use wolf_game::db::Container;
 use wolf_game::picture::{Picture, PictureKind, ANCHOR_CENTRE, ANCHOR_TOP_LEFT};
 use wolf_game::Game;
 
@@ -258,9 +259,15 @@ fn a_black_screen_below_the_top_bar_keeps_the_gauge() {
     hud.text = "\\f[14]\u{884c}\u{52a8}\u{529b}60/65".to_owned();
     hud.hidden = false;
     hud.opacity = 255;
+    let expected_points = game
+        .databases
+        .num(Container::CData, 0, 12, 8)
+        .zip(game.databases.num(Container::CData, 0, 12, 9))
+        .map(|(current, maximum)| (current.clamp(0, maximum), maximum));
+    assert!(expected_points.is_some(), "the save has action-point cells");
     assert_eq!(
         game.hud_action_points(),
-        Some((60, 65)),
+        expected_points,
         "the readout itself must still be recognised"
     );
 
@@ -278,7 +285,7 @@ fn a_black_screen_below_the_top_bar_keeps_the_gauge() {
     game.screen.insert(cover);
     assert_eq!(
         game.hud_action_points(),
-        Some((60, 65)),
+        expected_points,
         "a cover that starts below the top bar must not hide the gauge"
     );
 

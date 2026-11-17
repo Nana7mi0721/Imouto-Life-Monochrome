@@ -172,6 +172,16 @@ const BALLOON_NAME_TEXT_PICTURE: i32 = 36014;
 /// centred in the grey band, seven pixels below the unadjusted run.
 const BALLOON_NAME_TEXT_Y_OFFSET: f32 = 7.0;
 
+/// Extra inset for the balloon body text.
+///
+/// CE270 places `36013` tight against the wash's top-left corner. The user
+/// asked for a little more breathing room even though the retail layout is
+/// tight. The frame also grows upward by [`BALLOON_BODY_TEXT_FRAME_EXTRA`] so
+/// the lower body inset does not eat the two/three-line bottom margin.
+const BALLOON_BODY_TEXT_X_OFFSET: f32 = 12.0;
+const BALLOON_BODY_TEXT_Y_OFFSET: f32 = 6.0;
+const BALLOON_BODY_TEXT_FRAME_EXTRA: f32 = 10.0;
+
 /// CE270's balloon frame picture (nine-slice window base).
 const BALLOON_FRAME_PICTURE: i32 = 36000;
 
@@ -1938,6 +1948,7 @@ impl Game {
                 }
             }
         }
+        self.sync_save_grid_highlight(grid);
         // CE94 parks the page arrows at the far screen edges. The narrower slot
         // column puts them just outside the 48..684 panel, level with row two.
         for (number, x) in [(12004, 8), (12005, 691)] {
@@ -1947,6 +1958,40 @@ impl Game {
                 picture.anchor = 0;
                 picture.shift = (0, 0);
                 picture.transition = None;
+            }
+        }
+    }
+
+    /// Keeps CE94's blinking cursor on the row the pointer is over.
+    ///
+    /// CE94 draws all four cursor windows at tone 0 and gives only the selected
+    /// row a `290 type 5` blink. Its own cursor branch runs on keyboard/page
+    /// events, not on mouse motion, so `sync_save_grid_cursor()` changing
+    /// `self[610]` alone left the pulse on the previous row. Move the effect
+    /// here, where mouse hover has already been folded into `grid.row`.
+    fn sync_save_grid_highlight(&mut self, grid: SaveGridState) {
+        for row in 0..grid.per_page {
+            let number = 12051 + 20 * row;
+            let Some(cursor) = self.screen.get_mut(number) else {
+                continue;
+            };
+            let selected = row == grid.row;
+            let has_blink = cursor
+                .effects
+                .iter()
+                .any(|effect| effect.kind == crate::picture::EFFECT_BLINK);
+            if selected {
+                if !has_blink {
+                    cursor.effects.push(crate::picture::PictureEffect::new(
+                        crate::picture::EFFECT_BLINK,
+                        15,
+                        [100, 100, 100],
+                    ));
+                }
+            } else if has_blink {
+                cursor
+                    .effects
+                    .retain(|effect| effect.kind != crate::picture::EFFECT_BLINK);
             }
         }
     }
@@ -3174,7 +3219,7 @@ impl Game {
         };
         let body_height = body.text_size.map_or(0.0, |(_, height)| height as f32);
         Some(
-            (body_height + BALLOON_FRAME_PADDING)
+            (body_height + BALLOON_FRAME_PADDING + BALLOON_BODY_TEXT_FRAME_EXTRA)
                 .max(min_height as f32)
                 .ceil() as i32,
         )
@@ -3382,8 +3427,15 @@ impl Game {
         // offset remains here.
         let balloon = picture.number == BALLOON_BODY_TEXT_PICTURE;
         let nameplate = picture.number == BALLOON_NAME_TEXT_PICTURE;
+        let x = x + if balloon {
+            BALLOON_BODY_TEXT_X_OFFSET
+        } else {
+            0.0
+        };
         let y = y + if nameplate {
             BALLOON_NAME_TEXT_Y_OFFSET
+        } else if balloon {
+            BALLOON_BODY_TEXT_Y_OFFSET
         } else {
             0.0
         };

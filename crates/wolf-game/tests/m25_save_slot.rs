@@ -16,6 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
+use wolf_game::picture::EFFECT_BLINK;
 use wolf_game::Game;
 use wolf_save::SaveFile;
 
@@ -32,6 +33,41 @@ fn data_root() -> PathBuf {
     base.pop();
     base.pop();
     base.join(path)
+}
+
+fn save_title(save: &SaveFile) -> String {
+    let mut parts = Vec::new();
+    for field in [0usize, 1] {
+        let Some(bytes) = save.vardb.string(0, 12, field) else {
+            continue;
+        };
+        let len = bytes
+            .iter()
+            .rposition(|byte| *byte != 0)
+            .map_or(0, |last| last + 1);
+        let text = wolf_format::bytes::decode_wolf_str(&bytes[..len]);
+        let text = text.trim();
+        if !text.is_empty() {
+            parts.push(text.to_owned());
+        }
+    }
+    let mut title = parts.join(" ");
+    if title.is_empty() {
+        return title;
+    }
+    let job = if save.normal_var(10) == Some(1) {
+        "学生"
+    } else if save.normal_var(11) == Some(1) {
+        "自由职业者"
+    } else if save.normal_var(12) == Some(1) {
+        "社会人"
+    } else {
+        "废人"
+    };
+    title.push_str(" 哥哥（");
+    title.push_str(job);
+    title.push('）');
+    title
 }
 
 fn save_file(slot: u32) -> PathBuf {
@@ -116,6 +152,41 @@ fn the_grid_uses_the_reference_left_column_layout() {
     assert_eq!(hit.slot, 4);
 }
 
+fn cursor_blinks(game: &Game, row: i32) -> bool {
+    game.screen.get(12051 + 20 * row).is_some_and(|cursor| {
+        cursor
+            .effects
+            .iter()
+            .any(|effect| effect.kind == EFFECT_BLINK)
+    })
+}
+
+#[test]
+fn hovering_a_slot_moves_the_blinking_cursor() {
+    let Some(mut game) = grid() else { return };
+    assert!(cursor_blinks(&game, 0), "CE131 opens on the first row");
+
+    game.mouse = [366, 84 + 2 * 116 + 56];
+    for _ in 0..3 {
+        game.frame();
+    }
+    assert!(
+        !cursor_blinks(&game, 0),
+        "the old row must lose the blink when the pointer moves"
+    );
+    assert!(
+        cursor_blinks(&game, 2),
+        "the third row must start blinking under the pointer"
+    );
+
+    game.mouse = [366, 84 + 3 * 116 + 56];
+    for _ in 0..3 {
+        game.frame();
+    }
+    assert!(!cursor_blinks(&game, 2));
+    assert!(cursor_blinks(&game, 3));
+}
+
 #[test]
 fn the_slot_text_is_split_into_label_playtime_and_one_summary_line() {
     let Some(game) = grid() else { return };
@@ -135,15 +206,14 @@ fn the_slot_text_is_split_into_label_playtime_and_one_summary_line() {
         "playtime needs the clock separator: {playtime:?}"
     );
 
+    let bytes = std::fs::read(save_file(1)).expect("slot 1 save");
+    let save = SaveFile::parse(&bytes).expect("parse slot 1");
+    let expected_title = save_title(&save);
     let summary = slot_text(&game, 12055);
     assert!(summary.contains('天'), "summary day missing: {summary:?}");
     assert!(
-        summary.contains("熊头"),
-        "summary must carry the brother name: {summary:?}"
-    );
-    assert!(
-        summary.contains("学生"),
-        "summary must carry the CE242 job suffix: {summary:?}"
+        summary.contains(&expected_title),
+        "summary must carry the saved brother title {expected_title:?}: {summary:?}"
     );
     assert!(
         !summary.contains("NORMAL"),
@@ -265,6 +335,7 @@ fn slot_one_is_labelled_auto_save_and_the_row_shows_the_save_summary() {
         "the lower-left row is playtime only: {playtime:?}"
     );
     let summary = slot_text(&game, 12055);
+    let expected_title = save_title(&save);
     assert!(
         summary.contains(&format!("{day}天")),
         "summary day missing: {summary:?}"
@@ -274,8 +345,8 @@ fn slot_one_is_labelled_auto_save_and_the_row_shows_the_save_summary() {
         "summary clock missing: {summary:?}"
     );
     assert!(
-        summary.contains("熊头") && summary.contains("学生"),
-        "the slot still shows the brother title"
+        summary.contains(&expected_title),
+        "the slot must show the saved brother title {expected_title:?}: {summary:?}"
     );
 }
 

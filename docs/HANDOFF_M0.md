@@ -263,6 +263,16 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-17）
 
+* **2026-11-17 `review_a2a618d_report.md` 收口（当前状态）**：报告前 6 项已核实
+  落地；两项遗留已修。存档栏鼠标悬停现在把 CE94 的 `290 type 5` 闪烁从旧行迁移到
+  `self[610]` 当前行，新增 `m25_save_slot` 回归；气泡正文在 `36013` 上增加
+  `x+12/y+6` 内边距并让框体额外向上增长 10 px，三行文本四周留白有断言。
+  `m25_save_slot` 14/14（跳过两条会临时写玩家存档的自动存档用例）、
+  `m19_balloon_ui` 3/3、`m17_text_layer` 5/5、`m17_ui_regressions` 22/22、
+  `m25_sister_body_rects` 3/3、`m25_sister_pose5` 4/4、`m25_return_to_title` 2/2、
+  `m25_cursor_follow` 10/10；`cargo test --workspace --no-run` 通过；
+  `build-godot.sh` 成功，`smoke-godot.sh` exit 0。玩家存档未改写。
+
 * **2026-11-17 实机报告 5 项收口（当前状态）**：枕头 Ev 13 优先于睡姿
   Ev 12；恶作剧 `1109` 底框不再注册为姿势按钮；相册 Ev 35 的点击沿交还
   并行轮询页，宿主不再消费或停掉它；CE270 正文首帧即按头像文件采用
