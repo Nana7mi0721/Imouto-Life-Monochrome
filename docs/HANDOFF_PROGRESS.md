@@ -1458,3 +1458,40 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   `v14=4` 无目标）；`m25_sister_pose5` 改为 3 条（站立立绘不可点、统计页双层门控、
   睡姿全身矩形）；`m17_ui_regressions` 站立立绘用例改为断言 `None`。
   `m17_ui_regressions` 仍为 21/22，唯一失败是既有 `SaveData01` 夜间提示夹具漂移。
+
+### 2026-11-17 实机报告 5 项收口与存档栏参考布局
+
+* **枕头优先于睡姿**：`v14 == 5` 时，`sister_body_action_event_at()` 先用
+  `PILLOW_BODY_RECT = [56, 340, 134, 88]` 命中 **Ev 13（就寝兄）**，再落到
+  Ev 12 的全身矩形。避免扩展后的睡姿矩形覆盖沙发枕头。`m25_sister_pose5`
+  新增枕头中心/睡姿外侧两点回归，4/4 通过。
+* **恶作剧底框不再算姿势按钮**：从 `PICTURE_ACTION_CONTROLS` 移除
+  `(1109, 22, "Picture/pose_iconarea.png")`，只保留真正的姿势图标
+  `1110`（Ev 22）与 `1117`（Ev 28）。点击「道具」右侧空框不再由宿主触发换姿势。
+* **相册图标交还给并行脚本**：Ev 35 的可见图标由它自己的 Parallel 页
+  `op124 hover(-7)` + `op123 decide` 轮询。宿主命中 35 时不再
+  `mouse_consumed = true`，也不再启动空的 ActionKey 页（后者会停掉并行实例）。
+  点击沿留给脚本读取；`m17_ui_regressions::album_icon_uses_its_visible_picture_ink`
+  仍能启动 CE303。
+* **气泡首帧即用头像高度**：CE270 在正文首帧就写入 `36002` 的头像文件
+  （`Picture/face02.png`），但透明度从 0 渐入。`balloon_has_face()` 改为看
+  “文件非空”而不是“opacity > 0”，因此首帧就是 107 px，不再 60→107 跳变、
+  正文不再上移。新增
+  `m17_ui_regressions::the_balloon_uses_face_height_before_the_face_fades_in`。
+* **存档栏改为参考左栏布局**：CE94 的 928×115 全宽行在每帧 VM 步进后由
+  `apply_save_grid_layout()` 重排为 `x=48, y=84 + row*116, 636×112`；
+  翻页箭头移到 `(8,280)` / `(691,280)`。槽内文本拆成：
+  左上 `数据 N（槽 1 自动存档）`、左下仅 `H:MM`、右侧单行
+  `N天 周X HH:MM 熊头 强壮 哥哥（学生）`。称号按 CE242 的
+  `v10/v11/v12 == 1` 规则补职业后缀。渲染、鼠标命中、键盘光标共用
+  `save_grid_row_layout()`；`sync_save_grid_cursor()` 不再读旧全宽图。
+  Godot 右侧注意事项框改为 `Rect2(716,96,276,216)`、18 px 六行。
+  `m25_save_slot` 扩到 **15/15**（新增左栏几何、三段文本、字号/坐标断言），
+  `godot/tests/save_slot_modal.gd` 的槽 1 点击点同步到 `(366,140)`。
+* **验证**：`m25_save_slot` 15/15、`m25_sister_pose5` 4/4、
+  `m17_ui_regressions` 22/22（跳过既有的夜间夹具漂移用例）、
+  `m3_map_click` 8/8、`m21_cursor_hover` 7/7；`cargo fmt --all`；
+  `bash tools/smoke-godot.sh` exit 0；`wolf-cli capture --event 131` 生成
+  `work/out/save_layout.png` 供视觉核对。工作区默认 `cargo test --workspace`
+  仍有 4 条既有字体度量失败（choice×3 / textpic×1），逐条单独运行也失败，
+  与本轮改动无关。玩家 `work/Data/Save/` 未被回滚或覆盖。

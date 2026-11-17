@@ -261,7 +261,19 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 > **[HANDOFF_PROGRESS.md](HANDOFF_PROGRESS.md)**。本节只保留**当前状态摘要**；
 > 新会话判断“现在是什么状态”以本节 + 各专题文档为准，查历史细节再翻日志。
 
-### 11.1 当前状态（2026-11-16）
+### 11.1 当前状态（2026-11-17）
+
+* **2026-11-17 实机报告 5 项收口（当前状态）**：枕头 Ev 13 优先于睡姿
+  Ev 12；恶作剧 `1109` 底框不再注册为姿势按钮；相册 Ev 35 的点击沿交还
+  并行轮询页，宿主不再消费或停掉它；CE270 正文首帧即按头像文件采用
+  107 px 气泡高度；CE94 存档栏重排为参考左栏
+  `x=48, y=84+row*116, 636×112`，右侧 6 行注意事项框由 Godot 绘制，
+  槽 1 标“自动存档”，左下仅游玩时长，右侧单行日/星期/时间/哥哥称号，
+  渲染/鼠标/键盘光标共用 `save_grid_row_layout()`。`m25_save_slot` 15/15、
+  `m25_sister_pose5` 4/4、`m17_ui_regressions` 22/22（跳过既有夜间夹具）、
+  `m3_map_click` 8/8、`m21_cursor_hover` 7/7，`smoke-godot.sh` exit 0，
+  DLL 已重建。默认 workspace 仍有 4 条既有字体度量失败
+  （choice×3 / textpic×1），与本轮无关；玩家存档未回滚。
 
 * **2026-11-16 实机复审收口（当前状态）**：按 `review_46de4eb_and_ux_bugs_report.md`
   与用户新截图继续收口。

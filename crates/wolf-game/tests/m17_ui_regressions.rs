@@ -221,6 +221,47 @@ fn balloon_face_stays_anchored_when_the_frame_grows() {
 }
 
 #[test]
+fn the_balloon_uses_face_height_before_the_face_fades_in() {
+    let Some(mut game) = open_event_one_balloon() else {
+        return;
+    };
+    let mut atlas = Atlas::with_size(2048, 4096);
+    let mut caught_first_body_frame = false;
+    for _ in 0..120 {
+        game.frame();
+        let rendered = game.picture_quads(&mut atlas);
+        let _ = game.text_quads();
+        let body_visible = game
+            .screen
+            .get(36013)
+            .is_some_and(|body| !body.hidden && body.opacity > 0 && !body.text.is_empty());
+        if !body_visible {
+            continue;
+        }
+        let face = game.screen.get(36002).expect("face slot");
+        assert!(
+            !face.file.is_empty(),
+            "CE270 installs the face file on the body's first visible frame"
+        );
+        let frame = quad_bounds(&rendered, 36000).expect("balloon frame");
+        assert_eq!(
+            frame[3], 107.0,
+            "the first visible body frame must already use the 107 px face height \
+             (face opacity {})",
+            face.opacity
+        );
+        if face.opacity == 0 {
+            caught_first_body_frame = true;
+            break;
+        }
+    }
+    assert!(
+        caught_first_body_frame,
+        "the probe never caught a body frame before the face fade-in"
+    );
+}
+
+#[test]
 fn balloon_quads_are_idempotent_and_do_not_mutate_the_screen() {
     let Some(mut game) = open_event_one_balloon() else {
         return;
@@ -1140,14 +1181,17 @@ fn sleeping_sister_uses_her_full_body_rect_without_standing_art() {
         "SampleMapA event 12 must stay at tile (9,20) with a 9x4 hit rectangle"
     );
 
-    let (_, top, _, height) = rect;
-    click_at(&mut game, 71, top + height / 2);
+    let (_, top, _, _) = rect;
+    // Stay above the pillow rectangle (y = 340..428) so this exercises the
+    // sleeping body's left edge rather than the pillow's own hotspot.
+    let body_y = top + 10;
+    click_at(&mut game, 71, body_y);
     assert_eq!(
         game.last_action_event, None,
         "one pixel left of the sleeping body must not trigger the sister"
     );
 
-    click_at(&mut game, 72, top + height / 2);
+    click_at(&mut game, 72, body_y);
     assert_eq!(
         game.last_action_event,
         Some(12),

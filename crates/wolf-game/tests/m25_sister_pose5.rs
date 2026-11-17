@@ -169,16 +169,47 @@ fn the_sleeping_pose_uses_its_full_body_rect_without_standing_art() {
         "SampleMapA event 12 must stay at tile (9,20) with a 9x4 hit rectangle"
     );
 
-    click_at(&mut game, 71, top + height / 2);
+    // Stay above the pillow rectangle (y = 340..428) so this exercises the
+    // sleeping body's left edge rather than the pillow's own hotspot.
+    let body_y = top + 10;
+    click_at(&mut game, 71, body_y);
     assert_eq!(
         game.last_action_event, None,
         "one pixel left of the sleeping body must not trigger the sister"
     );
 
-    click_at(&mut game, 72, top + height / 2);
+    click_at(&mut game, 72, body_y);
     assert_eq!(
         game.last_action_event,
         Some(12),
         "the sleeping pose must answer from the left edge of its visible body"
+    );
+}
+
+#[test]
+fn the_pillow_wins_over_the_sleeping_body() {
+    // The pillow confirmation (Ev 13) sits on the sofa above the sleeping pose.
+    // Ev 12's full-body rectangle overlaps it, so the host must resolve the
+    // pillow first instead of letting the larger sleeping rectangle swallow it.
+    let Some(mut pillow_game) = loaded_with(&[12, 13]) else {
+        return;
+    };
+    set_daytime_pose(&mut pillow_game, 5);
+    click_at(&mut pillow_game, 100, 380);
+    assert_eq!(
+        pillow_game.last_action_event,
+        Some(13),
+        "the pillow centre must open the 就寝兄 confirmation"
+    );
+
+    let Some(mut body_game) = loaded_with(&[12, 13]) else {
+        return;
+    };
+    set_daytime_pose(&mut body_game, 5);
+    click_at(&mut body_game, 300, 340);
+    assert_eq!(
+        body_game.last_action_event,
+        Some(12),
+        "the sleeping body outside the pillow must still open the sister event"
     );
 }

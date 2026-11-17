@@ -151,7 +151,6 @@ const PICTURE_ACTION_CONTROLS: &[(i32, u32, &str)] = &[
     (-5, 5, "Picture/icon01.png"),
     (-4, 30, "Picture/icon05.png"),
     (1108, 21, "Picture/endbutton.png"),
-    (1109, 22, "Picture/pose_iconarea.png"),
     (1110, 22, "Picture/pose_icon"),
     (1117, 28, "Picture/pose_icon02.png"),
 ];
@@ -573,6 +572,35 @@ fn sister_body_rect(pose: i32) -> Option<[i32; 4]> {
         .find_map(|(known, rect)| (*known == pose).then_some(*rect))
 }
 
+/// Visual click rectangle for the pillow (Ev 13, 就寝兄) on the sofa.
+const PILLOW_BODY_RECT: [i32; 4] = [56, 340, 134, 88];
+
+/// Pillow click rectangle for Ev 13 (就寝兄).
+fn pillow_body_rect() -> [i32; 4] {
+    PILLOW_BODY_RECT
+}
+
+/// Left-column geometry of one save/load slot.
+///
+/// CE94 draws four full-width rows (928x115 at y=86, 201, ...). The reference
+/// layout keeps the list in a 636 px column on the left and gives the right
+/// side to the notice panel. Rendering, hit-testing and the pointer cursor all
+/// read this one function so the three cannot drift apart.
+const SAVE_GRID_X: i32 = 48;
+const SAVE_GRID_TOP: i32 = 84;
+const SAVE_GRID_WIDTH: i32 = 636;
+const SAVE_GRID_HEIGHT: i32 = 112;
+const SAVE_GRID_PITCH: i32 = 116;
+
+fn save_grid_row_layout(row: i32) -> [f32; 4] {
+    [
+        SAVE_GRID_X as f32,
+        (SAVE_GRID_TOP + row * SAVE_GRID_PITCH) as f32,
+        SAVE_GRID_WIDTH as f32,
+        SAVE_GRID_HEIGHT as f32,
+    ]
+}
+
 /// A pending choice prompt.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Choices {
@@ -836,22 +864,31 @@ struct SaveSummary {
 }
 
 impl SaveSummary {
-    fn detail(&self) -> String {
+    /// Playtime as `H:MM`, the first line of the left slot column.
+    fn playtime(&self) -> String {
+        let total_minutes = self.playtime_frames / 3600;
+        format!("{}:{:02}", total_minutes / 60, total_minutes % 60)
+    }
+
+    /// Day, weekday, clock and brother title, as one left-aligned line.
+    fn status_line(&self) -> String {
         const WEEKDAYS: [&str; 7] = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
         let weekday = WEEKDAYS
             .get(self.weekday.rem_euclid(7) as usize)
             .copied()
             .unwrap_or("周一");
-        let total_minutes = self.playtime_frames / 3600;
-        format!(
-            "{}:{:02}  {}天 {} {:02}:{:02}",
-            total_minutes / 60,
-            total_minutes % 60,
-            self.day,
-            weekday,
-            self.hour,
-            self.minute
-        )
+        let title = self.title.trim();
+        if title.is_empty() {
+            format!(
+                "{}天 {} {:02}:{:02}",
+                self.day, weekday, self.hour, self.minute
+            )
+        } else {
+            format!(
+                "{}天 {} {:02}:{:02} {}",
+                self.day, weekday, self.hour, self.minute, title
+            )
+        }
     }
 }
 
@@ -1846,14 +1883,72 @@ impl Game {
 
     /// The visible rectangle of one slot row in CE131's grid.
     ///
-    /// `Screen::picture_rect` is the same geometry the renderer uses. The texture
-    /// is usually already cached while the grid is up; the window box is still
-    /// available for the first frame before the atlas decode.
+    /// Presses, hover, the keyboard cursor and the renderer all use the left-column
+    /// layout installed by [`Self::apply_save_grid_layout`]. The picture must still
+    /// exist, because CE94 owns when a row is on screen at all.
     fn save_grid_row_rect(&self, row: i32) -> Option<[f32; 4]> {
-        let assets = &self.assets;
-        self.screen.picture_rect(12050 + 20 * row, |file| {
-            assets.cached(file).map(|image| (image.width, image.height))
-        })
+        self.screen.get(12050 + 20 * row)?;
+        Some(save_grid_row_layout(row))
+    }
+
+    /// Re-lays CE94's full-width rows onto the reference left column.
+    ///
+    /// CE94 recreates these pictures from the script constants whenever it
+    /// redraws (open, page turn, cursor blink), so the override runs after every
+    /// VM step. The row texts keep CE94's own offsets inside the panel:
+    /// `+22/+19` for the slot label, `+28/+72` for playtime and `+240/+70` for
+    /// the day/status line. Character portraits in `+4..+19` are hidden: the
+    /// reference adds the summary line without the sister SD art or `NORMAL`.
+    fn apply_save_grid_layout(&mut self) {
+        let Some(grid) = self.save_grid_state() else {
+            return;
+        };
+        for row in 0..grid.per_page {
+            let [x, y, width, height] = save_grid_row_layout(row);
+            let base = 12050 + 20 * row;
+            for offset in [0, 1] {
+                if let Some(picture) = self.screen.get_mut(base + offset) {
+                    picture.x = x as i32;
+                    picture.y = y as i32;
+                    picture.window = Some((width as i32, height as i32));
+                    picture.anchor = 0;
+                    picture.scale = 100;
+                    picture.scale_y = 100;
+                    picture.shift = (0, 0);
+                    picture.transition = None;
+                }
+            }
+            for (number, dx, dy) in [(base + 2, 22, 19), (base + 3, 28, 72), (base + 5, 240, 70)] {
+                if let Some(picture) = self.screen.get_mut(number) {
+                    picture.x = x as i32 + dx;
+                    picture.y = y as i32 + dy;
+                    picture.anchor = 0;
+                    picture.scale = 100;
+                    picture.scale_y = 100;
+                    picture.shift = (0, 0);
+                    picture.transition = None;
+                }
+            }
+            for offset in 4..20 {
+                if offset == 5 {
+                    continue;
+                }
+                if let Some(picture) = self.screen.get_mut(base + offset) {
+                    picture.hidden = true;
+                }
+            }
+        }
+        // CE94 parks the page arrows at the far screen edges. The narrower slot
+        // column puts them just outside the 48..684 panel, level with row two.
+        for (number, x) in [(12004, 8), (12005, 691)] {
+            if let Some(picture) = self.screen.get_mut(number) {
+                picture.x = x;
+                picture.y = 280;
+                picture.anchor = 0;
+                picture.shift = (0, 0);
+                picture.transition = None;
+            }
+        }
     }
 
     /// True while the save/load grid (CE131) owns the screen.
@@ -1934,14 +2029,34 @@ impl Game {
             .ok()
             .and_then(|bytes| wolf_save::SaveFile::parse(&bytes).ok())
             .map(|save| {
-                let mut title = String::new();
+                let mut title_parts = Vec::new();
                 for field in [0usize, 1] {
                     let Some(bytes) = save.vardb.string(0, 12, field) else {
                         continue;
                     };
                     let text =
                         wolf_format::bytes::decode_wolf_str(crate::savegame::strip_nul(bytes));
-                    title.push_str(text.trim());
+                    let text = text.trim();
+                    if !text.is_empty() {
+                        title_parts.push(text.to_owned());
+                    }
+                }
+                let mut title = title_parts.join(" ");
+                if !title.is_empty() {
+                    // CE242 builds the top-bar title as `<name><trait>哥哥（<job>）`.
+                    // The job is the first one of v10/v11/v12 that equals 1.
+                    let job = if save.normal_var(10) == Some(1) {
+                        "学生"
+                    } else if save.normal_var(11) == Some(1) {
+                        "自由职业者"
+                    } else if save.normal_var(12) == Some(1) {
+                        "社会人"
+                    } else {
+                        "废人"
+                    };
+                    title.push_str(" 哥哥（");
+                    title.push_str(job);
+                    title.push('）');
                 }
                 SaveSummary {
                     day: save.normal_var(99).unwrap_or(0),
@@ -1966,11 +2081,13 @@ impl Game {
     /// Replaces one script-drawn save-grid string with the project's added detail.
     ///
     /// The grid's original labels remain the source of truth for placement. This
-    /// only changes the two text pictures that carry the slot title and metadata:
+    /// only changes the three text pictures that carry the slot label, playtime
+    /// and summary:
     ///
     /// * slot 1 is labelled `数据 1 自动存档`;
-    /// * the playtime row also carries day, weekday, game time and (on the existing
-    ///   right-hand block) the brother's title.
+    /// * the lower-left row keeps only `H:MM` playtime;
+    /// * the right-hand text block carries day, weekday, game time and the
+    ///   brother's full title on one left-aligned line.
     fn save_slot_text_override(&self, number: i32) -> Option<String> {
         let grid = self.save_grid_state()?;
         for row in 0..grid.per_page {
@@ -1982,17 +2099,12 @@ impl Game {
             }
             if number == detail {
                 if let Some(summary) = self.save_summary(slot) {
-                    return Some(format!("\\f[19] {}", summary.detail()));
+                    return Some(format!("\\f[19] {}", summary.playtime()));
                 }
             }
             if number == 12055 + 20 * row {
                 if let Some(summary) = self.save_summary(slot) {
-                    if !summary.title.is_empty() {
-                        return Some(format!(
-                            "<R>\\space[0]\\f[14]\\-[1]\\E\\A- 1\n{}",
-                            summary.title
-                        ));
-                    }
+                    return Some(format!("\\f[16]{}", summary.status_line()));
                 }
             }
         }
@@ -3037,11 +3149,17 @@ impl Game {
         Some(frame.destination_with_origin(frame.x, y, width as f32, height as f32))
     }
 
-    /// True only while the speaker-face picture is visible and has graphic art.
+    /// True while this balloon sentence associates a speaker face.
+    ///
+    /// CE270 installs the face file on the frame the body text appears, but
+    /// ramps its opacity in over the next few frames. Waiting for opacity > 0
+    /// kept the bubble at the 60 px no-face height for those frames, then
+    /// jumped it to 107 px and shifted the text upward. The file is the stable
+    /// signal that the sentence has a portrait; opacity only controls the fade.
     fn balloon_has_face(&self) -> bool {
         self.screen
             .get(BALLOON_FACE_PICTURE)
-            .is_some_and(|face| !face.hidden && face.opacity > 0 && !face.file.is_empty())
+            .is_some_and(|face| !face.hidden && !face.file.is_empty())
     }
 
     fn balloon_frame_target_height(&self) -> Option<i32> {
@@ -3606,6 +3724,14 @@ impl Game {
         }
         let governed = self.picture_governed_action_events();
         if let Some(event) = self.picture_action_event_at(x, y) {
+            // Event 35's visible album icon is owned by its own Parallel page:
+            // op124 hover(-7) followed by op123 decide. Starting the empty
+            // ActionKey page here stopped that poller and ate the click edge,
+            // which made the icon appear unresponsive for a frame or two.
+            // Leave the edge for the running script to read.
+            if event == 35 {
+                return;
+            }
             // The visible icon owns the press even when its page condition is not
             // active: falling through would revive the old tile rectangle or hit
             // an unrelated hotspot behind the icon.
@@ -3863,6 +3989,16 @@ impl Game {
         });
         if has_standing_art {
             return None;
+        }
+
+        // Ev 13 (pillow) takes priority over Ev 12 (sleeping sister) in the
+        // pillow area.
+        if pose == 5 {
+            let [left, top, width, height] = pillow_body_rect();
+            let inside = (left..left + width).contains(&x) && (top..top + height).contains(&y);
+            if inside {
+                return Some(13);
+            }
         }
 
         let [left, top, width, height] = sister_body_rect(pose)?;
@@ -4145,24 +4281,18 @@ impl Game {
         };
         let slots = slots.clamp(1, 10);
         let mut slot = None;
-        {
-            let screen = &self.screen;
-            let assets = &mut self.assets;
-            for index in 0..slots {
-                // CE94's per-slot window block: 50 = base + 10 (frame), +20 per slot.
-                let Some(rect) =
-                    screen.picture_rect(12050 + 20 * index, |file| assets.texture_size(file))
-                else {
-                    continue;
-                };
-                if (x as f32) >= rect[0]
-                    && (x as f32) < rect[0] + rect[2]
-                    && (y as f32) >= rect[1]
-                    && (y as f32) < rect[1] + rect[3]
-                {
-                    slot = Some(index);
-                    break;
-                }
+        for index in 0..slots {
+            // CE94's per-slot window block: 50 = base + 10 (frame), +20 per slot.
+            let Some(rect) = self.save_grid_row_rect(index) else {
+                continue;
+            };
+            if (x as f32) >= rect[0]
+                && (x as f32) < rect[0] + rect[2]
+                && (y as f32) >= rect[1]
+                && (y as f32) < rect[1] + rect[3]
+            {
+                slot = Some(index);
+                break;
             }
         }
         if let Some(slot) = slot {
@@ -4606,6 +4736,10 @@ impl Game {
         // Slides (150 Move with a duration tail) live on the same screen and advance
         // one frame at a time, so they are stepped with the fades rather than the VM.
         self.screen.advance();
+        // CE94 redraws its rows with the shipped full-width geometry; re-apply
+        // the reference column after every VM step so rendering and hit boxes
+        // stay on the same rectangles.
+        self.apply_save_grid_layout();
         // A `151 ChangeColor` ramp advances one frame at a time, alongside the picture
         // slides it shares the screen with.
         self.screen_tint.tick();
@@ -7741,5 +7875,28 @@ mod tests {
         let mut host = host(&mut game);
         assert_eq!(host.picture_state(12053, 0), Some(420));
         assert_eq!(host.picture_state(12053, 1), Some(33));
+    }
+
+    #[test]
+    fn the_prank_pose_area_frame_is_not_a_host_action_button() {
+        assert!(
+            !PICTURE_ACTION_CONTROLS
+                .iter()
+                .any(|(slot, _, _)| *slot == 1109),
+            "the whole pose/item bottom frame must not turn its empty item half \
+             into a pose click"
+        );
+        assert!(
+            PICTURE_ACTION_CONTROLS
+                .iter()
+                .any(|(slot, event, _)| *slot == 1110 && *event == 22),
+            "the real pose icon must still open event 22"
+        );
+        assert!(
+            PICTURE_ACTION_CONTROLS
+                .iter()
+                .any(|(slot, event, _)| *slot == 1117 && *event == 28),
+            "pose icon 02 must still open event 28"
+        );
     }
 }

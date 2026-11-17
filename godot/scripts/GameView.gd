@@ -11,7 +11,7 @@ extends Control
 const LOGICAL_SIZE := Vector2(1024.0, 576.0)
 ## The save-page notice sits above every game picture/text but below the pointer.
 const SAVE_NOTICE_Z := 99990
-const SAVE_NOTICE_RECT := Rect2(660.0, 8.0, 354.0, 56.0)
+const SAVE_NOTICE_RECT := Rect2(716.0, 96.0, 276.0, 216.0)
 ## Preferred UI faces on Windows.  Missing files are skipped, never assumed.
 const WINDOWS_FONT_BOLD := "C:/Windows/Fonts/msyhbd.ttc"
 const WINDOWS_FONT_REGULAR := "C:/Windows/Fonts/msyh.ttc"
@@ -44,7 +44,7 @@ const WolfKeysLib := preload("res://scripts/WolfKeys.gd")
 
 class _BlendBatch extends Node2D:
 	const LOGICAL_SIZE := Vector2(1024.0, 576.0)
-	const SAVE_NOTICE_RECT := Rect2(660.0, 8.0, 354.0, 56.0)
+	const SAVE_NOTICE_RECT := Rect2(716.0, 96.0, 276.0, 216.0)
 
 	var items: Array = []
 	var overlays: Array = []
@@ -112,20 +112,31 @@ class _BlendBatch extends Node2D:
 			)
 
 	func _draw_save_notice() -> void:
-		draw_rect(SAVE_NOTICE_RECT, Color(0.09, 0.09, 0.11, 0.94), true)
-		draw_rect(SAVE_NOTICE_RECT, Color(0.62, 0.72, 0.86, 0.85), false, 1.0)
-		_draw_notice_line("第一栏为自动存档所使用；第一栏已有存档数据时，", 12.0)
-		_draw_notice_line("请先读取该存档，再保存至合适位置。", 31.0)
+		draw_rect(SAVE_NOTICE_RECT, Color(0.07, 0.07, 0.09, 0.88), true)
+		draw_rect(SAVE_NOTICE_RECT, Color(0.78, 0.80, 0.84, 0.90), false, 1.0)
+		var lines := [
+			"烦请注意：",
+			"存档的第一栏",
+			"为自动存档所使用。",
+			"第一栏已有存档数据时，",
+			"请先读取该存档，",
+			"重新保存至合适位置。",
+		]
+		for index in range(lines.size()):
+			_draw_notice_line(lines[index], index)
 
-	func _draw_notice_line(text: String, y: float) -> void:
+	func _draw_notice_line(text: String, index: int) -> void:
 		WolfTextScript.draw_text(
 			self,
 			{
 				"text": text,
-				"rect": Rect2(Vector2(670.0, y), Vector2(334.0, 18.0)),
-				"font_px": 12.0,
+				"rect": Rect2(
+					SAVE_NOTICE_RECT.position + Vector2(16.0, 16.0 + float(index) * 30.0),
+					Vector2(SAVE_NOTICE_RECT.size.x - 32.0, 26.0)
+				),
+				"font_px": 18.0,
 				"weight": 400,
-				"colour": Color(0.86, 0.88, 0.92, 1.0),
+				"colour": Color(0.95, 0.95, 0.95, 1.0),
 				"alpha": 1.0,
 				"outline": true,
 			},
@@ -1258,21 +1269,32 @@ func _draw_action_points(ap: Dictionary) -> void:
 
 
 func _draw_save_notice() -> void:
-	draw_rect(SAVE_NOTICE_RECT, Color(0.09, 0.09, 0.11, 0.94), true)
-	draw_rect(SAVE_NOTICE_RECT, Color(0.62, 0.72, 0.86, 0.85), false, 1.0)
-	_draw_save_notice_line("第一栏为自动存档所使用；第一栏已有存档数据时，", 12.0)
-	_draw_save_notice_line("请先读取该存档，再保存至合适位置。", 31.0)
+	draw_rect(SAVE_NOTICE_RECT, Color(0.07, 0.07, 0.09, 0.88), true)
+	draw_rect(SAVE_NOTICE_RECT, Color(0.78, 0.80, 0.84, 0.90), false, 1.0)
+	var lines := [
+		"烦请注意：",
+		"存档的第一栏",
+		"为自动存档所使用。",
+		"第一栏已有存档数据时，",
+		"请先读取该存档，",
+		"重新保存至合适位置。",
+	]
+	for index in range(lines.size()):
+		_draw_save_notice_line(lines[index], index)
 
 
-func _draw_save_notice_line(text: String, y: float) -> void:
+func _draw_save_notice_line(text: String, index: int) -> void:
 	WolfTextScript.draw_text(
 		self,
 		{
 			"text": text,
-			"rect": Rect2(Vector2(670.0, y), Vector2(334.0, 18.0)),
-			"font_px": 12.0,
+			"rect": Rect2(
+				SAVE_NOTICE_RECT.position + Vector2(16.0, 16.0 + float(index) * 30.0),
+				Vector2(SAVE_NOTICE_RECT.size.x - 32.0, 26.0)
+			),
+			"font_px": 18.0,
 			"weight": 400,
-			"colour": Color(0.86, 0.88, 0.92, 1.0),
+			"colour": Color(0.95, 0.95, 0.95, 1.0),
 			"alpha": 1.0,
 			"outline": true,
 		},

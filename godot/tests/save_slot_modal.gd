@@ -20,8 +20,8 @@ extends SceneTree
 
 const WolfKeys := preload("res://scripts/WolfKeys.gd")
 const TITLE_CHOICES := ["menu1", "menu2", "menu3"]
-## The middle of the first slot panel: x 48, y 86, 928 x 115.
-const SLOT_ONE := Vector2(512, 143)
+## The middle of the first slot panel: x 48, y 84, 636 x 112.
+const SLOT_ONE := Vector2(366, 140)
 
 var view: Control
 var data_root := ""

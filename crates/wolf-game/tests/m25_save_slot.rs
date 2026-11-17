@@ -14,9 +14,13 @@
 //! snapshot the whole Save directory first and restore it afterwards.
 
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use wolf_game::Game;
 use wolf_save::SaveFile;
+
+/// Serializes the two tests that snapshot and rewrite the same shipped save.
+static SAVE_LOCK: Mutex<()> = Mutex::new(());
 
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/Data".to_owned());
@@ -76,8 +80,104 @@ fn the_grid_names_the_slot_under_the_pointer() {
     let hit = game.save_slot_at(x, y).expect("the pointer is over a slot");
     assert_eq!(hit.slot, 3, "the third row of the first page is slot three");
     assert_eq!(hit.path, save_file(3), "slot three is Save/SaveData03.sav");
-    assert!(!hit.occupied, "the shipped data root has no slot three");
+    assert_eq!(
+        hit.occupied,
+        save_file(3).is_file(),
+        "occupancy must follow the file that is actually there"
+    );
     assert!(!hit.loading, "the in-game grid writes saves");
+}
+
+#[test]
+fn the_grid_uses_the_reference_left_column_layout() {
+    let Some(mut game) = grid() else { return };
+    for row in 0..4 {
+        let rect = {
+            let screen = &game.screen;
+            let assets = &mut game.assets;
+            screen
+                .picture_rect(12050 + 20 * row, |file| assets.texture_size(file))
+                .unwrap_or_else(|| panic!("row {row} panel"))
+        };
+        assert_eq!(
+            rect,
+            [48.0, 84.0 + row as f32 * 116.0, 636.0, 112.0],
+            "row {row} must stay in the left column"
+        );
+    }
+
+    assert!(
+        game.save_slot_at(700, 140).is_none(),
+        "the old full-width right half is now the notice panel, not a slot"
+    );
+    let hit = game
+        .save_slot_at(366, 84 + 3 * 116 + 56)
+        .expect("the fourth row is still clickable");
+    assert_eq!(hit.slot, 4);
+}
+
+#[test]
+fn the_slot_text_is_split_into_label_playtime_and_one_summary_line() {
+    let Some(game) = grid() else { return };
+    let label = slot_text(&game, 12052);
+    assert!(label.contains("数据 1 自动存档"), "slot label: {label:?}");
+
+    let playtime = slot_text(&game, 12053);
+    assert!(
+        playtime
+            .trim()
+            .chars()
+            .all(|ch| ch.is_ascii_digit() || ch == ':'),
+        "playtime must be only H:MM: {playtime:?}"
+    );
+    assert!(
+        playtime.contains(':'),
+        "playtime needs the clock separator: {playtime:?}"
+    );
+
+    let summary = slot_text(&game, 12055);
+    assert!(summary.contains('天'), "summary day missing: {summary:?}");
+    assert!(
+        summary.contains("熊头"),
+        "summary must carry the brother name: {summary:?}"
+    );
+    assert!(
+        summary.contains("学生"),
+        "summary must carry the CE242 job suffix: {summary:?}"
+    );
+    assert!(
+        !summary.contains("NORMAL"),
+        "the reference layout drops the difficulty line: {summary:?}"
+    );
+
+    let quads = game.text_quads();
+    let rect = |number: i32| {
+        quads
+            .iter()
+            .find(|quad| quad.number == number)
+            .map(|quad| quad.rect)
+            .unwrap_or_else(|| panic!("missing text quad {number}"))
+    };
+    let label_rect = rect(12052);
+    let playtime_rect = rect(12053);
+    let summary_rect = rect(12055);
+    assert!(
+        (label_rect[0] - 70.0).abs() < 2.0,
+        "label starts at slot x+22: {label_rect:?}"
+    );
+    assert!(
+        (playtime_rect[0] - 76.0).abs() < 2.0,
+        "playtime starts at slot x+28: {playtime_rect:?}"
+    );
+    assert!(
+        (summary_rect[0] - 288.0).abs() < 2.0,
+        "summary starts at slot x+240: {summary_rect:?}"
+    );
+    assert!(
+        label_rect[1] < playtime_rect[1] && playtime_rect[1] < summary_rect[1] + 2.0,
+        "label/playtime/summary must occupy top, lower-left and right rows: \
+         {label_rect:?} {playtime_rect:?} {summary_rect:?}"
+    );
 }
 
 /// A point outside every panel belongs to no slot.
@@ -130,8 +230,8 @@ fn the_keyboard_cursor_reports_the_same_slot_and_its_row_centre() {
     assert_eq!(hit.slot, 1, "CE131 opens on the first row");
     assert_eq!(
         hit.center,
-        [(48.0 + 928.0 * 0.5) as i32, (86.0 + 115.0 * 0.5) as i32],
-        "the first row centre is the click a keyboard save replays"
+        [(48.0 + 636.0 * 0.5) as i32, (84.0 + 112.0 * 0.5) as i32],
+        "the first row centre follows the reference left-column layout"
     );
     assert!(game.in_submenu(), "the save grid is a secondary screen");
 }
@@ -156,21 +256,25 @@ fn slot_one_is_labelled_auto_save_and_the_row_shows_the_save_summary() {
 
     let bytes = std::fs::read(save_file(1)).expect("slot 1 save");
     let save = SaveFile::parse(&bytes).expect("parse slot 1");
-    let detail = slot_text(&game, 12053);
+    let playtime = slot_text(&game, 12053);
     let day = save.normal_var(99).unwrap_or(0);
     let hour = save.normal_var(4).unwrap_or(0);
     let minute = save.normal_var(5).unwrap_or(0);
     assert!(
-        detail.contains(&format!("{day}天")),
-        "summary day missing: {detail:?}"
+        !playtime.contains('天'),
+        "the lower-left row is playtime only: {playtime:?}"
+    );
+    let summary = slot_text(&game, 12055);
+    assert!(
+        summary.contains(&format!("{day}天")),
+        "summary day missing: {summary:?}"
     );
     assert!(
-        detail.contains(&format!("{hour:02}:{minute:02}")),
-        "summary clock missing: {detail:?}"
+        summary.contains(&format!("{hour:02}:{minute:02}")),
+        "summary clock missing: {summary:?}"
     );
-    let title = slot_text(&game, 12055);
     assert!(
-        !title.trim().is_empty(),
+        summary.contains("熊头") && summary.contains("学生"),
         "the slot still shows the brother title"
     );
 }
@@ -268,12 +372,16 @@ fn a_missing_file_is_not_queued() {
 
 /// Restores the Save directory after the auto-save tests touched it.
 struct SaveGuard {
+    _lock: MutexGuard<'static, ()>,
     dir: PathBuf,
     baseline: Vec<(String, Vec<u8>)>,
 }
 
 impl SaveGuard {
     fn new() -> Option<SaveGuard> {
+        let lock = SAVE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let dir = data_root().join("Save");
         let mut baseline = Vec::new();
         for entry in std::fs::read_dir(&dir).ok()?.flatten() {
@@ -283,7 +391,11 @@ impl SaveGuard {
             }
         }
         baseline.sort();
-        Some(SaveGuard { dir, baseline })
+        Some(SaveGuard {
+            _lock: lock,
+            dir,
+            baseline,
+        })
     }
 }
 
