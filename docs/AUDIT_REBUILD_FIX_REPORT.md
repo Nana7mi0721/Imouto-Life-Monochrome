@@ -2,7 +2,7 @@
 
 > 日期：2026-11-13  
 > 工作区：`E:\Study\github program\Imouto Life`，代码提交 `b2b6998`（已 push `origin/master`；文档补记见后续提交）
-> 依据：`docs/HANDOFF_T12_PATCH_AND_LEDGER.md`、`docs/imouto_life_rebuild_fixes_and_full_audit.md`
+> 依据：`docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md`、`docs/archive/reviews/imouto_life_rebuild_fixes_and_full_audit.md`
 
 ---
 
@@ -138,7 +138,7 @@
 | `crates/wolf-game/tests/m3_mouse_menu.rs` | 审计 | 失活选项回收回归 |
 | `godot/scripts/GameView.gd` | 审计 | 行动力条样式、音频缓存上限、键位缓存 |
 | `godot/scripts/WolfText.gd` | 审计 | `TextParagraph` 缓存 |
-| `docs/HANDOFF_T12_PATCH_AND_LEDGER.md` | T12 | 归因、修复与验证台账 |
+| `docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md` | T12 | 归因、修复与验证台账 |
 | `docs/HANDOFF_PROGRESS.md` / `docs/HANDOFF_M0.md` | 两轮 | 进度与当前状态 |
 
 ---

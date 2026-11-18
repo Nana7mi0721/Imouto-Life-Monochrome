@@ -1,8 +1,20 @@
 # 文档索引（docs/README.md）
 
 本文件是《妹！生活 ～単色～》Rust 重写的**唯一文档地图**。按用途分组：
-交接 → 基线 → 里程碑 → M3 专题审计 → 引擎行为与逆向 → 调研资料 → 翻译 → 参考实现 → 工具与工作区。
-标「历史」的文档只作证据链保留，**当前事实以「现行」条目为准**。
+交接 → 基线 → 里程碑 → M3 专题审计 → 引擎行为与逆向 → 审查与修复 → 调研资料 →
+翻译 → 参考实现 → 工具与工作区 → 归档。
+
+## 0. 状态约定
+
+| 标签 | 含义 |
+|---|---|
+| **现行** | 内容代表当前工程事实，可以直接引用 |
+| **现行 · 先读** | 现行且应当优先阅读的入口文档 |
+| **现行 · 证据** | 现行的事实来源（实测 / 反编译），数字可直接引用 |
+| **历史 · 非事实源** | 只作背景与证据链，**不得**从中抄数字或行号 |
+| **已归档** | 已被取代，移入 `docs/archive/`，登记表见 [archive/README.md](archive/README.md) |
+
+标「历史」「已归档」的文档只作证据链保留，**当前事实以「现行」条目为准**。
 
 ## 1. 交接与工程约定（先读）
 
@@ -21,21 +33,50 @@
 | [reviews/CODE_REVIEW_4ROUND.md](reviews/CODE_REVIEW_4ROUND.md) | **现行 · 唯一审查事实源** | 第一至四轮完整审查（2026-11）：报告 §六基线 BUG-20..24（与 `HANDOFF_PROGRESS.md` 旧台账同号不同义）、第一轮 BUG-25..35、第二轮 BUG-36..40、第三轮 BUG-41..46、第四轮 BUG-47..48 + 架构建议 |
 | [HANDOFF_DEEP_REVIEW_FIX.md](HANDOFF_DEEP_REVIEW_FIX.md) | **现行 · 完成交接** | BUG-25..48 的 T0–T11 完成状态、实施细节、官方手册/反编译语义证据、最终验证结果；历史中断快照保留 |
 | [TASKS_REMAINING_BUGS.md](TASKS_REMAINING_BUGS.md) | **现行 · 执行完成** | 原 T0–T12 任务卡与写作用域；§0 为 2026-11-12 完成状态（含 T12 性能/旧编号复核），§1 起为历史编排快照 |
-| [HANDOFF_T12_PATCH_AND_LEDGER.md](HANDOFF_T12_PATCH_AND_LEDGER.md) | 存档 · 2026-11-13 会话 | T12 性能路径审查结论、`alpha_bounds` 记忆化与 `install_map` 清扫补丁、`m16` 双台账收口、`m14` 两场景既有红（含 A/B 归因与基线对照表） |
+| [archive/HANDOFF_T12_PATCH_AND_LEDGER.md](archive/HANDOFF_T12_PATCH_AND_LEDGER.md) | 已归档 · 2026-11-13 会话 | T12 性能路径审查结论、`alpha_bounds` 记忆化与 `install_map` 清扫补丁、`m16` 双台账收口、`m14` 两场景既有红（含 A/B 归因与基线对照表） |
 | [AUDIT_REBUILD_FIX_REPORT.md](AUDIT_REBUILD_FIX_REPORT.md) | 现行 · 两轮汇总 | T12 收口 + 审计轮：截图 6 项、RNG/缓存/键位/文本塑形落地、验证数字、未处理项与环境坑 |
 | [GEMINI_REVIEW_1c76dcc_FIX_REPORT.md](GEMINI_REVIEW_1c76dcc_FIX_REPORT.md) | 现行 · 第三轮 | Gemini `1c76dcc` 全量审查处理：人名牌缓存 P1、行动力三位数右对齐、`1a9fafe` 两条闭环核对、测试与遗留项 |
 | [reviews/README.md](reviews/README.md) | 现行 · 导读 | 审查轮次/缺陷编号对照、阅读注意、报告命名规则 |
 | [GEMINI_FULL_AUDIT_GUIDE.md](GEMINI_FULL_AUDIT_GUIDE.md) | 现行 · 云端审查任务书 | Gemini 只读全量审查：云端数据边界、需求闭环矩阵、正确性/性能/死代码/素材封包检查、证据等级与交付格式 |
 | [AUDIT_2411996_FIX_REPORT.md](AUDIT_2411996_FIX_REPORT.md) | 现行 · 全量审查修复 | `2411996` 审查处置：F-01 误报、Godot 导出、checksum 警告、发行包纯档、动作键门控/移动区间/资源缓存 |
+| [reviews/T13_UI_REGRESSION_AUDIT.md](reviews/T13_UI_REGRESSION_AUDIT.md) | 现行 · UI 专项 | 2026-11-12 用户 15 项截图缺陷逐项复核；91 passed / 2 ignored，中央对话双源仍开放 |
+| [REVIEW_9a817e4_FIX_REPORT.md](REVIEW_9a817e4_FIX_REPORT.md) | 现行 · 复审修复 | `code_review_9a817e4.md`（`1c76dcc..9a817e4`）核实与修复：名牌缓存、格子条对齐、夜间点击热区 |
+| [LIVE_PLAY_FIX_REPORT.md](LIVE_PLAY_FIX_REPORT.md) | 现行 · 实机修复 | 实机 11 项断言（`live_play_issues_and_fixes_report.md`）剩余项修复：开场取消穿透、窗口图标、音频 cell |
+| [M25_LIVE_UX.md](M25_LIVE_UX.md) | 现行 · 实机 UX | M25 四项收口：live RNG / 光标 / 睡姿热区 / 存读档 |
 | [archive/README.md](archive/README.md) | 归档 · 索引 | 归档规则与全部归档项（旧交接、旧审查报告） |
 | [archive/HANDOFF_NEXT_AGENT.md](archive/HANDOFF_NEXT_AGENT.md) | 已归档 · 已完成 | 2026-11-11 POST_DEEPSEEK 19 项修复交接（BUG-02 闭环），仅作追溯 |
 | [archive/reviews/CODE_REVIEW_1_2ROUND_superseded.md](archive/reviews/CODE_REVIEW_1_2ROUND_superseded.md) | 已归档 · 被取代 | 第一、二轮审查单行本（BUG-25..40）；内容已并入现行四轮总报告 |
+
+### 1.2 云端只读审查轮次
+
+云端复审按轮次出报告，**同一时间只保留最新一轮为现行**，更早的轮次进 `docs/archive/reviews/`。
+
+| 轮次 | 位置 | 状态 | 基线与内容 |
+|---|---|---|---|
+| 2026-11-18 | [reviews/cloud_audit_2026-11-18_e716f08/](reviews/cloud_audit_2026-11-18_e716f08/) | **现行 · 最新** | 基线 `e716f08`；目前只交付了执行摘要（分册说明见 [reviews/README.md](reviews/README.md)） |
+| 2026-11-17 | [archive/reviews/cloud_audit_2026-11-17_2411996/](archive/reviews/cloud_audit_2026-11-17_2411996/) | 已归档 · 被取代 | 基线 `2411996`；10 份完整分册，处置结果见 [AUDIT_2411996_FIX_REPORT.md](AUDIT_2411996_FIX_REPORT.md) |
+
+> **编号体系警告**：云端轮次报告用 `F-xx` 编号，与
+> [reviews/CODE_REVIEW_4ROUND.md](reviews/CODE_REVIEW_4ROUND.md) 的 `BUG-20..48` 台账
+> **不是同一套**。引用时必须写明出处（轮次 + 编号），不要把 `F-07` 当成 `BUG-07`。
+
+### 1.3 归档区
+
+归档件**统一登记在 [archive/README.md](archive/README.md)**（文件 / 归档原因 / 现行替代 三列），
+本索引不重复列举。两类来源：
+
+| 归档族 | 内容 |
+|---|---|
+| `docs/archive/*.md` | 已被取代的会话存档与诊断报告（交接类、T12 轮报告、UI 诊断） |
+| `docs/archive/reviews/*` | 已被取代的审查报告与**成组的云端审查产物**（按轮次建目录） |
+
+归档不等于删除：内容保留作证据链，但其中的数字、行号、结论**不再代表当前工程事实**。
 
 ## 2. 基线
 
 | 文件 | 状态 | 内容 |
 |---|---|---|
-| [BASELINE.json](BASELINE.json) | 现行 | 本作自己的 `wolf-cli verify` 期望值（25 个 Game.dat 参数、350 公共事件、地图事件、tileset/文件版本、1,361 条 archive） |
+| [BASELINE.json](BASELINE.json) | 现行 | 本作自己的 `wolf-cli verify` 期望值：`game_dat` **9 个分组**（strings / u8 / u16 设置 / 字体 / 两张随机表 / 页脚 / 版本头）、`common_events` 350 个公共事件、地图事件与 tileset、14 项文件版本、1,361 条 archive |
 | [REFERENCE.md](REFERENCE.md) | 现行 | 日文原版路径、攻略链接、10 张实机截图目录、存档样本 |
 
 ## 3. 里程碑说明
@@ -79,13 +120,24 @@
 
 | 文件 | 状态 | 内容 |
 |---|---|---|
-| [ENGINE_BEHAVIOR.md](ENGINE_BEHAVIOR.md) | **现行 · 引擎规范** | 六类核心行为（九宫格/文本度量与换行/选择面板/1-10 UI 缩放/过渡/叠色）+ §3 十二项常量与落地状态 |
+| [ENGINE_BEHAVIOR.md](ENGINE_BEHAVIOR.md) | **现行 · 引擎规范** | 六类核心行为（九宫格/文本度量与换行/选择面板/1-10 UI 缩放/过渡/叠色）+ §3 十二项常量与落地状态 + **§3.5 开放项清单（OPEN-01..11）** |
 | [RE_GAME_EXE.md](RE_GAME_EXE.md) | 现行 · 逆向方法 | 工具链（Ghidra 12.2 + JDK 25）、二进制身份、函数地图、可复现步骤与坑 |
 | [re/RUNTIME_CONSTANTS.md](re/RUNTIME_CONSTANTS.md) | 现行 · 证据 | 帧率/窗口/present 后端/皮肤/过渡掩膜几何 |
 | [re/TEXT_METRICS.md](re/TEXT_METRICS.md) | 现行 · 证据 | 行距公式、禁则（原版无）、打字机累加水位 |
 | [re/LAYOUT_METRICS.md](re/LAYOUT_METRICS.md) | 现行 · 证据 | 坐标取整、默认原点、九宫格、极小盒、102 面板全链、超宽选项；§9 落地记录 |
 | [re/TRANSITION.md](re/TRANSITION.md) | 现行 · 证据 | 过渡掩膜几何、溶解语义、tint×fade 顺序；§5 落地前后对照 |
 | [re/SCREENSHOT_METRICS.md](re/SCREENSHOT_METRICS.md) | 现行 · 实机 | 实机截图标定：消息行距 23、选择支行距 27、面板 156×114 / 162×141、内缩 8 |
+| [re/EVENT_REACHABILITY.md](re/EVENT_REACHABILITY.md) | 现行 · 证据 | 事件可达性静态分析：入口条件 → 触发点 → 实际可达集合 |
+| [re/README.md](re/README.md) | 现行 · 证据层导读 | 逆向与实机证据层索引：6 篇的取证方法（只读 Ghidra dump / 数据解析 / 实机度量）、与 `ENGINE_BEHAVIOR.md` §3 条目的对应、置信度口径与阅读注意 |
+
+### 5.1 opcode 契约（逐指令语义）
+
+> 这一组是**单个字节码指令的语义契约**，写实现前先查这里，不要凭反编译片段猜。
+
+| 文件 | 状态 | 内容 |
+|---|---|---|
+| [OPCODE_122.md](OPCODE_122.md) | 现行 · 契约 | Opcode 122 SetString 变量字符串操作：第二操作数语义、模式位掩码（`0xFF00` vs `0xFFF0`）、与「代入先を変数で指定」标志的区分 |
+| [OPCODE_220_SAVE.md](OPCODE_220_SAVE.md) | 现行 · 契约 | Opcodes 220 / 221 / 222 存档访问：三者线格式相同但语义不同，存档编号与路径解析 |
 
 ## 6. 调研与实证（历史背景，不是当前事实源）
 
@@ -93,9 +145,21 @@
 |---|---|
 | [research/README.md](research/README.md) | 调研目录说明 |
 | [research/M7_PRNG.md](research/M7_PRNG.md) | PRNG 实证（M3 已落地） |
-| [research/gpt-reports/](research/gpt-reports/) | M0 之前的 6 份 GPT 深度调研报告 + 前置问题组 `GPT_RESEARCH_GROUPS.md`；**采信/推翻清单以 HANDOFF §7 为准** |
+| [research/gpt-reports/](research/gpt-reports/) | 历史 · 非事实源 | M0 之前的 6 份 GPT 深度调研报告 + 前置问题组 `GPT_RESEARCH_GROUPS.md`；**采信/推翻清单以 HANDOFF §7 为准**。逐篇对照见下表 |
 | [攻略文档/](攻略文档/) | 第三方攻略与资料（gitignore，不提交；仅本地参考，非事实源） |
 | 相关链接.txt | 外部链接汇总（gitignore，不提交） |
+
+**gpt-reports 逐篇对照**（**文件名里的 `(1)`…`(5)` 是下载批次序号，不代表问题组编号**）
+
+| 文件 | 问题组 | 主题 |
+|---|---|---|
+| [GPT_RESEARCH_GROUPS.md](research/gpt-reports/GPT_RESEARCH_GROUPS.md) | 前置 | 6 个问题组的提问原文；每组规定固定 7 段报告格式与「事实 / 推测」分界规则 |
+| [deep-research-report (4).md](<research/gpt-reports/deep-research-report (4).md>) | 第 1 组 | 日常循环与时间/日程/行动力：主角四种身份、行动力上限与消耗、时间段划分 |
+| [deep-research-report (5).md](<research/gpt-reports/deep-research-report (5).md>) | 第 2 组 | 妹妹状态与人际数值：状态面板字段、警戒度与性興味、阈值事件、状态图标 |
+| [deep-research-report (2).md](<research/gpt-reports/deep-research-report (2).md>) | 第 3 组 | H 场景系统、相册与结局：场景分类与进入条件、操作方式、结局数量 |
+| [deep-research-report (3).md](<research/gpt-reports/deep-research-report (3).md>) | 第 4 组 | UI、操作、设置与存档：按键与引擎行为，以及公开资料查不到的项清单 |
+| [deep-research-report (1).md](<research/gpt-reports/deep-research-report (1).md>) | 第 5 组 | WOLF RPG Editor 2.00 世代引擎事实：版本发布时间线、「基本システム Ver2.20」模板、2.00 命令语义变更、官方手册术语 |
+| [deep-research-report.md](research/gpt-reports/deep-research-report.md) | 第 6 组 | 版本谱系与中文化：正式名与发售、1.0→2.03 履历、汉化来源、Steam 版、与续作沿革 |
 
 ## 6.1 攻略与事件逻辑检查（用户资料向，未入库）
 
@@ -135,7 +199,15 @@
 
 | 文档 | 内容 |
 |---|---|
+| [攻略/README.md](攻略/README.md) | 资料集（百科层）目录导读：九册制清单、S/T/G/U 证据分级定义、与 `docs/guide/` 的分工对照、版本口径与「社区攻略仅作 G 级交叉验证」约定 |
 | [攻略/妹生活_资料集/00_总索引.md](攻略/妹生活_资料集/00_总索引.md) | 九册制百科总索引（按《资料集通用编写要求》编写）：01 系统与数值 / 02 物品 / 03 事件 / 04 角色 / 05 日程与结局 / 06 收集与CG / 99 内部ID与校验附录；全量剧透、S/T/G/U 证据分级、成人内容中性技术表述；本作无战斗/迷宫/DLC 故不设战斗册。数字来源同定稿 01–12，与 guide 正文互补（百科查表 vs 叙述攻略） |
+| [攻略/妹生活_资料集/01_系统与数值.md](攻略/妹生活_资料集/01_系统与数值.md) | 系统数值百科：时间轴、行动力/精力/金钱、妹妹与哥哥五维数值模型、心情/睡眠/兴奋/敏感档位、开局问答、4 职业与 17 称号 |
+| [攻略/妹生活_资料集/02_物品.md](攻略/妹生活_资料集/02_物品.md) | 物品百科：全部商品（茶饮/食品/药品/避孕/健身/安眠/游戏/情趣用品）的价格、效果、获取方式、上限；价格取 `CE250`/`CE245` 字面量 |
+| [攻略/妹生活_资料集/03_事件.md](攻略/妹生活_资料集/03_事件.md) | 事件百科：平日/周末/晚餐/夜间/浴室/厕所/就寝/早晨的日常行动逐条，含进入条件、结果增量与随机分支；优先标 `CE212..303` / `ev N` |
+| [攻略/妹生活_资料集/04_角色.md](攻略/妹生活_资料集/04_角色.md) | 角色数值模型：本作只有妹妹与哥哥（玩家）两名可交互角色 + 商店街 NPC 群像（无数值）；状态机与面板/统计含义；系列通用的「角色与队友」养成体系在本作不存在 |
+| [攻略/妹生活_资料集/05_日程与结局.md](攻略/妹生活_资料集/05_日程与结局.md) | 一日循环结构、周循环、节日日程（非固定公历）与全部结局判定链 |
+| [攻略/妹生活_资料集/06_收集与CG.md](攻略/妹生活_资料集/06_收集与CG.md) | 内裤收集 20 格、相册 16 个 `album_000..015` 资产（15 解锁格 + 背景框）、CG 29 条一览与结局演出 |
+| [攻略/妹生活_资料集/99_内部ID与校验附录.md](攻略/妹生活_资料集/99_内部ID与校验附录.md) | 回查锚点：变量总表、CE/地图事件索引、脚本坐标、证据分级定义、U 项汇总与数据源；全册数值可回指到本册 |
 
 > 口径与数字来源：`00_说明与口径.md` 为现行写作口径；**正文出现的每个数值都应能回指到 `数据定稿/01–12` 某表某行**；
 > 当前订正/U 状态源 = `05_冲突与待验证.md`（14 处订正 / 34 项 U）；一手 S 级中间数据在 `work/out/`（gitignored，51 份产物）。
@@ -168,7 +240,10 @@
 | 位置 | 说明 |
 |---|---|
 | `tools/env.sh` / `env.ps1` / `setpath.ps1` | 环境（含 `GHIDRA_INSTALL_DIR`/`GHIDRA_JAVA_HOME`） |
-| `tools/package.sh` / `package.ps1` / `package/` | 打包脚本与模板 |
+| `tools/package.sh` / `package.ps1` / `package/` | 打包脚本与模板（NSIS 安装器：`package/ImoutoLife.nsi.in` + `package/render_nsis.py`） |
+| [../tools/pack_gemini_review.py](../tools/pack_gemini_review.py) | 云端 Gemini 只读审查打包器：切 ≤16 MB 单包 + 附审查说明与 sha256 清单 |
+| [../tools/pack_review_bundle.py](../tools/pack_review_bundle.py) | 云端沙箱**可构建**包打包器：额外带 `work/Data` 与离线依赖树 |
+| [../tools/split_review_bundle.py](../tools/split_review_bundle.py) | 沙箱包按 9 MB 分片并生成还原脚本 |
 | [../tools/re/wolfpe.py](../tools/re/wolfpe.py) | 只读 PE 探针（facts/strings/xref/disasm） |
 | [../tools/re/ghidra/README.md](../tools/re/ghidra/README.md) | Ghidra headless 反编译脚本（DumpAll/DumpByAnchor） |
 | `work/Data` | 解包后的本作数据，176 MB，**gitignore**，测试必需 |
@@ -182,9 +257,11 @@
 以下路径在**代码注释**里被引用，但本仓库没有对应文件（沿用上一作仓库的文档名，未随仓库复制过来）。
 新会话不要以为它们存在；需要时从上一作仓库取，或按 [ENGINE_BEHAVIOR.md](ENGINE_BEHAVIOR.md) 重写：
 
-`ARCHITECTURE.md`、`OPCODE_SPEC.md`、`OPCODE_101/102/112/124/210_RETURN/220_SAVE/250/290.md`、
+`ARCHITECTURE.md`、`OPCODE_SPEC.md`、`OPCODE_101/102/112/124/210_RETURN/250/290.md`、
 `FORMAT_SPEC.md`、`SAVE_SPEC.md`、`TEXT_SPEC.md`、`BATTLE.md`、`HSCENE.md`、`ENGINE_EVENTS.md`、
 `MAP_AUDIT.md`、`ASSET_AUDIT.md`、`AUDIO.md`、`M1_CLOSURE.md`、`HANDOFF_M3.md`、`HANDOFF_M4.md`、`PLAN.md`、`UNVERIFIED.md`。
+
+> 已有对应实现说明的：`OPCODE_220_SAVE.md` → 见 §5.1；`OPCODE_122.md` → 见 §5.1。
 
 ## 11. 文档维护规则
 
@@ -193,6 +270,15 @@
   在 [archive/README.md](archive/README.md) 登记原因与替代文档，并更新本索引。
 - 现行代码审查报告统一放 `docs/reviews/`，同一时间只保留一份现行总报告；
   新报告须在 [reviews/README.md](reviews/README.md) 标注轮次与缺陷编号范围。
+- 云端只读复审按轮次成目录 `docs/reviews/cloud_audit_<日期>_<基线>/`；
+  **最新一轮留在 `docs/reviews/`，更早的整轮移入 `docs/archive/reviews/`**，
+  归档时在文件顶部加「归档说明」块，不改写原始记录。
 - 会改变玩家可见行为或 verify 数值的改动：同时更新 [HANDOFF_M0.md](HANDOFF_M0.md) §11.1、
   [HANDOFF_PROGRESS.md](HANDOFF_PROGRESS.md) 末尾新增一条，以及本索引对应条目状态。
 - 反编译/实测证据进 `docs/re/`；调研背景进 `docs/research/`；两者都不与规范文档混放。
+- 攻略正文与资料层（`docs/guide/`、`docs/攻略/`）自成一格，内部互链，**不与工程规范混放**；
+  `docs/攻略文档/` 是本地私有目录（gitignore），不得作为事实源引用。
+- **本索引必须覆盖仓库里每一份 `.md`**（零孤儿）：新增文档要在此登记，
+  移走的要更新链接；改完跑一次链接体检，确认无断链。
+- **审查产物不进仓库根**：云端审查报告、只读复审产物一律落到 `docs/reviews/` 或
+  `docs/archive/reviews/`；仓库根只保留 `README.md`、`AGENTS.md` 等入口文件。

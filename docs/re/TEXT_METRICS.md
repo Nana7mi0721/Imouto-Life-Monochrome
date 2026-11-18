@@ -51,7 +51,7 @@
    ```
 
    即 **额外行距 = 行距配置 × min(基准字号, 32) / 32 × S**（`>>5` 是算术右移 5，配 `+ (x>>31 & 31)` 的向零取整）。
-   第二分支 `:489-525`（`param_1[0xe0] != 0`）改用 `*DAT_00a166a4`，公式相同。**[推断]** 这两个配置分别对应 `Game.dat` u8[11]=`text_line_spacing`=6 与 u8[12]=`choice_line_spacing`=14（仓内 `gamedat.rs:272,278` 的命名），但哪条指针指向哪个字段尚未在 dump 里闭合。
+   第二分支 `:489-525`（`param_1[0xe0] != 0`）改用 `*DAT_00a166a4`，公式相同。**[推断]** 这两个配置分别对应 `Game.dat` u8[11]=`text_line_spacing`=6 与 u8[12]=`choice_line_spacing`=14（仓内 `wolf-format/src/gamedat.rs（行距与基准字号读取）` 的命名），但哪条指针指向哪个字段尚未在 dump 里闭合。
 
 **合并结论**：
 
@@ -60,11 +60,11 @@ line_pitch = max_font_on_line * S + trunc(line_spacing_cfg * min(base_font_cfg, 
 ```
 
 - 行距**比例项只跟“基准字号配置”挂钩，不跟当前行的字号挂钩**。行内 `\f[40]` 放大只抬高基础步进（本行最大字号），不抬高那 6 px。
-- 本作 `Game.dat`：u8[11] = **6**（仓内 `gamedat.rs:272 text_line_spacing`），u8[0] = **16**（基准字号候选，见 §0.1）。
+- 本作 `Game.dat`：u8[11] = **6**（仓内 `wolf-format/src/gamedat.rs（行距读取） text_line_spacing`），u8[0] = **16**（基准字号候选，见 §0.1）。
 
 ### 仓内实现
 
-`crates/wolf-game/src/message.rs:43` `LINE_GAP=6.0`；`:122-124` `line_height(font) = font + 6`；
+`crates/wolf-game/src/message.rs::DEFAULT_FONT_PX` `LINE_GAP=6.0`；`:122-124` `line_height(font) = font + 6`；
 `:318` / `:584` 每行 `y += line_height(该行最高字号)`。
 
 ### 差异
@@ -109,7 +109,7 @@ line_pitch = max_font_on_line * S + trunc(line_spacing_cfg * min(base_font_cfg, 
 
 ### 仓内实现
 
-`crates/wolf-game/src/message.rs:288-309` `wrap()`：逐字符累计 `choice::advance_at(ch, font_px)`，超宽即断；断点若是空格则丢弃。**无禁则**。
+`crates/wolf-game/src/message.rs::wrap()` `wrap()`：逐字符累计 `choice::advance_at(ch, font_px)`，超宽即断；断点若是空格则丢弃。**无禁则**。
 
 ### 差异
 
@@ -178,7 +178,7 @@ if (p+0xe8 > 0) p+0xe8 -= DAT_0084b244;      // 计数以“帧片”为单位
 
 ### 仓内实现
 
-`crates/wolf-game/src/message.rs:268-279`：
+`crates/wolf-game/src/message.rs::revealed()`：
 
 ```
 if cps <= 0 { None }

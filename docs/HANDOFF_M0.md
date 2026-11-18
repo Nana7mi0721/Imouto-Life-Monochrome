@@ -263,16 +263,99 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-18）
 
+* **2026-11-18 媒体只读包与高 DPI 小图标（当前状态）**：正式 `Data/` 已从
+  747 个明文文件收口为 **17 个文件**：15 个明文清单文件 +
+  `Save/System.sav` + `Data/media.pak`。7 个媒体前缀共 **731 个文件 /
+  113,002,329 B** 进入 113,038,832 B 的只读包；文件体按绝对 offset 使用固定
+  seed 的 splitmix64 XOR 流混淆，索引也混淆并带 CRC-32。`BasicData/`、
+  `MapData/`、`Save/` 与字体保持明文；资源查找优先级仍为
+  **Mod overlay 散文件 > 基础目录散文件 > `media.pak`**，Godot 音频通过
+  `wolf.read_media()` 从同一查找链读取后交给内存解码。Windows 运行时
+  标题栏覆盖使用 6 张 16/20/24/32/40/48 px PNG，全部由
+  `inusuku` 的 256 px 头像裁切直接做 LANCZOS 缩小，不重绘任何形状；
+  程序/安装器/任务栏图标则全部来自 `icon_windows.png`。运行时用
+  `GetDpiForWindow` + `GetSystemMetricsForDpi(SM_CXSMICON)` 选择精确尺寸，
+  `window_icon.ico` 与 `tools/package/icon_windows.ico` 的
+  16/20/24/32/40/48/64/128/256 九帧全部来自 `icon_windows.png`，
+  inusuku 裁切不得进入程序或安装器图标。发行 Data 的精确冒烟（只留 `media.pak`，
+  无任何松散媒体目录）为 `pictures=4 sprites=4 texts=0`；包内
+  `checksums.txt` 21 项全通过。
+  当前正式产物：`Setup.exe` **148,083,098 B** / SHA-256
+  `aa1bcda54bd5bd71e526cebb3ea9011a2179cc8c42280f65fa4dca67bdbe3591`；
+  `Setup.zip` **159,788,921 B** / SHA-256
+  `fe4dea402cc29b5784bdaa2984ec021be332a93d48eb4164ba5710e4e9d088a4`。
+  安装版/便携版均已复制到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`。
+
+* **2026-11-18 文档全面整理（当前状态）**：仓库文档从「散落 + 索引失真」整理为
+  **零断链 / 零孤儿** 的结构。① 根目录散落的 `review/`（16 份云端审查产物）与
+  `00_executive_summary.md` 归位：11-17 轮（基线 `2411996`）整组进
+  `docs/archive/reviews/cloud_audit_2026-11-17_2411996/`，11-18 轮（基线 `e716f08`）
+  进 `docs/reviews/cloud_audit_2026-11-18_e716f08/`；`review/` 目录已删除，
+  仓库根只剩 `README.md` 与 `AGENTS.md`。② `docs/` 根目录 7 份被取代文档
+  （`Full Code Review 1c76dcc`、`code_review_cb5ecb4_141c524`、
+  `imouto_life_*`、`ui_and_interaction_diagnosis_report`、
+  `HANDOFF_T12_PATCH_AND_LEDGER`、`ROUND_T12_AND_SCREENSHOT_FIX_REPORT`）
+  移入 `docs/archive/`，21 份归档件顶部加「归档说明」块，登记表见
+  `docs/archive/README.md`。③ `docs/README.md` 重写：新增 §0 状态约定、
+  §1.2 云端审查轮次、§1.3 归档区、§5.1 opcode 契约；原先 27 份未登记文档
+  全部登记。④ 新建 `docs/re/README.md` 与 `docs/攻略/README.md` 两个子目录索引；
+  `docs/research/README.md` 补 gpt-reports 逐篇对照表（文件名的 `(1)..(5)`
+  是下载批次序号，**不是**问题组编号）。⑤ `ENGINE_BEHAVIOR.md` 与 `docs/re/*`
+  的源码行号引用**全部改为 `文件::符号` 引用**（原先 20 余处失准、3 处指到
+  完全无关的代码），并新增 §3.5 开放项清单 `OPEN-01..11`。⑥ 修掉 3 条
+  「测试状态」矛盾：`ce238_relative_panel_lands_at_the_left_edge` 早在 11-15
+  就已转绿（报告里的"仍失败"是过期结论）；`TASKS_REMAINING_BUGS.md` §0 的
+  「当前工作区测试状态」改标为「快照（非现行）」。
+  ⑦ `docs/README.md` §2 的「25 个 Game.dat 参数」更正为 **9 个分组**
+  （`BASELINE.json` 实测）；`docs/REFERENCE.md` 的截图段从已不存在的
+  `prt sc/`（10 张 GUID 名 PNG）改为实际的 `ptr_sc/`（39 张中文名）。
+  ⑧ `PROJECT_ASSETS.md` 与根 `README.md` 刷新（9 crate / 209 .rs / 128,135 行 /
+  1,241 个 `#[test]`）。**当前唯一开放测试项**：
+  `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`
+  （玩家 `SaveData01` 夹具漂移，非回归）。
+  本轮**未发现真 bug**——所有问题都是文档过期。
+
+* **2026-11-18 工作区空间清理（当前状态）**：仓库由 **7.6 GB 进一步降到
+  960 MB**。删除 `target/`（`cargo clean`，5.9 GiB）、`work/out/nsis-smoke`
+  与 `work/out/portable`（各 235 MB 的重复安装/暂存目录）、
+  `work/out/gemini_upload_2026-11-15`（**可用
+  `python -I tools/pack_gemini_review.py` 一键重打**）、旧 review 源码 ZIP、旧命名
+  `Imouto Life-0.1.0-godot.zip`、旧 Inno 工具与 NSIS 下载 ZIP，以及未被
+  文档引用的派生 `*.atlas.png`、旧测试日志、`.err`、试验 `.pck/.exe` 等
+  （97.1 MiB）。**保留**：`work/Data`、`work/out/dist`（490 MB，当前
+  Setup/ZIP 与 `0.1.0` 发行目录）、`work/out/re_all`、`shot_metrics`、
+  `m14_visual`、`event_reach`、`player_saves_*`、S 级数据与 `docs/`、`review/`。
+  `m14_visual`、`event_reach`、`player_saves_*`、S 级数据与 `docs/`。
+  （`review/` 已在同日的文档整理轮移入 `docs/reviews/` 与 `docs/archive/reviews/`。）
+  `target/` 已不存在，下次 `cargo build` / `cargo test` 会重新生成，属正常。
+
+* **2026-11-18 显示快捷键与发行指引（当前状态）**：`GameView.gd` 新增
+  F4 窗口尺寸循环（按原版手册从 100% 逐级 +100%，下一档超出桌面可用区时
+  进入无边框全屏；1080p 通常为 100%↔全屏）、F8 标题栏信息、F5/W 的
+  60/30/15 fps 渲染上限循环；F11 退出全屏时恢复进入前尺寸和位置。
+  `godot/tests/display_hotkeys.gd` 覆盖 F4 状态机与 F4/F8/F5/W/F11 分发，
+  已接入 smoke。新增 `tools/package/KEYBOARD_GUIDE.txt`，打包为
+  `按键功能指引.txt` 并进入 checksums/ZIP/NSIS；卸载器同步删除。
+  素材加密结论：外部 `Data/` 不受 `encrypt_pck` 保护，且官方模板不支持
+  PCK 加密；该能力随后由同日的 `Data/media.pak` 轮次实现，见本节首条。
+  `inusuku.png` 是 400×400 位图，转 SVG 不会提升清晰度，Windows 图标仍用
+  ICO；同日新增了按 DPI 使用的原图采样小尺寸 PNG。
+
 * **2026-11-18 复审开放项与正式发包（当前状态）**：`F-07` 模态期间已停止
   `wolf.frame()`；`F-11` 由 `textpic::is_inline_image_only()` 区分纯图片条与
   图文混排，Atlas 贴图补 anchor/scale/alpha；`Assets` 增加 256 MiB 近似 LRU；
   两份 Godot 回归接入 smoke 并改用 `--data-root`；发布预设关闭 console wrapper，
   `AGENTS.md` 改为 9 个 crate。`cargo test -p wolf-game --lib` 373/373、
   `m14_visual_regression` 5/5、`wolf-cli verify` PASS 64/1、Godot smoke exit 0。
-  正式便携 ZIP 为 764 entries / 751 files（UTF-8 中文顶层目录），
-  `Data/Save` 仅含干净 `System.sav`；`Setup.exe` 已由 Inno Setup 6.7.4 生成，
+  该时点正式便携 ZIP 为 765 entries / 752 files（UTF-8 中文顶层目录），
+  `Data/Save` 仅含干净 `System.sav`；`Setup.exe` 已由 NSIS 3.11 生成，
   版本资源语言为简体中文。产物在 `work/out/dist/godot/`，哈希见
-  `Imouto Life setup.zip.sha256` 与 `Imouto Life setup.exe.sha256`。
+  `Imouto Life setup.zip.sha256` 与 `Imouto Life setup.exe.sha256`
+  （该轮旧包已被同日的媒体只读包重打轮次取代，当前数字见本节首条；
+  两轮均含 `按键功能指引.txt`）。
+  `work/out` 的 Low Mandatory Level 标签会让 Setup 无法写普通 `%TEMP%`，
+  可运行副本已放到
+  `D:\REISEN\Downloads\Imouto Life 0.1.0\`。
   `cargo test --workspace` 仅余已记录的玩家 `SaveData01` 夹具漂移
   `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`。
 
@@ -284,7 +367,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `crates/wolf-vm/src/exec.rs` 的 `split_sound_cell()` 现在按首行取文件名、
   后两行取音量/音高；`split_first_line()` 同时修正 122 首行截取的 CRLF 行尾。
   新增 3 条回归，`smoke-godot.sh` exit 0 且不再出现该 audio warning。
-  发行包仍需 Inno Setup 6 的 `ISCC.exe` 才能生成 `Setup.exe`；便携 ZIP 不受影响。
+  安装器已改用 NSIS 3.11（`makensis.exe`），见本节首条；便携 ZIP 不受影响。
 
 * **2026-11-18 开场取消穿透与窗口图标（当前状态）**：`102` 无 `421` 时，
   Esc/右键/框外点击不再回落到块尾；VM 只有拿到真实 cancel/choice 目标才解除等待，
@@ -307,7 +390,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `WOLF_LIVE_RNG=0` 可关闭。真实数据回归 `m25_live_rng` 16/16、
   `m27_opening_choice_cancel` 5/5，Godot smoke 全过。
 
-* **2026-11-17 安装版准备（当前状态，未打包）**：`export_presets.cfg` 已补全
+* **2026-11-17 安装版准备（历史，已被 NSIS 方案取代）**：`export_presets.cfg` 已补全
   `0.1.0.0`、产品名/文件描述、`Inusuku` 公司与版权；脚本从预设动态读取这些
   字段，避免 Godot 编辑器同步覆盖。新增 Inno Setup 模板与渲染器
   （`tools/package/ImoutoLife.iss.in`、`render_inno.py`）及多尺寸
@@ -557,9 +640,9 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     拆分只让两场景的 text picture/item/line 各 +1，像素基线 533187/554890 **未动**；
     T18 的稳定 `hover` 让 CE238/CE239 hide 页不再每帧重画，停靠侧栏从零售 0.2 alpha
     变成 1.0，已在 `game.rs` 用 `SIDE_PANEL_PARKED_ALPHA=0.2`（`x ≤ -300` 且无过渡）
-    复原。细节见 `docs/HANDOFF_T12_PATCH_AND_LEDGER.md` §4.1。
-* **审计修复轮（2026-11-13 晚，当前状态）**：`docs/imouto_life_rebuild_fixes_and_full_audit.md` 的 §一 6 项截图与 §二 P1/P2 已落地。选项 `(0,0)` 回退居中 + 控制码剥离；失活 `choices` 由 `frame`/`install_map` 自动回收（`m3_mouse_menu` 14 passed）；行动力条在黑屏开场不再误出，宿主条改 100×12 深灰槽 + 亮边（`HUD_ACTION_VALUE_X=716`）；`36002` 底边钳到 576，`m17_ui_regressions` 21 passed；`message` 名牌按原版实机图保留，连续同人翻页瞬态仍待原版逐帧证据。RNG 读档按 `playtime_frames` 定位表游标（`.sav` 无字段，同存档重放仍同）；Godot `audio_cache` 上限 64、`key_config_revision` 缓存、`WolfText` 段落缓存。m14 仍 **5 passed**（533187/554890），workspace 只余既有 `m3_manual_rules::late_night_bedtime...`；Godot 9 个 headless 脚本全绿。两轮报告见 `docs/AUDIT_REBUILD_FIX_REPORT.md`；代码提交 `b2b6998` 已 push `origin/master`。
-* **Gemini 全量审查 `1c76dcc` 处理（2026-11-14，当前状态）**：`docs/Full Code Review 1c76dcc.md` 新 P1 成立并已修——`Game::text_quads` 现将 `balloon_frame_growth()` 提前计入 `TextQuadKey`，`36014` 人名牌在多行流式换行时随 `36008..=36012` 同步上移；新增 `a_streaming_balloon_lifts_the_nameplate_through_the_text_cache`（1 passed）。P3 行动力条按报告方案 2 右对齐：`HUD_ACTION_LABEL_X 560→545`、`HUD_ACTION_BAR [608,18,100,12]→[593,18,100,12]`、`HUD_ACTION_VALUE_X 716→750`，`GameView.gd` fallback 同步；新增三位数回归（1 passed），`m14_visual_regression` 仍 **5 passed**（533187/554890）。报告两条“待核对 `1a9fafe`”均已在当前代码闭环：`121` 不再对 `SelfVar` 强制 `batch_count=0`（`op121_self_range_updates_every_slot_in_the_range`），瞬时 `Move` 已清 `transition` 且 `move_cancels_an_erase_fade` 断言 `opacity==255`；`spawn_child` 也已继承 `is_parallel`。`125` 单协程同帧多次 `123` 只消费一次仍保留为已知边界项。额外发现 `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge` 失败（面板停在 -305），本轮未触碰相对绘制路径，待单独排查。详见 `docs/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`。
+    复原。细节见 `docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md` §4.1。
+* **审计修复轮（2026-11-13 晚，当前状态）**：`docs/archive/reviews/imouto_life_rebuild_fixes_and_full_audit.md` 的 §一 6 项截图与 §二 P1/P2 已落地。选项 `(0,0)` 回退居中 + 控制码剥离；失活 `choices` 由 `frame`/`install_map` 自动回收（`m3_mouse_menu` 14 passed）；行动力条在黑屏开场不再误出，宿主条改 100×12 深灰槽 + 亮边（`HUD_ACTION_VALUE_X=716`）；`36002` 底边钳到 576，`m17_ui_regressions` 21 passed；`message` 名牌按原版实机图保留，连续同人翻页瞬态仍待原版逐帧证据。RNG 读档按 `playtime_frames` 定位表游标（`.sav` 无字段，同存档重放仍同）；Godot `audio_cache` 上限 64、`key_config_revision` 缓存、`WolfText` 段落缓存。m14 仍 **5 passed**（533187/554890），workspace 只余既有 `m3_manual_rules::late_night_bedtime...`；Godot 9 个 headless 脚本全绿。两轮报告见 `docs/AUDIT_REBUILD_FIX_REPORT.md`；代码提交 `b2b6998` 已 push `origin/master`。
+* **Gemini 全量审查 `1c76dcc` 处理（2026-11-14，当前状态）**：`docs/archive/reviews/CODE_REVIEW_1c76dcc_superseded.md` 新 P1 成立并已修——`Game::text_quads` 现将 `balloon_frame_growth()` 提前计入 `TextQuadKey`，`36014` 人名牌在多行流式换行时随 `36008..=36012` 同步上移；新增 `a_streaming_balloon_lifts_the_nameplate_through_the_text_cache`（1 passed）。P3 行动力条按报告方案 2 右对齐：`HUD_ACTION_LABEL_X 560→545`、`HUD_ACTION_BAR [608,18,100,12]→[593,18,100,12]`、`HUD_ACTION_VALUE_X 716→750`，`GameView.gd` fallback 同步；新增三位数回归（1 passed），`m14_visual_regression` 仍 **5 passed**（533187/554890）。报告两条“待核对 `1a9fafe`”均已在当前代码闭环：`121` 不再对 `SelfVar` 强制 `batch_count=0`（`op121_self_range_updates_every_slot_in_the_range`），瞬时 `Move` 已清 `transition` 且 `move_cancels_an_erase_fade` 断言 `opacity==255`；`spawn_child` 也已继承 `is_parallel`。`125` 单协程同帧多次 `123` 只消费一次仍保留为已知边界项。额外发现 `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge` 失败（面板停在 -305），本轮未触碰相对绘制路径，待单独排查。详见 `docs/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`。
 * **实机截图四轮复核与 5 项视觉/交互缺陷闭环（2026-11-15，当前状态）**：
   1. **名牌右半边残留彻底消除**：`exec.rs` 为 `PictureAction::Move` 解码 `head & 0x0100_0000` 标志位的 `span`；`picture.rs` 实现范围批量移动（`lo..=hi`），CE270 执行 `150 Move 36008..36012` 时所有名牌组件同步淡出至 0 透明度，右半圆角（36010）残留彻底消失。
   2. **妹妹对话框加高 136px & 头像完整容纳**：按原版实机视觉效果（`ptr_sc/卧室_点击妹妹_首句话.png`），妹妹说话出现半身头像（36002）时，气泡对话框统一定位加高至 136px（`BALLOON_FACE_FRAME_MIN_HEIGHT = 136`，y=428..564）；头像底边统一定位在 `BALLOON_FACE_BOTTOM_Y = 563.0`（发顶在 y>=444，距名牌底边 434 留出 10px 清晰空隙），头像完整容纳于对话框内，不超出底边亦不被名牌遮挡。
@@ -611,4 +694,4 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 * `kind≥0` 掩膜过渡、`window.rs` 极小盒角折半——本作不触发，明确不实现。
 * 存档/读档界面（CE94/CE131）的十分之一单位几何是 2026-11-02 的历史修复记录；当前工作区已删除 `Screen::ui_scale_for`、`TENTHS_UI`/`tenths_block` 与渲染二次 `/10`，不应再把该补偿当作现行实现。历史测量见 docs/re/SCREENSHOT_METRICS.md §6；**注意**：`work/Data/Save/SaveData01.sav` 曾被玩家在存档界面覆盖为含 94 张存档界面图的版本，依赖它精确像素数的测试已改为自洽断言或按「非干净 HUD 存档」跳过。设置界面（CE95）的 tenths 描述同样是历史依据，当前文本样式由 `Game::uses_regular_ui_text` 处理。
 * `m14_visual_regression` 已于 2026-11-13 收口为 5 passed（停靠侧栏 alpha 回归已修复、
-  行动力拆分只重钉文本计数），详见 §11.1 末条与 `docs/HANDOFF_T12_PATCH_AND_LEDGER.md` §4.1。
+  行动力拆分只重钉文本计数），详见 §11.1 末条与 `docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md` §4.1。

@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::patch::PatchSet;
+use wolf_format::media_pack::{MediaPack, MediaPackError};
 
 /// Extensions probed when an asset name carries none, in the order WOLF tries them.
 pub const PROBE_EXTENSIONS: [&str; 5] = ["png", "jpg", "bmp", "jpeg", "webp"];
@@ -204,6 +205,13 @@ pub enum AssetError {
         /// Decoded height.
         height: u32,
     },
+    /// The media pack is corrupt or unreadable.
+    Pack {
+        /// The requested name.
+        name: String,
+        /// Underlying pack error.
+        source: MediaPackError,
+    },
 }
 
 impl fmt::Display for AssetError {
@@ -220,6 +228,7 @@ impl fmt::Display for AssetError {
                 width,
                 height,
             } => write!(f, "asset {name} has unusable size {width}x{height}"),
+            Self::Pack { name, source } => write!(f, "cannot read packed asset {name}: {source}"),
         }
     }
 }
@@ -229,6 +238,7 @@ impl std::error::Error for AssetError {
         match self {
             Self::Io { source, .. } => Some(source),
             Self::Decode { source, .. } => Some(source),
+            Self::Pack { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -246,6 +256,12 @@ pub struct Assets {
     /// Optional mod roots, highest priority last (a later overlay wins a name clash).
     /// Empty for a plain data root; see Assets::with_overlays.
     overlays: Vec<PathBuf>,
+    /// Optional read-only media pack at `<root>/media.pak`.
+    media: Option<Arc<MediaPack>>,
+    /// Why an existing pack could not be opened. Kept so a release install with
+    /// only media.pak reports corruption instead of pretending the files are
+    /// simply absent.
+    media_open_error: Option<String>,
     cache: HashMap<String, CachedImage>,
     cache_bytes: usize,
     cache_byte_limit: usize,
@@ -291,6 +307,19 @@ impl Assets {
     /// only has to carry the files it replaces.
     #[must_use]
     pub fn with_overlays(root: impl Into<PathBuf>, overlays: Vec<PathBuf>) -> Self {
+        let root = root.into();
+        let media_path = root.join("media.pak");
+        let (media, media_open_error) = if media_path.is_file() {
+            match MediaPack::open(&media_path) {
+                Ok(pack) => (Some(Arc::new(pack)), None),
+                Err(error) => {
+                    eprintln!("media pack: cannot open {}: {error}", media_path.display());
+                    (None, Some(error.to_string()))
+                }
+            }
+        } else {
+            (None, None)
+        };
         // A malformed patch set is reported and ignored: a broken mod must not stop
         // the game from loading its own assets.
         let patches = match PatchSet::load_from_overlays(&overlays) {
@@ -301,8 +330,10 @@ impl Assets {
             }
         };
         Self {
-            root: root.into(),
+            root,
             overlays,
+            media,
+            media_open_error,
             cache: HashMap::new(),
             cache_bytes: 0,
             cache_byte_limit: DEFAULT_CACHE_BYTES,
@@ -423,18 +454,97 @@ impl Assets {
         None
     }
 
-    /// Resolves a name, then a narrow fallback alias if the direct lookup misses.
+    /// The media pack detected at `<root>/media.pak`, when it opened cleanly.
+    #[must_use]
+    pub fn media_pack(&self) -> Option<&MediaPack> {
+        self.media.as_deref()
+    }
+
+    /// Reads one asset's raw bytes without decoding it.
     ///
-    /// Only the `Picture/word_effect* -> hword/word_effect*` author typo is aliased
-    /// (docs/HSCENE.md 4.6). Everything else obeys the strict `missing file is fatal`
-    /// rule, so a genuinely absent asset still errors out.
-    fn resolve_with_fallback(&self, name: &str) -> Option<(PathBuf, Option<String>)> {
-        if let Some(path) = self.resolve(name) {
-            return Some((path, None));
+    /// Priority is newest mod overlay, older overlays, the base root's loose
+    /// files, then `<root>/media.pak`. Byte patches from the mod overlays are
+    /// applied before the bytes are returned, so decoded images and audio see
+    /// exactly the same content.
+    ///
+    /// # Errors
+    ///
+    /// `BadName` for an illegal relative name, `NotFound` when no layer has the
+    /// file, `Io` for unreadable loose files, and `Pack` for a corrupt pack.
+    pub fn read_raw(&self, name: &str) -> Result<Vec<u8>, AssetError> {
+        self.read_bytes(name).map(|(bytes, _)| bytes)
+    }
+
+    /// Reads an asset plus the fallback alias that supplied it, then applies
+    /// any byte patches that target either name.
+    fn read_bytes(&self, name: &str) -> Result<(Vec<u8>, Option<String>), AssetError> {
+        let relative = normalize(name).ok_or_else(|| AssetError::BadName {
+            name: name.to_owned(),
+        })?;
+        let mut alias = None;
+        let mut bytes = match self.read_one(&relative, name)? {
+            Some(bytes) => bytes,
+            None => {
+                // Only the author's `Picture/word_effect* -> hword/` typo gets an
+                // alias (docs/HSCENE.md 4.6); every other miss stays fatal.
+                let Some(fallback) = word_effect_alias(&relative) else {
+                    return Err(AssetError::NotFound {
+                        name: name.to_owned(),
+                        root: self.root.clone(),
+                    });
+                };
+                let Some(bytes) = self.read_one(&fallback, name)? else {
+                    return Err(AssetError::NotFound {
+                        name: name.to_owned(),
+                        root: self.root.clone(),
+                    });
+                };
+                alias = Some(fallback);
+                bytes
+            }
+        };
+        // Byte patches run on the raw bytes, before any decoder sees them.
+        let mut candidates: Vec<&str> = vec![name];
+        if let Some(alias) = alias.as_deref() {
+            candidates.push(alias);
         }
-        let alias = word_effect_alias(name)?;
-        let path = self.resolve(&alias)?;
-        Some((path, Some(alias)))
+        if let Err(error) = self.patches.apply_bytes(&mut bytes, &candidates) {
+            eprintln!("mod patch: asset {name}: {error}");
+        }
+        Ok((bytes, alias))
+    }
+
+    /// Reads one normalized name from every layer, in priority order.
+    fn read_one(&self, relative: &str, requested: &str) -> Result<Option<Vec<u8>>, AssetError> {
+        for root in self
+            .overlays
+            .iter()
+            .rev()
+            .chain(std::iter::once(&self.root))
+        {
+            if let Some(path) = resolve_in(root, relative) {
+                let bytes = std::fs::read(&path).map_err(|source| AssetError::Io {
+                    name: requested.to_owned(),
+                    source,
+                })?;
+                return Ok(Some(bytes));
+            }
+        }
+        if let Some(pack) = &self.media {
+            return pack.read(relative).map_err(|source| AssetError::Pack {
+                name: requested.to_owned(),
+                source,
+            });
+        }
+        if let Some(detail) = &self.media_open_error {
+            return Err(AssetError::Pack {
+                name: requested.to_owned(),
+                source: MediaPackError::Corrupt {
+                    detail: format!("media.pak could not be opened: {detail}"),
+                },
+            });
+        }
+        Ok(None)
     }
 
     /// Decodes an image, reusing the cache.
@@ -454,32 +564,12 @@ impl Assets {
                 name: name.to_owned(),
             });
         }
-        let (path, alias) = match self.resolve_with_fallback(name) {
-            Some(pair) => pair,
-            None => {
-                return Err(AssetError::NotFound {
-                    name: name.to_owned(),
-                    root: self.root.clone(),
-                })
-            }
-        };
+        let (bytes, alias) = self.read_bytes(name)?;
         if let Some(alias) = &alias {
             let message = format!("asset fallback: {name} -> {alias}");
             if !self.fallbacks.iter().any(|existing| existing == &message) {
                 self.fallbacks.push(message);
             }
-        }
-        let mut bytes = std::fs::read(&path).map_err(|source| AssetError::Io {
-            name: name.to_owned(),
-            source,
-        })?;
-        // Byte patches run on the raw file bytes, before the decoder sees them.
-        let mut candidates: Vec<&str> = vec![name];
-        if let Some(alias) = alias.as_deref() {
-            candidates.push(alias);
-        }
-        if let Err(error) = self.patches.apply_bytes(&mut bytes, &candidates) {
-            eprintln!("mod patch: asset {name}: {error}");
         }
         let decoded = image::load_from_memory(&bytes).map_err(|source| AssetError::Decode {
             name: name.to_owned(),

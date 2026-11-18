@@ -36,12 +36,12 @@ python work/out/layout_metrics/scan_sys.py
 
 | 项 | 原版行为 | 仓内实现 | 判定 |
 |---|---|---|---|
-| §3-8 坐标倍率取整 | **整除（向零截断）**：`Sys116 / 32`、`Sys117 / 24`，i32 除法；三种标准分辨率另硬编码成 10/20/25 | `db.rs:159` u32 整除（等价，多了 `.max(1)`）；`message.rs:97` **float 除法**（非整倍数屏会偏） | **部分实现**，取整语义已定（A 级） |
-| §3-9 `trunc(rateY/10)` | **确认是原版公式**：CE63 里 `Sys2 = 17*rateY` 再 `Sys2 += rateY/10`（同一套整除） | `message.rs:111` `trunc()` + `.round()`；整倍数屏等价，非整倍数屏偏 | **已实现但取整口径不同** |
+| §3-8 坐标倍率取整 | **整除（向零截断）**：`Sys116 / 32`、`Sys117 / 24`，i32 除法；三种标准分辨率另硬编码成 10/20/25 | `db.rs::coordinate_scale()` u32 整除（等价，多了 `.max(1)`）；`message.rs::coordinate_scale()` **float 除法**（非整倍数屏会偏） | **部分实现**，取整语义已定（A 级） |
+| §3-9 `trunc(rateY/10)` | **确认是原版公式**：CE63 里 `Sys2 = 17*rateY` 再 `Sys2 += rateY/10`（同一套整除） | `message.rs::default_origin()` `trunc()` + `.round()`；整倍数屏等价，非整倍数屏偏 | **已实现但取整口径不同** |
 | §3-1 九宫格内边距 | **皮肤帧厚 = 唯一的框内 padding**；绘制只有"角固定像素 + 中行列拉伸"。选择支面板另有固定内缩 **0x1a = 26 px**（A 级，§5.4） | `window.rs` CORNER=3 ✓；`choice.rs` PADDING=14（两侧 28）↔ 原版 26 | **数值差 2 px** |
-| §3-2 极小盒退化 | 角不折半、不钳制：盒小于两倍角时中段宽 = `right - corner`，会变 0/负，交给 blit 裁剪 | `window.rs:80` 角折半 `min(cw, w/2)` | **行为不同（C 级：DxLib 对反向矩形的实际表现未实测）** |
-| §3-6 选择面板越界 | **无回退/无夹取**（A 级，§5.5）：102 面板按对象字段 +0x8d8/+0x8dc 落点（默认 (fontbase*10 - w/2, 0xaa/scale - h/2)），越界即被裁剪 | `choice.rs:180` 完全屏外才居中，且锚点用 Sys3/Sys4 | **锚点与回退都不同（A 级）** |
-| §3-7 超宽选项（布局侧） | 面板宽 = 最宽选项 + **26 px**（A 级），无最大宽、无截断、无换行 | `choice.rs:112` 无上限/无截断（加数 +62、MIN_WIDTH=120） | **策略一致，常数不同** |
+| §3-2 极小盒退化 | 角不折半、不钳制：盒小于两倍角时中段宽 = `right - corner`，会变 0/负，交给 blit 裁剪 | `window.rs::nine_slice()` 角折半 `min(cw, w/2)` | **行为不同（C 级：DxLib 对反向矩形的实际表现未实测）** |
+| §3-6 选择面板越界 | **无回退/无夹取**（A 级，§5.5）：102 面板按对象字段 +0x8d8/+0x8dc 落点（默认 (fontbase*10 - w/2, 0xaa/scale - h/2)），越界即被裁剪 | `choice.rs::build()` 完全屏外才居中，且锚点用 Sys3/Sys4 | **锚点与回退都不同（A 级）** |
+| §3-7 超宽选项（布局侧） | 面板宽 = 最宽选项 + **26 px**（A 级），无最大宽、无截断、无换行 | `choice.rs::advance_at()` 无上限/无截断（加数 +62、MIN_WIDTH=120） | **策略一致，常数不同** |
 
 ---
 
@@ -60,7 +60,7 @@ op=121 ints=[1600026, 9000117, 24, 12288]     # v26 = Sys117 / 24
 
 - `9000116`/`9000117` = Sys116/Sys117（magic 前缀 `0x9000000 + index` 就是系统变量）。
 - op121 第 4 个 int 是 `bits`，`(bits>>12)&0xF` 选二元算子；`12288 = 0x3000 -> 3 = 整除`
-  （`crates/wolf-vm/src/exec.rs:1540-1560` `binary_op(0x3) = a.wrapping_div(b)`，注释里正好
+  （`crates/wolf-vm/src/exec.rs（opcode 102 选项标签展开）` `binary_op(0x3) = a.wrapping_div(b)`，注释里正好
   拿 `Sys116/32` 举例）。`wrapping_div` == x86 `idiv` == **向零截断**，不是 floor，
   也不是 round。
 - Sys116/Sys117 就是**逻辑（未乘 DAT_0084b248）屏幕宽高**：
@@ -87,11 +87,11 @@ CE48 的三档分支 + 自动计算分支（分支开关是 `Sys84`：`ce48.txt:
 
 ### 1.2 仓内实现
 
-- `crates/wolf-game/src/db.rs:159-165`：`(w/32).max(1)`、`(h/24).max(1)`，u32 整除
+- `crates/wolf-game/src/db.rs::coordinate_scale()`：`(w/32).max(1)`、`(h/24).max(1)`，u32 整除
   → **与原版等价**（`.max(1)` 是仓内防御，原版脚本无钳制；只有屏宽 < 32 才可能差，不可达）。
-- `crates/wolf-game/src/message.rs:97-102`：`(screen_w/32.0).max(1.0)`，**f32 除法** →
+- `crates/wolf-game/src/message.rs::coordinate_scale()`：`(screen_w/32.0).max(1.0)`，**f32 除法** →
   与原版不同。
-- 仓内自测值：`db.rs:1002-1005`、`message.rs:668-670`（1024x576 -> (32,24)、
+- 仓内自测值：`db.rs（数据根探测）`、`message.rs::wrap()`（1024x576 -> (32,24)、
   1280x720 -> (40,30)），这两个都能整除，所以测不出差异。
 
 ### 1.3 差异（B 级推算）
@@ -132,7 +132,7 @@ op=121 ints=[9000002, 1600089, 10, 12544]    # Sys2 += self89 / 10
 
 ### 2.2 仓内实现
 
-`crates/wolf-game/src/message.rs:111-120`：
+`crates/wolf-game/src/message.rs::default_origin()`：
 
 ```rust
 (2.0 * rate_x).round(),
@@ -184,10 +184,10 @@ FUN_0051f060((local_18 - P1(0x1c0))*s, ...);
 
 ### 3.2 仓内实现与差异
 
-- `crates/wolf-game/src/window.rs:30` `CORNER=3`、`SKIN="SystemFile/WindowBase.png"`
+- `crates/wolf-game/src/window.rs::CORNER` `CORNER=3`、`SKIN="SystemFile/WindowBase.png"`
   → 与皮肤实测一致（A 级）。
-- `nine_slice()`（`window.rs:62`）的"角保像素、中段吸收余量"与上面的反编译结构一致。
-- **但 `choice.rs:25 PADDING=14` 在原版里找不到对应常量**：它是仓内为"选项文字不要贴边框"
+- `nine_slice()`（`window.rs::nine_slice()`）的"角保像素、中段吸收余量"与上面的反编译结构一致。
+- **但 `choice.rs::CHOICE_LINE_SPACING PADDING=14` 在原版里找不到对应常量**：它是仓内为"选项文字不要贴边框"
   自定的内缩。原版选择面板的文字内缩**未取到**（见 §5 TODO）。所以现在只能说："3 px 是皮肤帧厚
   （对），14 px 是仓内猜测（无原版依据）"。
 - `docs/ENGINE_BEHAVIOR.md:34` 的「[未实测精确内边距]」应改成"引擎无 padding 常量；
@@ -215,8 +215,8 @@ FUN_0051f060((local_18 - P1(0x1c0))*s, (local_14 - P1(0x1c8))*s, ...) /* 右下�
 
 ### 4.2 仓内实现与差异
 
-- `window.rs:37 MIN_BOX=2` 是**仓内哨兵**（"没有显式 box"）；原版没有这个常量。
-- `window.rs:78-90` 的 `(cw as f32).min(w/2.0)` 角折半是**仓内安全实现**，与原版不同。
+- `window.rs::MIN_BOX MIN_BOX=2` 是**仓内哨兵**（"没有显式 box"）；原版没有这个常量。
+- `window.rs::nine_slice()` 的 `(cw as f32).min(w/2.0)` 角折半是**仓内安全实现**，与原版不同。
   视觉上可能一样（都看不到角），但要逐像素对齐就得保留固定角 + 反向中段；建议去掉
   `.min(w/2)`，让 `nine_slice` 现有的 `dw<=0` 跳过逻辑吞掉反向片。
 
@@ -248,7 +248,7 @@ FUN_0051f060((local_18 - P1(0x1c0))*s, (local_14 - P1(0x1c8))*s, ...) /* 右下�
 
 ### 5.3 仓内差异
 
-`choice.rs:180-214` 在"完全屏外"时居中回退。判断条件
+`choice.rs::build() / ::layout_at_sized()` 在"完全屏外"时居中回退。判断条件
 `rect[0] < W && rect[1] < H && rect[0]+w > 0 && rect[1]+h > 0` 是**矩形相交**判据：
 
 - 原版：(-1000,-1000) → 面板画到屏外 → 玩家看不到（游戏正是利用这点）。
@@ -293,7 +293,7 @@ for (i = 0; i < count; i++) if (local_8 < *FUN_004ce990(i)) local_8 = *FUN_004ce
 ```
 
 → **没有任何"最大宽"钳制、没有截断、没有换行**；选项有多宽面板就有多宽（+26 px），因此可以超出
-屏宽。这与仓内 `choice.rs:112` 的 `(widest + marker + 2*PADDING + SLACK)` 在"无上限"
+屏宽。这与仓内 `choice.rs::advance_at()` 的 `(widest + marker + 2*PADDING + SLACK)` 在"无上限"
 这一点上一致，但常数完全不同（原版 +26，仓内 +30(marker)+28(padding)+4(slack)=+62，且另有
 MIN_WIDTH=120）。
 
@@ -343,7 +343,7 @@ else
 
 ### 5.6 对仓内的结论（重要）
 
-1. 仓内 `choice.rs:180` 的"完全屏外→居中"回退在原版**不存在**（A 级否定证据：整条
+1. 仓内 `choice.rs::build()` 的"完全屏外→居中"回退在原版**不存在**（A 级否定证据：整条
    102 链路里没有任何面板坐标回退）。原版是"画到屏外就看不见"，这正是 CE42 标题用
    (-1000,-1000) 隐藏引擎菜单的机制。
 2. 仓内的**锚点来源**（Sys3/Sys4）也与原版不同：原版 102 面板用对象字段 +0x8d8/+0x8dc，
@@ -364,7 +364,7 @@ else
   `最后一条的宽/高 + 0x1a` 决定（`004c3d20.c:73-77`）。超宽时面板直接超出屏宽，靠 blit 裁剪。
 - **脚本侧旁证（B 级）**：万能窗口 CE64 的默认宽 `32*rateX` = 整屏宽（`ce64.txt`：
   `self24 = 32*rateX`、`self25 = 24*rateY`），说明"顶着屏幕宽"是允许的用法。
-- **仓内**：`choice.rs:112-117` `width = (widest + marker + 2*PADDING + SLACK).max(MIN_WIDTH)`，
+- **仓内**：`choice.rs::advance_at()` `width = (widest + marker + 2*PADDING + SLACK).max(MIN_WIDTH)`，
   无上限、无截断 —— 与原版"不截断"一致；超宽时同样伸出屏外被裁剪。
 - **差异**：宽度加数不同（原版 `+26`；仓内 `+30 marker +28 padding +4 slack = +62`），
   `MIN_WIDTH=120` 与原版无关（原版宽度按文本量算，单字符选项的面板会明显更窄）。
@@ -436,12 +436,12 @@ PY
 | 项 | RE 结论 | 落地值 | 位置 |
 |---|---|---|---|
 | §3-1 九宫格内边距 | 皮肤 18×18、3 px 对称、无额外 padding | 不变；新增 `window::nine_slice_cornered(dst,w,h,corner)` 供光标用 corner=4 | `crates/wolf-game/src/window.rs` |
-| §3-6 面板内缩 | 文本内缩 `2 + (base<<2)/10` = 8（base=16） | **8/侧**（实测 8.05 / 7.99 双证） | `choice.rs:38` |
-| §3-6 面板宽 | 最宽选项 + 0x1a = 26 | **最宽 advance + 2×8 = +16**（B 级：89EF 156.3 = 140+16 精确吻合；EE37 161.8 多 5.3 px 未解释，RE 的 +26 会给出 166） | `choice.rs:139` |
-| §3-6 面板高 | 末行记录 `+0x1a+高` 语义未定 | **6 + rows×pitch**（实测 4 行 114、5 行 141） | `choice.rs:139` |
-| §3-6 行距 | 面板高公式里最后一项待定 | **font + trunc(14×min(16,32)/32) = 27**（实测 27.18/26.87） | `choice.rs:70` `line_pitch()` |
-| §3-6 越界回退 | 锚点字段 +0x8d8/+0x8dc，**无越界回退、不读 Sys3/Sys4** | **保留** `layout_at_sized` 的"不相交→全屏居中"：删掉会让 CE42 标题处隐藏的 102 面板可见（C 级未闭合假设，见 §7.1-1），先保留 | `choice.rs:211` |
-| §7.1-3 光标 | 9 片之外未找到第 10 片 | **已找到**：`SystemFile/CursorBase.png` 12×12 RGBA，九宫格 corner=4，画于 `[x+6,row_y,w−12,font_px]` | `choice.rs:60,62,314` |
+| §3-6 面板内缩 | 文本内缩 `2 + (base<<2)/10` = 8（base=16） | **8/侧**（实测 8.05 / 7.99 双证） | `choice.rs::TEXT_INSET` |
+| §3-6 面板宽 | 最宽选项 + 0x1a = 26 | **最宽 advance + 2×8 = +16**（B 级：89EF 156.3 = 140+16 精确吻合；EE37 161.8 多 5.3 px 未解释，RE 的 +26 会给出 166） | `choice.rs::size()` |
+| §3-6 面板高 | 末行记录 `+0x1a+高` 语义未定 | **6 + rows×pitch**（实测 4 行 114、5 行 141） | `choice.rs::size()` |
+| §3-6 行距 | 面板高公式里最后一项待定 | **font + trunc(14×min(16,32)/32) = 27**（实测 27.18/26.87） | `choice.rs::line_pitch()` `line_pitch()` |
+| §3-6 越界回退 | 锚点字段 +0x8d8/+0x8dc，**无越界回退、不读 Sys3/Sys4** | **保留** `layout_at_sized` 的"不相交→全屏居中"：删掉会让 CE42 标题处隐藏的 102 面板可见（C 级未闭合假设，见 §7.1-1），先保留 | `choice.rs::layout_at_sized()` |
+| §7.1-3 光标 | 9 片之外未找到第 10 片 | **已找到**：`SystemFile/CursorBase.png` 12×12 RGBA，九宫格 corner=4，画于 `[x+6,row_y,w−12,font_px]` | `choice.rs::CURSOR_SKIN / ::CURSOR_CORNER / ::skin_pieces()` |
 | §3-2 极小盒 | 原版不折半/不钳制，靠 blit 裁剪 | **不改**（本作数据不产生 <6 px 的盒，属不触发路径） | `window.rs` 注释 |
 
 宽度分歧的推理：内缩 8 有两条独立证据（RE 的 `2+(base<<2)/10` 公式 + 两张实机图的墨迹内缩），

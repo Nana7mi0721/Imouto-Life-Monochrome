@@ -21,6 +21,7 @@ pub mod gamedat;
 pub mod gbk;
 pub mod generation;
 pub mod maptree;
+pub mod media_pack;
 pub mod messagetext;
 pub mod mps;
 pub mod sysdatabase;
@@ -28,3 +29,4 @@ pub mod tileset;
 
 pub use bytes::Reader;
 pub use error::{Error, Result};
+pub use media_pack::{MediaPack, MediaPackError, MediaPackWriter, PackStats};

@@ -14,13 +14,15 @@
 
 - **编译/测试（2026-11-12 封板快照）**：`cargo fmt --all -- --check`、`git diff --check`
   通过；`cargo check -q --workspace` 0 error；默认 `cargo test -q --workspace` exit 0。
-- **当前工作区测试状态（2026-11-13 复核）**：`cargo check -q --workspace` 0 error，
+- **测试状态快照（2026-11-13 复核，非现行）**：`cargo check -q --workspace` 0 error，
   `cargo fmt --all -- --check` / `git diff --check` 通过；默认
   `cargo test -q --workspace --no-fail-fast` 仅剩 1 个既有失败 target：
   `m3_manual_rules`（`late_night_bedtime_skips_to_next_evening`，实得 17:00）。
   `m3_menu_screens` 已按实际 `Save` 目录判断槽位状态；隔离只含 `SaveData01/02`
   的数据根时，空槽文本分支 4/4 通过。`wolf-vm` 并行子协程测试已修正为保留子实例到
   断言时点，130 / 130 通过。
+  > **这段是 11-13 的快照，不是当前状态**。现行测试状态见
+  > [HANDOFF_M0.md](HANDOFF_M0.md) §11.1；本文件 §1 起是历史编排快照。
 - **真实数据（2026-11-13 复核）**：
   `WOLF_DATA_ROOT=<abs>/work/Data cargo test -q --workspace --no-fail-fast`
   只剩 3 个既有测试失败、分布在 2 个 target：两项姊妹作 `db` 期望差异

@@ -5,18 +5,21 @@
 #   work/out/dist/godot/<version>/
 #     Imouto Life.exe       Godot release export (embedded PCK)
 #     wolf_gdext.dll         release GDExtension copied by the exporter
-#     Data/                  exact release whitelist + clean System.sav
+#     Data/                  plaintext release whitelist + Save/System.sav
+#                            + media.pak (fixed-key XOR-obfuscated media)
 #     README.txt
 #     checksums.txt
 #   work/out/dist/godot/
 #     Imouto Life setup.zip  portable package with the game folder at the root
-#     Imouto Life setup.exe  Inno Setup installer (optional; needs ISCC.exe)
+#     Imouto Life setup.exe  NSIS installer (optional; needs makensis.exe)
 #
 # The Windows Desktop export preset excludes addons/godot_ai/*, tests/*,
 # transient bin/~* libraries and the icon source used only to stamp the exe.
-# Data is staged from tools/package/release-data.manifest and contains exactly
-# that allowlist plus one clean Data/Save/System.sav.  The helper validates
-# every path, rejects symlink escapes, and checks the final file set exactly.
+# Data is staged from tools/package/release-data.manifest.  The fixed media
+# prefixes are excluded from staging and packed into Data/media.pak by the
+# media-pack binary; BasicData/MapData/Save/font stay plaintext.  The helper
+# validates every path, rejects symlink escapes, and checks the final file set
+# exactly (plaintext whitelist + System.sav + media.pak).
 # The script does not download Godot export templates; it stops with a clear
 # error when the matching 4.7.x templates are missing.
 #
@@ -41,7 +44,16 @@ SKIP_BUILD=0
 FORCE=0
 DRY_RUN=0
 MANIFEST="tools/package/release-data.manifest"
-ISCC_OPT=""
+MAKENSIS_OPT=""
+MEDIA_PREFIXES=(
+    "Picture/"
+    "cg/"
+    "BGM/"
+    "SE/"
+    "CharaChip/"
+    "SystemFile/"
+    "BalloonBase_CafeLatte/"
+)
 
 usage() {
     cat <<'USAGE'
@@ -58,12 +70,14 @@ Usage: tools/package-godot.sh [options]
   --godot PATH         Godot editor executable (default: GODOT_BIN or 4.7.2)
   --preset NAME        export preset (default: "Windows Desktop")
   --no-zip             do not create the zip archive
-  --no-setup           do not create the Inno Setup installer
-  --iscc PATH          Inno Setup command-line compiler
-  --skip-build         reuse godot/bin/wolf_gdext.dll
+  --no-setup           do not create the NSIS installer
+  --makensis PATH      NSIS command-line compiler (makensis.exe)
+  --skip-build         reuse godot/bin/wolf_gdext.dll (the media packer is
+                       still built if target/release/media-pack.exe is missing)
   --force              replace an existing --out-dir
-  --dry-run            data-plan only: print filters/template status without
-                       building, exporting, or copying the source data tree
+  --dry-run            data-plan only: print media pack plan, plaintext
+                       staging totals, and template status without building,
+                       exporting, packing, or copying the source data tree
   -h, --help           show this help
 USAGE
 }
@@ -112,7 +126,7 @@ while [ "$#" -gt 0 ]; do
         --preset)      need_arg "$@"; PRESET_NAME="$2"; shift 2 ;;
         --no-zip)      MAKE_ZIP=0; shift ;;
         --no-setup)    MAKE_SETUP=0; shift ;;
-        --iscc)        need_arg "$@"; ISCC_OPT="$2"; shift 2 ;;
+        --makensis)    need_arg "$@"; MAKENSIS_OPT="$2"; shift 2 ;;
         --skip-build)  SKIP_BUILD=1; shift ;;
         --force)       FORCE=1; shift ;;
         --dry-run)     DRY_RUN=1; shift ;;
@@ -167,13 +181,16 @@ DLL_FILE="$GODOT_PROJECT/bin/wolf_gdext.dll"
 EXPORT_EXE="$OUT_DIR/Imouto Life.exe"
 RELEASE_DATA_TOOL="$REPO/tools/package/release_data.py"
 [ -f "$RELEASE_DATA_TOOL" ] || die "release Data helper missing: $RELEASE_DATA_TOOL"
+MEDIA_PACK_BIN="$REPO/target/release/media-pack.exe"
+MEDIA_PAK="$OUT_DIR/Data/media.pak"
 VERSION_LANGUAGE_TOOL="$REPO/tools/package/windows_version_language.py"
 [ -f "$VERSION_LANGUAGE_TOOL" ] || \
     die "Windows version-language helper missing: $VERSION_LANGUAGE_TOOL"
 ICON_FILE="$GODOT_PROJECT/icon_windows.png"
-INNO_TEMPLATE="$REPO/tools/package/ImoutoLife.iss.in"
-INNO_RENDERER="$REPO/tools/package/render_inno.py"
+NSIS_TEMPLATE="$REPO/tools/package/ImoutoLife.nsi.in"
+NSIS_RENDERER="$REPO/tools/package/render_nsis.py"
 SETUP_ICON="$REPO/tools/package/icon_windows.ico"
+KEYBOARD_GUIDE_SOURCE="$REPO/tools/package/KEYBOARD_GUIDE.txt"
 
 SYSTEM_SAVE=""
 SYSTEM_SAVE_SOURCE=""
@@ -200,9 +217,11 @@ fi
 [ -f "$PRESET_FILE" ] || die "missing export preset: $PRESET_FILE"
 [ -f "$GDEXT_FILE" ] || die "missing GDExtension manifest: $GDEXT_FILE"
 [ -f "$ICON_FILE" ] || die "missing Windows executable icon: $ICON_FILE"
-[ -f "$INNO_TEMPLATE" ] || die "missing Inno Setup template: $INNO_TEMPLATE"
-[ -f "$INNO_RENDERER" ] || die "missing Inno Setup renderer: $INNO_RENDERER"
-[ -f "$SETUP_ICON" ] || die "missing Inno Setup icon: $SETUP_ICON"
+[ -f "$NSIS_TEMPLATE" ] || die "missing NSIS template: $NSIS_TEMPLATE"
+[ -f "$NSIS_RENDERER" ] || die "missing NSIS renderer: $NSIS_RENDERER"
+[ -f "$SETUP_ICON" ] || die "missing NSIS setup icon: $SETUP_ICON"
+[ -f "$KEYBOARD_GUIDE_SOURCE" ] || \
+    die "missing keyboard guide: $KEYBOARD_GUIDE_SOURCE"
 
 PRESET_SECTION="$(awk -v target="$PRESET_NAME" '
     function emit() {
@@ -304,42 +323,41 @@ check_export_templates() {
     echo "==> export templates: $TEMPLATE_DIR"
 }
 
-find_iscc() {
+find_makensis() {
     local candidate
-    if [ -n "$ISCC_OPT" ]; then
-        candidate="$(abs_path "$ISCC_OPT")"
+    if [ -n "$MAKENSIS_OPT" ]; then
+        candidate="$(abs_path "$MAKENSIS_OPT")"
         [ -x "$candidate" ] || return 1
-        ISCC="$candidate"
+        MAKENSIS="$candidate"
         return 0
     fi
     for candidate in \
-        "${ISCC_BIN:-}" \
-        "$REPO/work/out/tools/InnoSetup6/ISCC.exe" \
-        "$REPO/work/out/tools/InnoSetup-6.7.4/ISCC.exe" \
-        "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
-        "/c/Program Files/Inno Setup 6/ISCC.exe"
+        "${MAKENSIS_BIN:-}" \
+        "$REPO/work/out/tools/nsis-3.11/nsis-3.11/makensis.exe" \
+        "/c/Program Files (x86)/NSIS/makensis.exe" \
+        "/c/Program Files/NSIS/makensis.exe"
     do
         [ -n "$candidate" ] || continue
         if [ -x "$candidate" ]; then
-            ISCC="$candidate"
+            MAKENSIS="$candidate"
             return 0
         fi
     done
-    candidate="$(command -v ISCC.exe 2>/dev/null || true)"
+    candidate="$(command -v makensis.exe 2>/dev/null || true)"
     if [ -n "$candidate" ] && [ -x "$candidate" ]; then
-        ISCC="$candidate"
+        MAKENSIS="$candidate"
         return 0
     fi
     return 1
 }
 
-check_iscc() {
-    if ! find_iscc; then
-        echo "error: Inno Setup compiler (ISCC.exe) was not found." >&2
-        echo "       Install Inno Setup or pass --iscc PATH / set ISCC_BIN." >&2
+check_makensis() {
+    if ! find_makensis; then
+        echo "error: NSIS compiler (makensis.exe) was not found." >&2
+        echo "       Install NSIS or pass --makensis PATH / set MAKENSIS_BIN." >&2
         return 1
     fi
-    echo "==> Inno Setup compiler: $ISCC"
+    echo "==> NSIS compiler: $MAKENSIS"
 }
 
 echo "==> version $VERSION"
@@ -351,8 +369,28 @@ echo "    sha256=$(sha256sum "$SYSTEM_SAVE" | awk '{print $1}')"
 
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "==> dry-run (data plan only; not a full release preflight)"
-    python "$RELEASE_DATA_TOOL" plan --root "$DATA_ROOT" --manifest "$MANIFEST"
-    echo "    would add one clean Data/Save/System.sav"
+    PACK_PREFIX_SUMMARY=""
+    RELEASE_PLAN_ARGS=(
+        plan
+        --root "$DATA_ROOT"
+        --manifest "$MANIFEST"
+        --system-save "$SYSTEM_SAVE"
+    )
+    for prefix in "${MEDIA_PREFIXES[@]}"; do
+        PACK_PREFIX_SUMMARY="${PACK_PREFIX_SUMMARY}${PACK_PREFIX_SUMMARY:+, }$prefix"
+        RELEASE_PLAN_ARGS+=(--exclude-prefix "$prefix")
+    done
+    echo "==> media pack: Data/media.pak"
+    echo "    include prefixes: $PACK_PREFIX_SUMMARY"
+    echo "    expected payload: 731 files / 113,002,329 bytes (current manifest; plan recomputes)"
+    python "$RELEASE_DATA_TOOL" "${RELEASE_PLAN_ARGS[@]}"
+    echo "    would create: $MEDIA_PAK"
+    if [ -x "$MEDIA_PACK_BIN" ]; then
+        echo "==> dry run: media-pack available: $MEDIA_PACK_BIN"
+    else
+        echo "==> dry run: media-pack not built yet: $MEDIA_PACK_BIN"
+        echo "    a real run builds it with: cargo build -q --release -p wolf-format --bin media-pack"
+    fi
     if check_export_templates; then
         echo "==> dry run: export templates available"
     else
@@ -372,10 +410,10 @@ if [ "$DRY_RUN" -eq 1 ]; then
         echo "==> dry run: would create portable zip: $ZIP_PATH"
     fi
     if [ "$MAKE_SETUP" -eq 1 ]; then
-        if check_iscc; then
+        if check_makensis; then
             echo "==> dry run: would create installer: $SETUP_PATH"
         else
-            echo "warning: a real run would stop because ISCC.exe is missing" >&2
+            echo "warning: a real run would stop because makensis.exe is missing" >&2
         fi
     fi
     exit 0
@@ -389,16 +427,23 @@ fi
 
 check_export_templates || exit 1
 if [ "$MAKE_SETUP" -eq 1 ]; then
-    check_iscc || exit 1
+    check_makensis || exit 1
 fi
 
 if [ "$SKIP_BUILD" -eq 0 ]; then
     echo "==> building release GDExtension"
     bash tools/build-godot.sh --release
+    echo "==> building media packer"
+    cargo build -q --release -p wolf-format --bin media-pack
 else
     echo "==> skipping GDExtension build (--skip-build)"
+    if [ ! -x "$MEDIA_PACK_BIN" ]; then
+        echo "==> media-pack missing; building it despite --skip-build"
+        cargo build -q --release -p wolf-format --bin media-pack
+    fi
 fi
 [ -f "$DLL_FILE" ] || die "release GDExtension DLL missing: $DLL_FILE"
+[ -x "$MEDIA_PACK_BIN" ] || die "media packer missing after build: $MEDIA_PACK_BIN"
 
 if [ ! -f "$GODOT_PROJECT/.godot/extension_list.cfg" ]; then
     echo "==> importing Godot project"
@@ -446,6 +491,12 @@ python "$RELEASE_DATA_TOOL" verify-pck \
     --forbid "icon_windows.png" \
     --require "bin/wolf_gdext.gdextension" \
     --require "icon_titlebar.png.import" \
+    --require "icon_titlebar_16.png.import" \
+    --require "icon_titlebar_20.png.import" \
+    --require "icon_titlebar_24.png.import" \
+    --require "icon_titlebar_32.png.import" \
+    --require "icon_titlebar_40.png.import" \
+    --require "icon_titlebar_48.png.import" \
     --require "window_icon.ico" \
     --require "main.tscn.remap" \
     --require "project.binary" \
@@ -457,12 +508,46 @@ EXPORTED_DLL_SHA="$(sha256sum "$OUT_DIR/bin/wolf_gdext.dll" | awk '{print $1}')"
 [ "$DLL_SHA" = "$EXPORTED_DLL_SHA" ] || \
     die "exported wolf_gdext.dll does not match godot/bin/wolf_gdext.dll"
 
-echo "==> staging the exact release Data manifest"
-python "$RELEASE_DATA_TOOL" stage \
-    --root "$DATA_ROOT" \
-    --manifest "$MANIFEST" \
-    --dest "$OUT_DIR/Data" \
+echo "==> staging plaintext release Data (media prefixes excluded)"
+STAGE_ARGS=(
+    stage
+    --root "$DATA_ROOT"
+    --manifest "$MANIFEST"
+    --dest "$OUT_DIR/Data"
     --system-save "$SYSTEM_SAVE"
+    --defer-verify
+)
+VERIFY_ARGS=(
+    verify
+    --manifest "$MANIFEST"
+    --dest "$OUT_DIR/Data"
+    --extra "media.pak"
+)
+PACK_ARGS=(
+    --root "$(cygpath -w "$DATA_ROOT")"
+    --manifest "$(cygpath -w "$MANIFEST")"
+    --output "$(cygpath -w "$MEDIA_PAK")"
+)
+for prefix in "${MEDIA_PREFIXES[@]}"; do
+    STAGE_ARGS+=(--exclude-prefix "$prefix")
+    VERIFY_ARGS+=(--exclude-prefix "$prefix")
+    PACK_ARGS+=(--include-prefix "$prefix")
+done
+python "$RELEASE_DATA_TOOL" "${STAGE_ARGS[@]}"
+SAVE_EXTRA="$(find "$OUT_DIR/Data/Save" -maxdepth 1 -type f ! -iname 'System.sav' -print -quit)"
+[ -z "$SAVE_EXTRA" ] || die "release Data/Save must contain only System.sav: $SAVE_EXTRA"
+[ ! -e "$MEDIA_PAK" ] || die "media.pak already exists before packing: $MEDIA_PAK"
+
+echo "==> packing media into Data/media.pak"
+"$MEDIA_PACK_BIN" "${PACK_ARGS[@]}"
+[ -s "$MEDIA_PAK" ] || die "media packer did not create a non-empty file: $MEDIA_PAK"
+for prefix in "${MEDIA_PREFIXES[@]}"; do
+    loose_media="$OUT_DIR/Data/${prefix%/}"
+    [ ! -e "$loose_media" ] || die "loose media path must not be shipped: $loose_media"
+done
+
+echo "==> verifying the exact release Data file set"
+python "$RELEASE_DATA_TOOL" "${VERIFY_ARGS[@]}"
 
 BUILT="$(date -u +%Y-%m-%d)"
 echo "==> writing README.txt"
@@ -478,9 +563,17 @@ sed 's/$/\r/' > "$OUT_DIR/README.txt" <<EOF
 【文件夹说明】
   Imouto Life.exe   ← 双击这个（Godot release 导出，PCK 已内嵌）
   bin\wolf_gdext.dll ← Rust GDExtension（保留 bin\ 目录结构）
-  Data\             ← 精确发行素材清单，不含未使用地图/模板资源
+  Data\             ← 发行数据：media.pak + BasicData/MapData/Save/字体明文
   README.txt        ← 本说明
+  按键功能指引.txt  ← F4/F11/F8/F5 等快捷键与游戏操作说明
   checksums.txt     ← 发布包文件 SHA-256
+
+【Data 与 media.pak】
+  Data\media.pak 是媒体只读包，集中 Picture/cg/BGM/SE/CharaChip/
+  SystemFile/BalloonBase_CafeLatte 的发行文件，使用固定密钥 XOR 混淆。
+  这是提高直接浏览门槛的混淆，不是强加密。
+  Data\BasicData、MapData、Save 和字体仍为明文；
+  Mod 仍可沿用原来的 Data 目录结构放置同名散文件覆盖。
 
 【存档】
   Data\Save\ 只含一个干净的 System.sav 模板，
@@ -496,6 +589,10 @@ sed 's/$/\r/' > "$OUT_DIR/README.txt" <<EOF
   这是《妹！生活》的 Rust + Godot 重写版运行包，仅用于本地游玩与验证。
   版本：v$VERSION    构建：$BUILT
 EOF
+
+echo "==> writing keyboard guide"
+sed 's/$/\r/' "$KEYBOARD_GUIDE_SOURCE" > "$OUT_DIR/按键功能指引.txt"
+[ -s "$OUT_DIR/按键功能指引.txt" ] || die "keyboard guide was not written"
 
 echo "==> writing checksums.txt"
 (
@@ -586,25 +683,29 @@ PY
 fi
 
 if [ "$MAKE_SETUP" -eq 1 ]; then
-    mkdir -p "$ZIP_DIR" "$REPO/work/out/inno"
-    check_iscc || exit 1
-    ISS_FILE="$REPO/work/out/inno/ImoutoLife-$VERSION.iss"
-    echo "==> rendering Inno Setup script: $ISS_FILE"
-    python "$INNO_RENDERER" \
-        --template "$INNO_TEMPLATE" \
-        --output "$ISS_FILE" \
+    NSIS_BUILD_DIR="$REPO/work/out/nsis"
+    NSI_FILE="$NSIS_BUILD_DIR/ImoutoLife-$VERSION.nsi"
+    NSIS_TEMP_DIR="$NSIS_BUILD_DIR/temp"
+    mkdir -p "$ZIP_DIR" "$NSIS_BUILD_DIR" "$NSIS_TEMP_DIR"
+    check_makensis || exit 1
+    echo "==> rendering NSIS script: $NSI_FILE"
+    python "$NSIS_RENDERER" \
+        --template "$NSIS_TEMPLATE" \
+        --output "$NSI_FILE" \
         --source-dir "$OUT_DIR" \
-        --output-dir "$ZIP_DIR" \
+        --output-file "$SETUP_PATH" \
         --setup-icon "$SETUP_ICON" \
         --version "$VERSION" \
         --app-name "$GAME_FOLDER_NAME" \
         --publisher "$APP_PUBLISHER" \
         --copyright "$APP_COPYRIGHT"
-    ISS_WIN="$(cygpath -w "$ISS_FILE")"
+    NSI_WIN="$(cygpath -w "$NSI_FILE")"
+    NSIS_TEMP_WIN="$(cygpath -w "$NSIS_TEMP_DIR")"
     rm -f -- "$SETUP_PATH" "$SETUP_PATH.sha256"
     echo "==> creating installer: $SETUP_PATH"
-    MSYS2_ARG_CONV_EXCL='*' "$ISCC" /Qp "$ISS_WIN"
-    [ -f "$SETUP_PATH" ] || die "Inno Setup did not create: $SETUP_PATH"
+    TEMP="$NSIS_TEMP_WIN" TMP="$NSIS_TEMP_WIN" \
+        MSYS2_ARG_CONV_EXCL='*' "$MAKENSIS" /V2 "$NSI_WIN"
+    [ -f "$SETUP_PATH" ] || die "NSIS did not create: $SETUP_PATH"
     (
         cd "$ZIP_DIR"
         SETUP_BASE="$(basename "$SETUP_PATH")"

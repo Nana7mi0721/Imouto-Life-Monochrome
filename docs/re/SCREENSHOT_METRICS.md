@@ -96,13 +96,13 @@ RE（`FUN_004c3d20:59-77`，A 级）说面板宽 = 最宽选项 record 宽 + **0
 
 | 项 | 度量前（仓内） | 度量后（已落地） | 位置 |
 |---|---|---|---|
-| 消息行距 | font+6 = 26 | **font+3 = 23** | `crates/wolf-game/src/message.rs:45,50,134` |
-| 选择支行距 | 30（常量） | **font+7 = 27**（`line_pitch`） | `crates/wolf-game/src/choice.rs:24,31,70` |
-| 面板宽 | 最宽+62（含 marker/slack），最小 120 | **最宽 + 2×8**，无最小宽 | `choice.rs:139` |
-| 面板高 | rows×30+28 | **6 + rows×27** | `choice.rs:139` |
-| 文本内缩 | 14/侧 | **8/侧** | `choice.rs:38,153` |
-| 光标 | `"▶ "` 文本前缀 | **CursorBase 九宫格框**（corner 4） | `choice.rs:60,62,314` |
-| 单选行高 | 30 | **27**（行矩形），光标框 20 | `choice.rs:153` |
+| 消息行距 | font+6 = 26 | **font+3 = 23** | `crates/wolf-game/src/message.rs::LINE_GAP / ::BASE_FONT_PX / ::line_height()` |
+| 选择支行距 | 30（常量） | **font+7 = 27**（`line_pitch`） | `crates/wolf-game/src/choice.rs 常量区 + ::line_pitch()` |
+| 面板宽 | 最宽+62（含 marker/slack），最小 120 | **最宽 + 2×8**，无最小宽 | `choice.rs::size()` |
+| 面板高 | rows×30+28 | **6 + rows×27** | `choice.rs::size()` |
+| 文本内缩 | 14/侧 | **8/侧** | `choice.rs::TEXT_INSET / ::size()` |
+| 光标 | `"▶ "` 文本前缀 | **CursorBase 九宫格框**（corner 4） | `choice.rs::CURSOR_SKIN / ::CURSOR_CORNER / ::skin_pieces()` |
+| 单选行高 | 30 | **27**（行矩形），光标框 20 | `choice.rs::size()` |
 
 实测 vs 模型残差：宽 ±0.1 px、高 ±0.1 px、行距 ±0.2 px，都在亚像素级。
 

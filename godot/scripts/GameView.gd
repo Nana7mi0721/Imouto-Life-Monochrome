@@ -9,6 +9,13 @@ extends Control
 ## to the faces bundled in the data root and finally to a system font.
 
 const LOGICAL_SIZE := Vector2(1024.0, 576.0)
+const APP_WINDOW_TITLE := "妹！生活 ～单色～ Godot"
+const WINDOW_BASE_SIZE := Vector2i(1024, 576)
+const TITLEBAR_ICON_SMALL_SIZES := [16, 20, 24, 32, 40, 48]
+## F8 reports the measured render/physics rates and the active display tier.
+## F5 cycles the render cap; the 60/30/15 tiers match the retail title bar.
+const FPS_MODE_CAPS := [60, 30, 15]
+const FPS_MODE_SPECS := ["High Spec/Smooth", "Med Spec/Normal", "Low Spec/Rough"]
 ## Windows' native-icon path uses the ICO's exact 16x16 frame for the caption.
 ## A high-resolution HICON for ICON_SMALL keeps that title-bar icon crisp at
 ## high DPI; the taskbar keeps the ICO's large icon_windows frame.
@@ -439,6 +446,22 @@ var perf_atlas_revision: int = -1
 var perf_atlas_revision_changes: int = 0
 var perf_last_report_frame: int = 0
 var _titlebar_icon_image: Image
+var _titlebar_icon_images: Dictionary = {}
+## F4 follows the retail manual: start at 100%, add 100% per press while the
+## resulting client area still fits the usable desktop, then enter borderless
+## fullscreen. -1 means the current presentation is fullscreen.
+var _window_scale := 1
+var _windowed_size_before_fullscreen := WINDOW_BASE_SIZE
+var _windowed_position_before_fullscreen := Vector2i(-1, -1)
+var _fullscreen_active := false
+## F8 toggles the title-bar information line. F5 (or W while the line is
+## visible) cycles the 60/30/15 render caps.
+var _show_window_info := false
+var _fps_mode := 0
+var _inner_fps := 60
+var _inner_fps_frames := 0
+var _inner_fps_started_ms := 0
+var _info_title_elapsed := 0.0
 
 
 func _ready() -> void:
@@ -452,6 +475,8 @@ func _ready() -> void:
 	_mat_mul.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
 	# Parse first: the entry point and log switches are needed before the first frame.
 	_parse_args()
+	_apply_fps_mode()
+	_apply_window_title()
 	# Create the front-end layer before fonts, the data root or the runtime can
 	# fail. It has its own high z-index and never depends on `wolf`.
 	_ensure_modal_layer()
@@ -642,6 +667,7 @@ func _quit_from_startup_error() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	_note_inner_frame()
 	if wolf == null:
 		return
 	var frame_started := Time.get_ticks_usec()
@@ -777,6 +803,18 @@ func _input(event: InputEvent) -> void:
 	# it is never processed a second time at the unhandled-input stage.
 	if _is_fullscreen_toggle_event(event):
 		_toggle_fullscreen()
+		_mark_input_handled()
+		return
+	if _is_display_cycle_event(event):
+		_cycle_display_size()
+		_mark_input_handled()
+		return
+	if _is_window_info_event(event):
+		_toggle_window_info()
+		_mark_input_handled()
+		return
+	if _is_fps_mode_event(event):
+		_cycle_fps_mode()
 		_mark_input_handled()
 		return
 	if not _modal_kind.is_empty():
@@ -1183,13 +1221,208 @@ func _is_fullscreen_toggle_event(event: InputEvent) -> bool:
 
 
 func _toggle_fullscreen() -> void:
-	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	if _is_fullscreen():
+		_leave_fullscreen()
+		_window_scale = _window_scale_for_size(_windowed_size_before_fullscreen)
 	else:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		_enter_fullscreen()
 	# Godot re-sends its cached 16x16 ICON_SMALL when the window style changes.
 	# Put the high-resolution caption icon back after every mode switch.
 	_apply_window_titlebar_icon()
+	_apply_window_title()
+
+
+## F4 in the retail engine: 100%, 200%, ... until the next client area would
+## exceed the usable desktop, then pseudo-fullscreen. On a 1080p desktop the
+## second press therefore goes straight to borderless fullscreen, matching the
+## WOLF manual. F11 remains an independent fullscreen toggle.
+func _cycle_display_size() -> void:
+	if _is_fullscreen():
+		_leave_fullscreen()
+		_window_scale = 1
+		_apply_windowed_scale(1)
+	else:
+		var next_scale := maxi(1, _window_scale + 1)
+		if _window_scale_fits(next_scale):
+			_window_scale = next_scale
+			_apply_windowed_scale(next_scale)
+		else:
+			_enter_fullscreen()
+	_apply_window_titlebar_icon()
+	_apply_window_title()
+
+
+func _toggle_window_info() -> void:
+	_show_window_info = not _show_window_info
+	_info_title_elapsed = 0.0
+	_apply_window_title()
+
+
+func _cycle_fps_mode() -> void:
+	_fps_mode = (_fps_mode + 1) % FPS_MODE_CAPS.size()
+	_apply_fps_mode()
+	_apply_window_title()
+
+
+func _apply_fps_mode() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	Engine.max_fps = int(FPS_MODE_CAPS[_fps_mode])
+
+
+func _apply_window_title() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.window_set_title(_window_title_text())
+
+
+func _window_title_text() -> String:
+	var title := APP_WINDOW_TITLE + "    F4:Change Display / F8:Change Info"
+	if _show_window_info:
+		title = "[ScreenFPS%d/InnerFPS%d] [%s(Change w/ F5)]  F8:Change Info" % [
+			_current_screen_fps(),
+			_inner_fps,
+			FPS_MODE_SPECS[_fps_mode],
+		]
+	return title
+
+
+func _current_screen_fps() -> int:
+	return maxi(1, int(round(Engine.get_frames_per_second())))
+
+
+func _note_inner_frame() -> void:
+	var now := Time.get_ticks_msec()
+	if _inner_fps_started_ms == 0:
+		_inner_fps_started_ms = now
+		_inner_fps_frames = 0
+	_inner_fps_frames += 1
+	var elapsed := now - _inner_fps_started_ms
+	if elapsed >= 500:
+		_inner_fps = maxi(
+			1,
+			int(round(float(_inner_fps_frames) * 1000.0 / float(elapsed)))
+		)
+		_inner_fps_frames = 0
+		_inner_fps_started_ms = now
+
+
+func _key_identity(event: InputEvent) -> int:
+	if not (event is InputEventKey):
+		return 0
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return 0
+	var identity := key_event.physical_keycode
+	if identity == 0:
+		identity = key_event.keycode
+	return identity
+
+
+func _is_display_cycle_event(event: InputEvent) -> bool:
+	if not (event is InputEventKey):
+		return false
+	var key_event := event as InputEventKey
+	return (
+		_key_identity(event) == KEY_F4
+		and not key_event.alt_pressed
+		and not key_event.ctrl_pressed
+	)
+
+
+func _is_window_info_event(event: InputEvent) -> bool:
+	if not (event is InputEventKey):
+		return false
+	var key_event := event as InputEventKey
+	return (
+		_key_identity(event) == KEY_F8
+		and not key_event.alt_pressed
+		and not key_event.ctrl_pressed
+	)
+
+
+func _is_fps_mode_event(event: InputEvent) -> bool:
+	if not (event is InputEventKey):
+		return false
+	var key_event := event as InputEventKey
+	if key_event.alt_pressed or key_event.ctrl_pressed:
+		return false
+	var identity := _key_identity(event)
+	return identity == KEY_F5 or (_show_window_info and identity == KEY_W)
+
+
+func _is_fullscreen() -> bool:
+	return _fullscreen_active
+
+
+func _usable_window_rect() -> Rect2i:
+	if DisplayServer.get_name() == "headless":
+		return Rect2i(0, 0, 1920, 1080)
+	var screen := DisplayServer.window_get_current_screen()
+	var rect := DisplayServer.screen_get_usable_rect(screen)
+	if rect.size.x <= 0 or rect.size.y <= 0:
+		return Rect2i(0, 0, 1920, 1080)
+	return rect
+
+
+func _window_scale_fits(scale: int) -> bool:
+	var target := WINDOW_BASE_SIZE * scale
+	var usable := _usable_window_rect()
+	# Leave room for the non-client frame (title bar and resize borders).
+	return target.x + 32 <= usable.size.x and target.y + 80 <= usable.size.y
+
+
+func _window_scale_for_size(size: Vector2i) -> int:
+	if size.x <= 0:
+		return 1
+	return maxi(1, int(round(float(size.x) / float(WINDOW_BASE_SIZE.x))))
+
+
+func _apply_windowed_scale(scale: int) -> void:
+	var target := WINDOW_BASE_SIZE * maxi(1, scale)
+	_fullscreen_active = false
+	if DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_size(target)
+	_center_window(target)
+
+
+func _enter_fullscreen() -> void:
+	if not _fullscreen_active:
+		if DisplayServer.get_name() == "headless":
+			_windowed_size_before_fullscreen = WINDOW_BASE_SIZE * maxi(1, _window_scale)
+			_windowed_position_before_fullscreen = Vector2i(-1, -1)
+		else:
+			_windowed_size_before_fullscreen = DisplayServer.window_get_size()
+			_windowed_position_before_fullscreen = DisplayServer.window_get_position()
+	_window_scale = -1
+	_fullscreen_active = true
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
+func _leave_fullscreen() -> void:
+	_fullscreen_active = false
+	if DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	var size := _windowed_size_before_fullscreen
+	if size.x <= 0 or size.y <= 0:
+		size = WINDOW_BASE_SIZE
+	DisplayServer.window_set_size(size)
+	if _windowed_position_before_fullscreen.x >= 0:
+		DisplayServer.window_set_position(_windowed_position_before_fullscreen)
+	else:
+		_center_window(size)
+
+
+func _center_window(size: Vector2i) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var usable := _usable_window_rect()
+	var position := usable.position + (usable.size - size) / 2
+	DisplayServer.window_set_position(position)
 
 
 ## Replaces only the Windows title-bar icon with the high-resolution inusuku head crop.
@@ -1202,17 +1435,50 @@ func _apply_window_titlebar_icon() -> void:
 		return
 	if wolf == null or not wolf.has_method("set_titlebar_icon"):
 		return
+	var target_size := 0
+	if wolf.has_method("titlebar_icon_size"):
+		target_size = int(wolf.titlebar_icon_size())
+	var image := _titlebar_icon_for_size(target_size)
+	if image == null:
+		return
+	if not wolf.set_titlebar_icon(image):
+		push_warning("window icon: high-resolution title-bar icon was not applied")
+
+
+## Windows asks for ICON_SMALL in physical pixels; at 150% DPI that is usually
+## 24x24, not the 16x16 frame stored in the ICO. Prefer a dedicated simplified
+## small PNG, then fall back to a high-quality resize of the 256x256 crop.
+func _titlebar_icon_for_size(size: int) -> Image:
+	if size <= 0:
+		return _titlebar_icon_base()
+	if _titlebar_icon_images.has(size):
+		return _titlebar_icon_images[size]
+	var image: Image = null
+	if TITLEBAR_ICON_SMALL_SIZES.has(size):
+		var path := "res://icon_titlebar_%d.png" % size
+		var texture := load(path) as Texture2D
+		if texture != null:
+			image = texture.get_image()
+	if image == null:
+		var base := _titlebar_icon_base()
+		if base == null:
+			return null
+		image = base.duplicate()
+		image.resize(size, size, Image.INTERPOLATE_LANCZOS)
+	_titlebar_icon_images[size] = image
+	return image
+
+
+func _titlebar_icon_base() -> Image:
 	if _titlebar_icon_image == null:
 		var texture := load(TITLEBAR_ICON_PATH) as Texture2D
 		if texture == null:
 			push_warning("window icon: cannot load " + TITLEBAR_ICON_PATH)
-			return
+			return null
 		_titlebar_icon_image = texture.get_image()
 	if _titlebar_icon_image == null:
 		push_warning("window icon: " + TITLEBAR_ICON_PATH + " is not readable")
-		return
-	if not wolf.set_titlebar_icon(_titlebar_icon_image):
-		push_warning("window icon: high-resolution title-bar icon was not applied")
+	return _titlebar_icon_image
 
 
 ## The retail cursor is deterministic; a real windowed session opts into the
@@ -1238,7 +1504,12 @@ func _mark_input_handled() -> void:
 		viewport.set_input_as_handled()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _show_window_info:
+		_info_title_elapsed += delta
+		if _info_title_elapsed >= 0.25:
+			_info_title_elapsed = 0.0
+			_apply_window_title()
 	if capture_path.is_empty() or captured or wolf == null:
 		return
 	if not pause_on_msg.is_empty():
@@ -1685,14 +1956,26 @@ func _load_audio(file: String) -> AudioStream:
 	var path := data_root.path_join(file)
 	if audio_cache.has(path):
 		return audio_cache[path]
+	var packed := PackedByteArray()
+	if wolf != null and wolf.has_method("read_media"):
+		packed = wolf.read_media(file)
 	var stream: AudioStream = null
 	match path.get_extension().to_lower():
 		"ogg":
-			stream = AudioStreamOggVorbis.load_from_file(path)
+			if not packed.is_empty():
+				stream = AudioStreamOggVorbis.load_from_buffer(packed)
+			if stream == null:
+				stream = AudioStreamOggVorbis.load_from_file(path)
 		"mp3":
-			stream = AudioStreamMP3.load_from_file(path)
+			if not packed.is_empty():
+				stream = AudioStreamMP3.load_from_buffer(packed)
+			if stream == null:
+				stream = AudioStreamMP3.load_from_file(path)
 		"wav":
-			stream = AudioStreamWAV.load_from_file(path)
+			if not packed.is_empty():
+				stream = AudioStreamWAV.load_from_buffer(packed)
+			if stream == null:
+				stream = AudioStreamWAV.load_from_file(path)
 		_:
 			push_warning("audio: unsupported extension " + path)
 	if stream == null:

@@ -122,8 +122,87 @@ def top_level(rel: str) -> str:
     return parts[0] if len(parts) > 1 else "(root)"
 
 
-def print_plan(root: Path, entries: list[str]) -> tuple[dict[str, int], int]:
+def normalize_prefix(value: str) -> str:
+    if not value:
+        fail("--exclude-prefix must not be empty")
+    if "\x00" in value or "\\" in value:
+        fail(f"--exclude-prefix contains an invalid path character: {value!r}")
+    if ":" in value:
+        fail(f"--exclude-prefix must be a relative POSIX path: {value!r}")
+    raw = value.rstrip("/")
+    rel = PurePosixPath(raw)
+    if (
+        not raw
+        or rel.is_absolute()
+        or any(part in ("", ".", "..") for part in rel.parts)
+    ):
+        fail(f"--exclude-prefix must be a relative path without '.' or '..': {value!r}")
+    return rel.as_posix()
+
+
+def normalize_prefixes(values: list[str]) -> list[str]:
+    prefixes: list[str] = []
+    for value in values:
+        prefix = normalize_prefix(value)
+        if prefix not in prefixes:
+            prefixes.append(prefix)
+    return prefixes
+
+
+def normalize_extra(value: str) -> str:
+    if not value:
+        fail("--extra must not be empty")
+    if "\x00" in value or "\\" in value:
+        fail(f"--extra contains an invalid path character: {value!r}")
+    if ":" in value:
+        fail(f"--extra must be a relative POSIX path: {value!r}")
+    if value.endswith("/") or "//" in value:
+        fail(f"--extra must name a file, not a directory: {value!r}")
+    rel = PurePosixPath(value)
+    if rel.is_absolute() or any(part in ("", ".", "..") for part in rel.parts):
+        fail(f"--extra must be a relative path without '.' or '..': {value!r}")
+    canonical = rel.as_posix()
+    if canonical == SYSTEM_SAVE_REL:
+        fail(f"--extra must not repeat {SYSTEM_SAVE_REL}")
+    return canonical
+
+
+def is_excluded(rel: str, prefixes: list[str]) -> bool:
+    return any(rel == prefix or rel.startswith(prefix + "/") for prefix in prefixes)
+
+
+def filter_entries(entries: list[str], exclude_prefixes: list[str]) -> list[str]:
+    if not exclude_prefixes:
+        return list(entries)
+    return [rel for rel in entries if not is_excluded(rel, exclude_prefixes)]
+
+
+def validate_system_save(system_save: Path) -> Path:
+    try:
+        resolved = system_save.resolve(strict=True)
+    except OSError as error:
+        fail(f"System.sav template is missing or unreadable: {system_save}: {error}")
+    if not resolved.is_file():
+        fail(f"System.sav template is not a regular file: {system_save}")
+    if resolved.name.casefold() != "system.sav":
+        fail(f"System.sav template has the wrong name: {system_save}")
+    return resolved
+
+
+def print_plan(
+    root: Path,
+    entries: list[str],
+    exclude_prefixes: list[str],
+    system_save: Path | None,
+) -> tuple[dict[str, int], int]:
     sizes, total = manifest_files(root, entries)
+    filtered = filter_entries(entries, exclude_prefixes)
+    filtered_set = set(filtered)
+    filtered_sizes = {rel: sizes[rel] for rel in filtered}
+    filtered_total = sum(filtered_sizes.values())
+    pack_sizes = {rel: size for rel, size in sizes.items() if rel not in filtered_set}
+    pack_total = sum(pack_sizes.values())
+
     actual = dict(iter_data_files(root))
     missing_from_disk = [rel for rel in entries if rel not in actual]
     if missing_from_disk:
@@ -134,23 +213,48 @@ def print_plan(root: Path, entries: list[str]) -> tuple[dict[str, int], int]:
     excluded_bytes = sum(size for _, size in excluded)
     actual_bytes = sum(actual.values())
 
-    counts = collections.Counter(top_level(rel) for rel in entries)
+    counts = collections.Counter(top_level(rel) for rel in filtered)
     sizes_by_top: dict[str, int] = collections.defaultdict(int)
-    for rel, size in sizes.items():
+    for rel, size in filtered_sizes.items():
         sizes_by_top[top_level(rel)] += size
 
     print(f"manifest: {len(entries)} files / {total} bytes")
-    print(f"source Data (excluding Save/): {len(actual)} files / {actual_bytes} bytes")
-    print(f"excluded from release: {len(excluded)} files / {excluded_bytes} bytes")
+    print(f"pack plan: {len(pack_sizes)} files / {pack_total} bytes")
+    for prefix in exclude_prefixes:
+        prefix_files = [
+            rel for rel in pack_sizes if rel == prefix or rel.startswith(prefix + "/")
+        ]
+        prefix_bytes = sum(pack_sizes[rel] for rel in prefix_files)
+        print(f"  {len(prefix_files):4d} files  {prefix_bytes:12d} bytes  {prefix}/")
+    print(f"release manifest after exclusion: {len(filtered)} files / {filtered_total} bytes")
     for name in sorted(counts):
         print(f"  {counts[name]:4d} files  {sizes_by_top[name]:12d} bytes  {name}/")
+    print(f"source Data (excluding Save/): {len(actual)} files / {actual_bytes} bytes")
+    print(f"excluded from release: {len(excluded)} files / {excluded_bytes} bytes")
+    if system_save is not None:
+        save = validate_system_save(system_save)
+        save_size = save.stat().st_size
+        staged_files = len(filtered) + 1
+        staged_bytes = filtered_total + save_size
+        print(f"staged Data: {staged_files} files / {staged_bytes} bytes (adds {SYSTEM_SAVE_REL})")
+        print(
+            f"final Data after pack: {staged_files + 1} files; "
+            f"payload {staged_bytes + pack_total} bytes "
+            "(media container overhead excluded)"
+        )
+    else:
+        print(
+            f"final Data after pack: {len(filtered) + 2} files "
+            f"(adds {SYSTEM_SAVE_REL} and media.pak)"
+        )
 
-    return sizes, total
+    return filtered_sizes, filtered_total
 
 
-def expected_for_stage(entries: list[str]) -> set[str]:
+def expected_for_stage(entries: list[str], extras: list[str] | tuple[str, ...] = ()) -> set[str]:
     expected = set(entries)
     expected.add(SYSTEM_SAVE_REL)
+    expected.update(extras)
     return expected
 
 
@@ -168,14 +272,17 @@ def actual_stage_files(dest: Path) -> set[str]:
     return actual
 
 
-def stage(root: Path, manifest: Path, dest: Path, system_save: Path) -> None:
-    entries = read_manifest(manifest)
+def stage(
+    root: Path,
+    manifest: Path,
+    dest: Path,
+    system_save: Path,
+    exclude_prefixes: list[str],
+    defer_verify: bool,
+) -> None:
+    entries = filter_entries(read_manifest(manifest), exclude_prefixes)
     sizes, total = manifest_files(root, entries)
-    system_save = system_save.resolve(strict=True)
-    if not system_save.is_file():
-        fail(f"System.sav template is not a regular file: {system_save}")
-    if system_save.name.casefold() != "system.sav":
-        fail(f"System.sav template has the wrong name: {system_save}")
+    system_save = validate_system_save(system_save)
 
     if dest.exists() and any(dest.iterdir()):
         fail(f"staging destination is not empty: {dest}")
@@ -191,25 +298,49 @@ def stage(root: Path, manifest: Path, dest: Path, system_save: Path) -> None:
     save_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(system_save, save_target)
 
-    verify_stage(dest, entries)
-    print(f"staged: {len(entries) + 1} files / {total + system_save.stat().st_size} bytes -> {dest}")
+    message = (
+        f"staged: {len(entries) + 1} files / "
+        f"{total + system_save.stat().st_size} bytes -> {dest}"
+    )
+    if defer_verify:
+        print(f"{message} (verification deferred)")
+    else:
+        verify_stage(dest, entries, exclude_prefixes=exclude_prefixes)
+        print(message)
 
 
-def verify_stage(dest: Path, entries: list[str]) -> None:
-    expected = expected_for_stage(entries)
+def verify_stage(
+    dest: Path,
+    entries: list[str],
+    extras: list[str] | tuple[str, ...] = (),
+    exclude_prefixes: list[str] | tuple[str, ...] = (),
+) -> None:
+    expected = expected_for_stage(entries, extras)
     actual = actual_stage_files(dest)
     missing = sorted(expected - actual)
     extra = sorted(actual - expected)
-    if missing or extra:
+    lingering_prefixes = sorted(
+        f"{prefix}/"
+        for prefix in exclude_prefixes
+        if dest.joinpath(*path_parts(prefix)).exists()
+    )
+    if missing or extra or lingering_prefixes:
         lines = []
         if missing:
             lines.append("missing:\n  " + "\n  ".join(missing))
         if extra:
             lines.append("unexpected:\n  " + "\n  ".join(extra))
+        if lingering_prefixes:
+            lines.append(
+                "excluded prefix paths still exist:\n  " + "\n  ".join(lingering_prefixes)
+            )
         fail("staged data does not match the release manifest:\n" + "\n".join(lines))
     if not dest.joinpath(*path_parts(SYSTEM_SAVE_REL)).is_file():
         fail(f"staged data is missing {SYSTEM_SAVE_REL}")
-    print(f"verified: {len(actual)} files exactly match the manifest + {SYSTEM_SAVE_REL}")
+    detail = f"manifest + {SYSTEM_SAVE_REL}"
+    if extras:
+        detail += f" + {len(set(extras))} extra file(s)"
+    print(f"verified: {len(actual)} files exactly match the {detail}")
 
 
 def verify_manifest_only(root: Path, entries: list[str]) -> None:
@@ -301,6 +432,8 @@ def main() -> None:
     plan = sub.add_parser("plan", help="validate the manifest and print the release size")
     plan.add_argument("--root", required=True, type=Path)
     plan.add_argument("--manifest", required=True, type=Path)
+    plan.add_argument("--exclude-prefix", action="append", default=[])
+    plan.add_argument("--system-save", type=Path)
 
     check = sub.add_parser("check", help="validate manifest syntax and source files")
     check.add_argument("--root", required=True, type=Path)
@@ -311,10 +444,14 @@ def main() -> None:
     stage_parser.add_argument("--manifest", required=True, type=Path)
     stage_parser.add_argument("--dest", required=True, type=Path)
     stage_parser.add_argument("--system-save", required=True, type=Path)
+    stage_parser.add_argument("--exclude-prefix", action="append", default=[])
+    stage_parser.add_argument("--defer-verify", action="store_true")
 
     verify = sub.add_parser("verify", help="verify an already staged Data directory")
     verify.add_argument("--manifest", required=True, type=Path)
     verify.add_argument("--dest", required=True, type=Path)
+    verify.add_argument("--exclude-prefix", action="append", default=[])
+    verify.add_argument("--extra", action="append", default=[])
 
     pck = sub.add_parser("verify-pck", help="verify the embedded Godot PCK file set")
     pck.add_argument("--exe", required=True, type=Path)
@@ -334,15 +471,29 @@ def main() -> None:
 
     root = args.root.resolve() if hasattr(args, "root") else None
     entries = read_manifest(args.manifest.resolve())
+    excludes = normalize_prefixes(getattr(args, "exclude_prefix", []))
 
     if args.command == "plan":
-        print_plan(root, entries)
+        print_plan(root, entries, excludes, args.system_save)
     elif args.command == "check":
         verify_manifest_only(root, entries)
     elif args.command == "stage":
-        stage(root, args.manifest.resolve(), args.dest.resolve(), args.system_save)
+        stage(
+            root,
+            args.manifest.resolve(),
+            args.dest.resolve(),
+            args.system_save,
+            excludes,
+            args.defer_verify,
+        )
     elif args.command == "verify":
-        verify_stage(args.dest.resolve(), entries)
+        extras = [normalize_extra(value) for value in args.extra]
+        verify_stage(
+            args.dest.resolve(),
+            filter_entries(entries, excludes),
+            extras,
+            excludes,
+        )
 
 
 if __name__ == "__main__":

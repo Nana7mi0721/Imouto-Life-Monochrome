@@ -730,6 +730,8 @@ pub enum GameError {
     Mod(crate::mods::ModError),
     /// A mod's text-level catalog (`translations.tsv`) is malformed.
     Translate(crate::translate::TranslateError),
+    /// A media asset could not be resolved or read.
+    Asset(crate::assets::AssetError),
 }
 
 impl fmt::Display for GameError {
@@ -741,6 +743,7 @@ impl fmt::Display for GameError {
             Self::MissingSettings => write!(f, "no Save/System.sav to hold the global settings"),
             Self::Mod(err) => write!(f, "mod error: {err}"),
             Self::Translate(err) => write!(f, "mod translation catalog: {err}"),
+            Self::Asset(err) => write!(f, "media asset: {err}"),
         }
     }
 }
@@ -754,6 +757,7 @@ impl std::error::Error for GameError {
             Self::MissingSettings => None,
             Self::Mod(err) => Some(err),
             Self::Translate(err) => Some(err),
+            Self::Asset(err) => Some(err),
         }
     }
 }
@@ -1375,6 +1379,20 @@ impl Game {
     #[must_use]
     pub fn overlays(&self) -> &[PathBuf] {
         &self.overlays
+    }
+
+    /// Reads one raw media asset without decoding it.
+    ///
+    /// This is the host bridge used by the Godot front-end for audio files: it
+    /// follows the same overlay > loose data > `media.pak` priority as image
+    /// loading and applies any mod byte patches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GameError::Asset`] when the name is invalid, missing or the
+    /// selected layer contains unreadable/corrupt bytes.
+    pub fn read_media_bytes(&self, name: &str) -> Result<Vec<u8>, GameError> {
+        self.assets.read_raw(name).map_err(GameError::Asset)
     }
 
     /// The validated manifests of the loaded mod overlays, in layering order.

@@ -4,7 +4,12 @@
 
 本项目是《妹！生活 ～単色～》（WOLF RPG Editor 引擎）的**数据级重写**：游戏逻辑、数值与流程由 `Data/`（CommonEvent.dat、地图事件、DB）驱动，本仓库的 Rust 运行时负责忠实执行；但**另有一批行为不在 Data 里，而是硬编码在原版 Game.exe 的运行时**（窗口九宫格布局、文本度量与换行、选择面板越界回退、1/10 UI 缩放、淡入/过渡、present/swapchain 等）。这些行为无法从数据文件导出，只能靠说明书、参考实现、黑盒实测或定点逆向逐项确认。
 
-本文件把这些"数据外部"的引擎行为**逐项登记**，记录原版规则/常量、当前 Rust 实现的还原状态、实现位置（`文件:行`）以及后续核对方法，供后续逆向（C 任务）与验收使用。
+本文件把这些"数据外部"的引擎行为**逐项登记**，记录原版规则/常量、当前 Rust 实现的还原状态、实现位置以及后续核对方法，供后续逆向（C 任务）与验收使用。
+
+> **实现位置一律用 `文件::符号` 引用，不用行号。**
+> 行号会随任何一次改动漂移（2026-11-18 复核时发现本文曾有 20 余处行号失准，
+> 其中 3 处已指到完全无关的代码）。读到本文时**以符号名和规则描述为准**；
+> 需要行号时自行在当前 HEAD 上定位。
 
 **状态图例（取值固定为下列之一）：**
 
@@ -27,74 +32,74 @@
 
 ### 1.1 九宫格窗口几何
 
-| 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置(文件:行) | 测量/核对方法 |
+| 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置（文件::符号） | 测量/核对方法 |
 |---|---|---|---|---|---|
-| 窗口皮肤文件与格式 | `SystemFile/WindowBase.png`，18x18 像素；3px 对称边框 | 逆向/实测（皮肤像素） | 已实现 | crates/wolf-game/src/window.rs:27,30,62；crates/wolf-game/src/db.rs:62 | 解包该 png 量得 18x18；行/列 0=外暗线 0x424242、1=亮棱 0xf2f3f3、2=过渡线 0x576062、3..14=体 0x1f2425/α0xdf、15/16 镜像 |
-| 九宫格切分算法 | 帧厚 3px 对称九宫格；**角保持像素尺寸、中行列吸收余量**（WOLF 不 tile 边缘） | 逆向 `[推断]` | 已实现 | crates/wolf-game/src/window.rs:62（`nine_slice(dst,skin_w,skin_h)`），split(len,corner)=[0,corner,len-corner,len] | 单测 `nine_slice([0,0,30,20],18,18)`=9 片，centre src[3,3,12,12]/rect[3,3,24,14] |
-| 内边距 / 文字区偏移 | 3px 边框 + 帧图整体决定；文本原点 Sys1/Sys2=(64,410)，文字区宽 960（1024−64） | 实测 `[未实测精确内边距]` | 部分实现 | crates/wolf-game/src/message.rs:111,169；FRAME_PICTURE=19500 message.rs:60 | 实机 1024x576 截图量首字像素相对框左上角偏移 |
-| 盒最小尺寸 / 小盒退化 | `MIN_BOX=2`；盒小于帧尺寸时角折半 | 逆向 `[推断]` | 部分实现 | crates/wolf-game/src/window.rs:37,62 | 单测 4x4 盒只剩 4 角各 2px |
-| 消息窗整图（引擎只量不画） | op150 由脚本画 picture 19500；引擎据其矩形定义 wrap 宽 | 数据可导 | 数据可导 | crates/wolf-game/src/message.rs:60 | CE63 画帧，脚本矩形与 message_vars 一致 |
+| 窗口皮肤文件与格式 | `SystemFile/WindowBase.png`，18x18 像素；3px 对称边框 | 逆向/实测（皮肤像素） | 已实现 | `wolf-game/src/window.rs::SKIN` / `::CORNER` / `::nine_slice()`；`wolf-game/src/db.rs::WINDOW_SKIN_FILE` | 解包该 png 量得 18x18；行/列 0=外暗线 0x424242、1=亮棱 0xf2f3f3、2=过渡线 0x576062、3..14=体 0x1f2425/α0xdf、15/16 镜像 |
+| 九宫格切分算法 | 帧厚 3px 对称九宫格；**角保持像素尺寸、中行列吸收余量**（WOLF 不 tile 边缘） | 逆向 `[推断]` | 已实现 | `wolf-game/src/window.rs::nine_slice(dst,skin_w,skin_h)`，split(len,corner)=[0,corner,len-corner,len] | 单测 `nine_slice([0,0,30,20],18,18)`=9 片，centre src[3,3,12,12]/rect[3,3,24,14] |
+| 内边距 / 文字区偏移 | 3px 边框 + 帧图整体决定；文本原点 Sys1/Sys2=(64,410)，文字区宽 960（1024−64） | 实测 `[未实测精确内边距]` | 部分实现 | `wolf-game/src/message.rs::default_origin()` / `::Vars::defaults()`；`::FRAME_PICTURE`（=19500） | 实机 1024x576 截图量首字像素相对框左上角偏移 |
+| 盒最小尺寸 / 小盒退化 | `MIN_BOX=2`；盒小于帧尺寸时角折半 | 逆向 `[推断]` | 部分实现 | `wolf-game/src/window.rs::MIN_BOX` / `::nine_slice()` | 单测 4x4 盒只剩 4 角各 2px |
+| 消息窗整图（引擎只量不画） | op150 由脚本画 picture 19500；引擎据其矩形定义 wrap 宽 | 数据可导 | 数据可导 | `wolf-game/src/message.rs::FRAME_PICTURE` | CE63 画帧，脚本矩形与 message_vars 一致 |
 
 ### 1.2 文本度量与自动换行
 
-| 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置(文件:行) | 测量/核对方法 |
+| 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置（文件::符号） | 测量/核对方法 |
 |---|---|---|---|---|---|
-| 字号 | 共享 Sys8；boot 默认 20，范围外回退 20 | 说明书+实测 | 已实现 | crates/wolf-game/src/message.rs:40；crates/wolf-game/src/game.rs:1331 | CE48 写 Sys8=20；font_px() 取 Sys8 |
-| 行距 | 行高 = 字号 + trunc(行距配置 × min(基准字号,32)/32)；本作 6×16/32 = **3** → Sys8=20 时 **23**（RE FUN_004c2d50；实机 101 窗口行距 23.0） | 逆向 A + 截图实测 | 已实现 | crates/wolf-game/src/message.rs:44,50,133 | 实机 101 三行墨迹 pitch 34.36/1.496 ≈ 23.0；Game.dat u8[11]=6、u8[0]=16 |
-| 全/半角宽度 | 全角字符=font_px，半角=font_px*0.5 | 逆向/实测 | 部分实现 | crates/wolf-game/src/choice.rs:88（advance_at）；crates/wolf-game/src/fontmetrics.rs（em_advance） | 有 TTF 时用 hmtx em*px，无字形回退 choice 规则；逐字符量宽 |
+| 字号 | 共享 Sys8；boot 默认 20，范围外回退 20 | 说明书+实测 | 已实现 | `wolf-game/src/message.rs::DEFAULT_FONT_PX`；`wolf-game/src/game.rs::Game::font_px()` | CE48 写 Sys8=20；font_px() 取 Sys8 |
+| 行距 | 行高 = 字号 + trunc(行距配置 × min(基准字号,32)/32)；本作 6×16/32 = **3** → Sys8=20 时 **23**（RE FUN_004c2d50；实机 101 窗口行距 23.0） | 逆向 A + 截图实测 | 已实现 | `wolf-game/src/message.rs::LINE_GAP` / `::BASE_FONT_PX` / `::line_height()` | 实机 101 三行墨迹 pitch 34.36/1.496 ≈ 23.0；Game.dat u8[11]=6、u8[0]=16 |
+| 全/半角宽度 | 全角字符=font_px，半角=font_px*0.5 | 逆向/实测 | 部分实现 | `wolf-game/src/choice.rs::advance_at()`；`wolf-game/src/fontmetrics.rs`（em_advance） | 有 TTF 时用 hmtx em*px，无字形回退 choice 规则；逐字符量宽 |
 | 逐行推进（row_height） | 每行 y += max(行内 font) + 缩放后行距（本作 3） | 逆向 A | 已实现 | crates/wolf-game/src/message.rs（layout/layout_styled） | 多字号混排行对照实测 |
 | 标点避头尾（禁则处理） | 原版行首禁则字符集与挤压规则 | 需逆向 `[未实测]` | 未实现 | ——（message.rs 无禁则逻辑） | 需原版 Game.exe 逆向或逐帧实测行首标点处理 |
-| 打字机显示 | cps=Sys9（boot 500，CE269 后 120），preroll=Sys10（空闲 9 / 显示 1）；revealed=floor((frames−preroll)*cps/60) | 逆向/实测 | 已实现 | crates/wolf-game/src/message.rs:46,49,268 | 逐帧计字数对照 |
-| 换行（wrap） | 按 advance_at 累加断行；断点处空格丢弃 | 逆向 `[推断]` | 已实现 | crates/wolf-game/src/message.rs:288 | 单测长句换行与空格处理 |
+| 打字机显示 | cps=Sys9（boot 500，CE269 后 120），preroll=Sys10（空闲 9 / 显示 1）；revealed=floor((frames−preroll)*cps/60) | 逆向/实测 | 已实现 | `wolf-game/src/message.rs::DEFAULT_CHARS_PER_SECOND` / `::DEFAULT_PREROLL` / `::revealed()` | 逐帧计字数对照 |
+| 换行（wrap） | 按 advance_at 累加断行；断点处空格丢弃 | 逆向 `[推断]` | 已实现 | `wolf-game/src/message.rs::wrap()` | 单测长句换行与空格处理 |
 | 字体文件与度量 | 优先 `07やさしさゴシックボールド.ttf`；ttf_parser 解析 em_advance=hor_advance/units_per_em | 实测 | 已实现 | crates/wolf-game/src/fontmetrics.rs（FontMetrics::load/advance） | 加载 TTF 比对字宽；缺字 fallback seguisym.ttf |
 
 ### 1.3 选择面板布局与越界回退（H-MENU-1）
 
 | 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置(文件:行) | 测量/核对方法 |
 |---|---|---|---|---|---|
-| 面板基本常量 | TEXT_PX 20；行距 = font + trunc(14×16/32) = **27**；文本内缩 **8/侧**；行起点 +6；光标 = CursorBase.png 九宫格（corner 4） | 逆向 A + 截图实测 | 已实现 | crates/wolf-game/src/choice.rs:23-62,70 | 89EF/EE 两张实机图：行距 27.18/26.87、边框→首字墨迹 8.05/7.99、高亮条 20 |
-| 面板宽高公式 | 宽 = 最宽选项 advance + 2×8 + 4（无最小宽）；高 = 6 + rows×27；实测 4 行 156×114、5 行 162×141 | 截图实测（RE 的 +0x1a=26 与实测 17.8 冲突，取内缩值；额外 4 px 作为防折行余量） | 已实现 | crates/wolf-game/src/choice.rs:139-167 | 单测 the_panel_geometry_is_the_measured_102_panel |
-| 面板锚点 | Sys3=X、Sys4=Y（WOLF 无居中默认；title 设 (512,1000) 故无框） | 实测 | 已实现 | crates/wolf-game/src/game.rs:1290 | opcode102 按 Sys3/4 定位 |
-| H-MENU-1 越界回退 | 原版**无回退、无夹取**（FUN_004c3fa0 直接用字段值/默认锚点） | 反向 A | 保留兜底 | crates/wolf-game/src/choice.rs:211-245 | 屏界面板完全在外时回退居中；仅作隐藏菜单（title 用 −1000 藏引擎面板）的兜底，C 级未闭合，见 LAYOUT §7.1 |
-| 光标定位 / 鼠标命中行 | 光标框 [x+6, row_y, w−12, font_px]，整行 CursorBase.png 九宫格；无 "▶ " 字形；命中行矩形 [x+8, y+6+idx*27, w−16, 27] | 逆向 A + 截图实测 | 已实现 | crates/wolf-game/src/choice.rs:153-187；crates/wolf-game/src/game.rs:1301 | choice_row_at 与绘制同一 layout_at_sized |
-| 标题图片按钮三行 | 固定 X=10，Y=400/450/500，W=240，H=52，GAP=50；命中行 [10,400+idx*50,240,52] | 实测 | 已实现 | crates/wolf-game/src/choice.rs:225,237 | 三张 Picture/menu1..3_b at (10,400/450/500) 由 CE43 绘制，Sys20 镜像光标 |
+| 面板基本常量 | TEXT_PX 20；行距 = font + trunc(14×16/32) = **27**；文本内缩 **8/侧**；行起点 +6；光标 = CursorBase.png 九宫格（corner 4） | 逆向 A + 截图实测 | 已实现 | crates/wolf-game/src/choice.rs（常量区 + `::line_pitch()`） | 89EF/EE 两张实机图：行距 27.18/26.87、边框→首字墨迹 8.05/7.99、高亮条 20 |
+| 面板宽高公式 | 宽 = 最宽选项 advance + 2×8 + 4（无最小宽）；高 = 6 + rows×27；实测 4 行 156×114、5 行 162×141 | 截图实测（RE 的 +0x1a=26 与实测 17.8 冲突，取内缩值；额外 4 px 作为防折行余量） | 已实现 | crates/wolf-game/src/choice.rs::size() / ::build() | 单测 the_panel_geometry_is_the_measured_102_panel |
+| 面板锚点 | Sys3=X、Sys4=Y（WOLF 无居中默认；title 设 (512,1000) 故无框） | 实测 | 已实现 | crates/wolf-game/src/game.rs（选项锚点读取 Sys3/Sys4 处） | opcode102 按 Sys3/4 定位 |
+| H-MENU-1 越界回退 | 原版**无回退、无夹取**（FUN_004c3fa0 直接用字段值/默认锚点） | 反向 A | 保留兜底 | crates/wolf-game/src/choice.rs::layout_at_sized() | 屏界面板完全在外时回退居中；仅作隐藏菜单（title 用 −1000 藏引擎面板）的兜底，C 级未闭合，见 LAYOUT §7.1 |
+| 光标定位 / 鼠标命中行 | 光标框 [x+6, row_y, w−12, font_px]，整行 CursorBase.png 九宫格；无 "▶ " 字形；命中行矩形 [x+8, y+6+idx*27, w−16, 27] | 逆向 A + 截图实测 | 已实现 | crates/wolf-game/src/choice.rs::build()；crates/wolf-game/src/game.rs::Game::choice_row_at() | choice_row_at 与绘制同一 layout_at_sized |
+| 标题图片按钮三行 | 固定 X=10，Y=400/450/500，W=240，H=52，GAP=50；命中行 [10,400+idx*50,240,52] | 实测 | 已实现 | crates/wolf-game/src/choice.rs::is_title_image_menu() / ::title_image_layout() | 三张 Picture/menu1..3_b at (10,400/450/500) 由 CE43 绘制，Sys20 镜像光标 |
 | 宽选项超屏宽处理 | 原版截断/滚动/换行策略 | 需逆向 `[未实测]` | 未实现 | ——（choice.rs 未处理超宽） | 逆向或实测超长选项渲染 |
 
 ### 1.4 1/10 UI 缩放规则
 
-| 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置(文件:行) | 测量/核对方法 |
+| 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置（文件::符号） | 测量/核对方法 |
 |---|---|---|---|---|---|
-| 坐标倍率 | coordinate_scale = (屏宽/32, 屏高/24).max(1) → 1024x576 得 (32,24) | 实测+逆向 | 已实现 | crates/wolf-game/src/message.rs:97；crates/wolf-game/src/db.rs:159 | CE48 用 Sys116/32、Sys117/24；db.rs:290 写 CData(18,97/98) |
-| 逻辑画布 | LOGICAL_W=1024、LOGICAL_H=576 | 实测 | 已实现 | crates/wolf-render/src/scaler.rs:21,23 | 与 Game.dat 分辨率一致 |
-| ScaleMode | Integer（默认，整数倍）/ FitNearest / FitLinear | 实测 | 已实现 | crates/wolf-render/src/scaler.rs:27-35；crates/wolf-render/src/renderer.rs:641 | F9 循环切换；integer_scale/fit_scale 单测 |
+| 坐标倍率 | coordinate_scale = (屏宽/32, 屏高/24).max(1) → 1024x576 得 (32,24) | 实测+逆向 | 已实现 | `wolf-game/src/message.rs::coordinate_scale()`；`wolf-game/src/db.rs::coordinate_scale()` | CE48 用 Sys116/32、Sys117/24；`db.rs::Databases::apply_engine_defaults()` 写 CData(18,97/98) |
+| 逻辑画布 | LOGICAL_W=1024、LOGICAL_H=576 | 实测 | 已实现 | `wolf-render/src/scaler.rs::LOGICAL_W` / `::LOGICAL_H` | 与 Game.dat 分辨率一致 |
+| ScaleMode | Integer（默认，整数倍）/ FitNearest / FitLinear | 实测 | 已实现 | `wolf-render/src/scaler.rs::ScaleMode`；`wolf-render/src/renderer.rs`（`scale_mode` 字段） | F9 循环切换；`integer_scale`/`fit_scale` 单测 |
 | 1/10 字符格 UI 块判定（历史） | 同 chapter(number/1000) 内存在宽或高 >两屏（1024x2 / 576x2）的非停靠窗口 picture → 全块 10x；块内 x 已是像素（不除），y/w/h 才是十分之一（除 10） | 逆向+实测 | **当前已撤销 tenths 渲染补偿**；历史实现已删除 | 历史：`crates/wolf-game/src/picture.rs` `ui_scale_for`、`atlas.rs`、`window.rs`；当前 `Screen::quads`/`Atlas::sprites` 不再按 ui 二次 /10 | CE94 存档屏/CE95 设置屏；历史测量见 docs/re/SCREENSHOT_METRICS.md §6 |
-| 停靠窗（parked）排除 | \|x\|>SCREEN_W*2 或 \|y\|>SCREEN_H*2 视为停靠，不做 1/10 缩放、不当全屏层 | 实测 | 已实现 | crates/wolf-game/src/picture.rs:1062-1063,1441 | balloon 库 24 控件 @(-2784,2880) 被丢弃 |
-| 消息窗默认原点 | default_origin(1024,576)=(2*rateX, 17*rateY+trunc(rateY/10))=(64,410) | 逆向 `[公式推断]` | 已实现 | crates/wolf-game/src/message.rs:111 | 实机截图核对文本原点 |
-| 取整方式 | 整除(/) 取整；default_origin 内 trunc(rateY/10) | 需逆向 `[未实测]` | 部分实现 | crates/wolf-game/src/db.rs:159；crates/wolf-game/src/message.rs:111 | 非 32/24 整数倍屏宽时核对 |
+| 停靠窗（parked）排除 | \|x\|>SCREEN_W*2 或 \|y\|>SCREEN_H*2 视为停靠，不做 1/10 缩放、不当全屏层 | 实测 | 已实现 | `wolf-game/src/picture.rs`（停靠判定与队列过滤，见 `a_picture_parked_outside_the_screen_is_not_queued` 单测） | balloon 库 24 控件 @(-2784,2880) 被丢弃 |
+| 消息窗默认原点 | default_origin(1024,576)=(2*rateX, 17*rateY+trunc(rateY/10))=(64,410) | 逆向 `[公式推断]` | 已实现 | `wolf-game/src/message.rs::default_origin()` | 实机截图核对文本原点 |
+| 取整方式 | 整除(/) 取整；default_origin 内 trunc(rateY/10) | 需逆向 `[未实测]` | 部分实现 | `wolf-game/src/db.rs::coordinate_scale()`；`wolf-game/src/message.rs::default_origin()` | 非 32/24 整数倍屏宽时核对 |
 
 ### 1.5 过渡 / 淡入淡出语义
 
-| 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置(文件:行) | 测量/核对方法 |
+| 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置（文件::符号） | 测量/核对方法 |
 |---|---|---|---|---|---|
-| ScreenTransition（160/161/162） | **单程交叉溶解**：160 只装参数（kind、flags；duration=`flags & 0xffff`、bit16=wait，起跑恒阻塞）；161 冻结当前帧；162 起跑，alpha=`remaining/duration` **线性递减、无 easing、非三角波**，remaining 每帧减 `60/fps` | 逆向（A，见 `docs/re/TRANSITION.md` §1–§3） | 已实现 | crates/wolf-game/src/transition.rs:70,77,86,135；crates/wolf-vm/src/exec.rs:2115-2134 | capture 逐帧读 alpha；161 在 capture 路径只打日志 |
-| 真实过渡掩膜 | `SystemFile/[Transition]Fade.png` 640x480 L **单轴线性斜渐变**（≈21.5°、过渡带≈272 px、灰阶 0..251）；本作唯一 transition 是 kind=−1（无掩膜、均匀 alpha 溶解），掩膜路径降级为同一均匀溶解 | 逆向（A） | 本作路径已实现，掩膜未贴图 | crates/wolf-game/src/transition.rs:168（wants_mask） | 全作无 kind≥0 调用（opcode 直方图） |
-| ScreenTint（151 ChangeColor） | 151 是 DxLib `SetDrawBright`：`bright=clamp(255+(p−100)×255/100, 0, 255)`，**p≥100 钳到中性、不是百分比乘子**；flash（bit24）不是三角波，而是**整屏纯色块 overlay**，色值同公式、alpha=(剩余帧/总帧) 单向衰减 | 逆向（B，见 `docs/re/TRANSITION.md` §4–§5） | 已实现 | crates/wolf-game/src/tint.rs:106,119 | 逐帧读 `flash_overlay()` 的 rgb/alpha |
-| 叠色顺序 / 作用域 | **先 tint 后 fade，两段独立合成**（fade 前 `SetDrawBright(255,255,255)` 复位 → tint 不污染 fade）；151 只乘负号层（quad.number<0），160/162 溶解是独立 overlay、不逐 quad 相乘 | 逆向/实测 | 已实现 | crates/wolf-game/src/game.rs:1161,1204；crates/wolf-render/src/overlay.rs；crates/wolf-render/src/renderer.rs（freeze/set_overlays） | capture 对照 HUD 是否被 tint/溶解 |
-| 触发频度 | op160 CE 侧 1 次；op161/162 地图侧各 1 次（全作极少触发） | 实测（opcode 直方图） | 部分实现 | crates/wolf-game/src/game.rs:2747 | HANDOFF_M0.md:93,123 opcode 计数 |
-| Picture 淡入上限 | 单张 picture fade 帧数上限 MAX_TRANSITION_FRAMES=600 | 逆向 `[上限推断]` | 已实现 | crates/wolf-game/src/picture.rs:126 | 长帧 fade 输入核对 |
-| Picture `150 表示`(Draw) 命中已有图像 | **不是重画瞬移**：零售 action=0 作用在**已有图像**的槽位上时，把图片从旧坐标**补间**到新坐标，时长 = 该命令第 3 个参数（ウェイト時間）；alpha 保留不变（**不淡入**）。只有**空槽**才淡入（alpha 从 1 插到目标） | 逆向（`work/out/re_all/all/0049c7a0_FUN_0049c7a0.c`：Draw 应用器内含与 Move 应用器 `0049f280` 同构的插值算式，结尾把 `param_1[0x6c]`/`[0x6d]` 同时置为 ウェイト時間；`param_1[1]==0` 即空槽时位置直接就位） | 已实现 | crates/wolf-game/src/picture.rs:1231（Draw 分支）、:1266（同图判定）、:2003（状态条对齐） | 全作仅 **39 条**「同图重定位」Draw（CE234/238/239/283/293）；侧栏 CE238/239 滑入 20 帧、滑出 10 帧，实测 x 从 −305 逐帧到 0 |
+| ScreenTransition（160/161/162） | **单程交叉溶解**：160 只装参数（kind、flags；duration=`flags & 0xffff`、bit16=wait，起跑恒阻塞）；161 冻结当前帧；162 起跑，alpha=`remaining/duration` **线性递减、无 easing、非三角波**，remaining 每帧减 `60/fps` | 逆向（A，见 `docs/re/TRANSITION.md` §1–§3） | 已实现 | `wolf-game/src/transition.rs::ScreenTransition::install()` / `::prepare()` / `::execute()` / `::alpha()`；`wolf-vm/src/exec.rs`（op102 选项标签展开） | capture 逐帧读 alpha；161 在 capture 路径只打日志 |
+| 真实过渡掩膜 | `SystemFile/[Transition]Fade.png` 640x480 L **单轴线性斜渐变**（≈21.5°、过渡带≈272 px、灰阶 0..251）；本作唯一 transition 是 kind=−1（无掩膜、均匀 alpha 溶解），掩膜路径降级为同一均匀溶解 | 逆向（A） | 本作路径已实现，掩膜未贴图 | `wolf-game/src/transition.rs::ScreenTransition::wants_mask()` | 全作无 kind≥0 调用（opcode 直方图） |
+| ScreenTint（151 ChangeColor） | 151 是 DxLib `SetDrawBright`：`bright=clamp(255+(p−100)×255/100, 0, 255)`，**p≥100 钳到中性、不是百分比乘子**；flash（bit24）不是三角波，而是**整屏纯色块 overlay**，色值同公式、alpha=(剩余帧/总帧) 单向衰减 | 逆向（B，见 `docs/re/TRANSITION.md` §4–§5） | 已实现 | crates/wolf-game/src/tint.rs（tint 应用与复位） | 逐帧读 `flash_overlay()` 的 rgb/alpha |
+| 叠色顺序 / 作用域 | **先 tint 后 fade，两段独立合成**（fade 前 `SetDrawBright(255,255,255)` 复位 → tint 不污染 fade）；151 只乘负号层（quad.number<0），160/162 溶解是独立 overlay、不逐 quad 相乘 | 逆向/实测 | 已实现 | crates/wolf-game/src/game.rs（overlay 清单与 tint 应用处）；crates/wolf-render/src/overlay.rs；crates/wolf-render/src/renderer.rs（freeze/set_overlays） | capture 对照 HUD 是否被 tint/溶解 |
+| 触发频度 | op160 CE 侧 1 次；op161/162 地图侧各 1 次（全作极少触发） | 实测（opcode 直方图） | 部分实现 | crates/wolf-game/src/game.rs（op160/161/162 的调用点） | HANDOFF_M0.md:93,123 opcode 计数 |
+| Picture 淡入上限 | 单张 picture fade 帧数上限 MAX_TRANSITION_FRAMES=600 | 逆向 `[上限推断]` | 已实现 | crates/wolf-game/src/picture.rs::MAX_TRANSITION_FRAMES | 长帧 fade 输入核对 |
+| Picture `150 表示`(Draw) 命中已有图像 | **不是重画瞬移**：零售 action=0 作用在**已有图像**的槽位上时，把图片从旧坐标**补间**到新坐标，时长 = 该命令第 3 个参数（ウェイト時間）；alpha 保留不变（**不淡入**）。只有**空槽**才淡入（alpha 从 1 插到目标） | 逆向（`work/out/re_all/all/0049c7a0_FUN_0049c7a0.c`：Draw 应用器内含与 Move 应用器 `0049f280` 同构的插值算式，结尾把 `param_1[0x6c]`/`[0x6d]` 同时置为 ウェイト時間；`param_1[1]==0` 即空槽时位置直接就位） | 已实现 | crates/wolf-game/src/picture.rs（Draw 补间的落点）（Draw 分支）、:1266（同图判定）、:2003（状态条对齐） | 全作仅 **39 条**「同图重定位」Draw（CE234/238/239/283/293）；侧栏 CE238/239 滑入 20 帧、滑出 10 帧，实测 x 从 −305 逐帧到 0 |
 
 ### 1.6 present / swapchain
 
 | 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置(文件:行) | 测量/核对方法 |
 |---|---|---|---|---|---|
-| 离屏渲染 | Pass1 画进固定 1024x576 逻辑纹理，Pass2 blit 到 swapchain 单 quad 缩放居中 | 实测（设计） | 已实现 | crates/wolf-render/src/renderer.rs:5-14,910 | capture_rgba 读回 1024x576 |
-| 帧格式 / 混合空间 | FRAME_FORMAT=Rgba8Unorm（**非 sRGB**，gamma 字节空间混合） | 逆向（实测 Button01.png 叠色=63） | 已实现 | crates/wolf-render/src/renderer.rs:55 | 原版 DxLib D3DFMT_X8R8G8B8 dst=src.rgb*a+dst*(1−a)；gamma→63=retail，linear→136 |
-| 呈现模式 / 延迟 | present_mode=AutoVsync，desired_maximum_frame_latency=2，优先非 sRGB swapchain | 实测 | 已实现 | crates/wolf-render/src/renderer.rs:177,196,199 | 观察 vsync 帧节奏 |
-| 帧节奏 | 固定 1/60（FRAME_TIME=16_667µs）；落后>4 帧重置；ControlFlow::WaitUntil | 实测（设计） | 已实现 | crates/wolf-cli/src/play.rs:35,991 | 计帧；F9/F11 切换 |
-| 缩放呈现 | Integer/FitNearest→nearest，FitLinear→linear；blit blend=REPLACE 无混合；letterbox 黑边（Pass2 clear BLACK） | 实测 | 已实现 | crates/wolf-render/src/renderer.rs:566,910,976 | 放大截图看锯齿/插值 |
-| 窗口尺寸策略 | window_size_for(monitor)：宽留 6%、高留 10%，取最大整数倍 (1024*scale,576*scale) | 实测（本仓策略） | 已实现 | crates/wolf-cli/src/play.rs:65 | 多显示器观察窗口尺寸 |
-| 上屏坐标逆映射 | 物理像素→逻辑像素 floor((x−offset)/scale)（window_to_game） | 实测 | 已实现 | crates/wolf-render/src/renderer.rs:672；crates/wolf-render/src/scaler.rs:161,173 | CursorMoved 后点选命中验证 |
+| 离屏渲染 | Pass1 画进固定 1024x576 逻辑纹理，Pass2 blit 到 swapchain 单 quad 缩放居中 | 实测（设计） | 已实现 | crates/wolf-render/src/renderer.rs（Pass1/Pass2 双 pass 说明见文件头注释；present 见 ::present()） | capture_rgba 读回 1024x576 |
+| 帧格式 / 混合空间 | FRAME_FORMAT=Rgba8Unorm（**非 sRGB**，gamma 字节空间混合） | 逆向（实测 Button01.png 叠色=63） | 已实现 | crates/wolf-render/src/renderer.rs::FRAME_FORMAT | 原版 DxLib D3DFMT_X8R8G8B8 dst=src.rgb*a+dst*(1−a)；gamma→63=retail，linear→136 |
+| 呈现模式 / 延迟 | present_mode=AutoVsync，desired_maximum_frame_latency=2，优先非 sRGB swapchain | 实测 | 已实现 | crates/wolf-render/src/renderer.rs（present_mode / desired_maximum_frame_latency 配置） | 观察 vsync 帧节奏 |
+| 帧节奏 | 固定 1/60（FRAME_TIME=16_667µs）；落后>4 帧重置；ControlFlow::WaitUntil | 实测（设计） | 已实现 | crates/wolf-cli/src/play.rs（play 子命令与 capture 路径） | 计帧；F9/F11 切换 |
+| 缩放呈现 | Integer/FitNearest→nearest，FitLinear→linear；blit blend=REPLACE 无混合；letterbox 黑边（Pass2 clear BLACK） | 实测 | 已实现 | crates/wolf-render/src/renderer.rs（blit 参数与 letterbox clear） | 放大截图看锯齿/插值 |
+| 窗口尺寸策略 | window_size_for(monitor)：宽留 6%、高留 10%，取最大整数倍 (1024*scale,576*scale) | 实测（本仓策略） | 已实现 | crates/wolf-cli/src/play.rs | 多显示器观察窗口尺寸 |
+| 上屏坐标逆映射 | 物理像素→逻辑像素 floor((x−offset)/scale)（window_to_game） | 实测 | 已实现 | crates/wolf-render/src/renderer.rs::Renderer::window_to_game()；crates/wolf-render/src/scaler.rs::game_point() | CursorMoved 后点选命中验证 |
 
 ---
 
@@ -106,28 +111,28 @@
 下一步核对：解包 WindowBase.png 逐像素量边框厚度；用实机 1024x576 截图对齐消息框左上角与首字像素差；必要时逆向 Game.exe 的窗口绘制函数取 padding 常量。
 
 ### 2.2 文本度量与自动换行
-现状依据：字号读 Sys8（crates/wolf-game/src/game.rs:1331，范围 8..=64 否则 20）；行高 `line_height(font)=font+trunc(6×min(16,32)/32)=font+3`（crates/wolf-game/src/message.rs:134，`LINE_GAP=6` :45、`BASE_FONT_PX=16` :50）；全/半角 `advance_at(ch,font_px)`（crates/wolf-game/src/choice.rs:115）全角=font_px、半角=0.5*font_px；有 TTF 时 `fontmetrics::FontMetrics::advance` 用 hmtx 的 em_advance*font_px 覆盖近似（crates/wolf-game/src/fontmetrics.rs）；打字机 `revealed=floor((frames−preroll)*cps/60)`（message.rs:268），cps=Sys9（boot 500/CE269 后 120），preroll=Sys10（9/1）；换行 `wrap(text,width,font_px)` 逐字符断行（message.rs:288）。
+现状依据：字号读 Sys8（`crates/wolf-game/src/game.rs` 的 `Game::font_px`，范围 8..=64 否则 20）；行高 `line_height(font)=font+trunc(6×min(16,32)/32)=font+3`（`crates/wolf-game/src/message.rs` 的 `line_height()`，常量 `LINE_GAP=6`、`BASE_FONT_PX=16`）；全/半角 `advance_at(ch,font_px)`（`crates/wolf-game/src/choice.rs`）全角=font_px、半角=0.5*font_px；有 TTF 时 `fontmetrics::FontMetrics::advance` 用 hmtx 的 em_advance*font_px 覆盖近似（`crates/wolf-game/src/fontmetrics.rs`）；打字机 `revealed=floor((frames−preroll)*cps/60)`（`message.rs` 的 `revealed()`），cps=Sys9（boot 500/CE269 后 120），preroll=Sys10（9/1）；换行 `wrap(text,width,font_px)` 逐字符断行（`message.rs` 的 `wrap()`）。
 已知缺口：**禁则是原版本就没有**（4,375 个 ≥64B 函数里对 。、，」等码点零命中，只有显式 '\n' 与行首空格丢弃），因此不实现是正确的；**打字机速率与原版差 2 倍**（RE：每帧 `+0x88 += (60/fps)*speed/30` → 60fps 下 speed/2 字/秒，且无 preroll 减法），但 Sys9→p+0x80 的写入点未定位、本作 CE48 把速度设 500 ≈ 瞬间显示，暂不改（理由见 §3.2、docs/re/TEXT_METRICS.md §3）。
 下一步核对：在实机上用长消息（CE 里把 Sys9 调低）录逐帧显字数曲线，确认 2× 关系与 preroll 的有无。
 
 ### 2.3 选择面板布局与越界回退（H-MENU-1）
-现状依据：常量 `CHOICE_LINE_SPACING=14`（crates/wolf-game/src/choice.rs:24）、`BASE_FONT_PX=16`（:31）、`TEXT_INSET=8`（:38）、`ROW_TOP=6`（:45）、`TEXT_PX=20`（:57）、`CURSOR_SKIN="SystemFile/CursorBase.png"`（:60）、`CURSOR_CORNER=4`（:62），行距 `line_pitch(font)=font+trunc(14×16/32)=font+7`（:70）；`size()` 宽=最宽+2×8、高=6+rows×27（:139）；`build()` 行矩形 [x+8, y+6+idx×27, w−16, 27]、光标框 [x+6, row_y, w−12, font_px]（:153-187）；面板/光标都是九宫格（skin_pieces :288，CursorBase corner 4）；`layout_at_sized`（:211-245）在面板完全屏外时回退居中；`is_title_image_menu`/`title_image_layout` 固定 X=10/Y=400,450,500/W=240/H=52（:256,268）；`game::choice_row_at`（crates/wolf-game/src/game.rs:1301）用同一布局做命中矩形。锚点仍取 Sys3/Sys4（game.rs:1290）：RE 说原版锚点来自 op102 对象字段 +0x8d8/+0x8dc（-1 时用 base×10−w/2 等默认值），本作脚本显式写 Sys3/Sys4，两条路径哪个生效**仍无 C 级证据**，暂保持现状。
+现状依据（**引用一律用符号名，不用行号**——行号会随改动漂移）：常量 `CHOICE_LINE_SPACING=14`、`BASE_FONT_PX=16`、`TEXT_INSET=8`、`ROW_TOP=6`、`TEXT_PX=20`、`CURSOR_SKIN="SystemFile/CursorBase.png"`、`CURSOR_CORNER=4`（均在 `crates/wolf-game/src/choice.rs`），行距 `line_pitch(font)=font+trunc(14×16/32)=font+7`（`choice.rs::line_pitch`）；`choice.rs::size()` 宽=最宽+2×8、高=6+rows×27；`choice.rs::build()` 行矩形 [x+8, y+6+idx×27, w−16, 27]、光标框 [x+6, row_y, w−12, font_px]；面板/光标都是九宫格（`choice.rs::skin_pieces`，CursorBase corner 4）；`choice.rs::layout_at_sized()` 在面板完全屏外时回退居中；`choice.rs::is_title_image_menu()` / `title_image_layout()` 固定 X=10/Y=400,450,500/W=240/H=52；`crates/wolf-game/src/game.rs::Game::choice_row_at()` 用同一布局做命中矩形。锚点仍取 Sys3/Sys4（`game.rs` 中 `Game::choice_row_at` 同族的选项锚点读取处；RE 说原版锚点来自 op102 对象字段 +0x8d8/+0x8dc，-1 时用 base×10−w/2 等默认值），本作脚本显式写 Sys3/Sys4，两条路径哪个生效**仍无 C 级证据**，暂保持现状。
 已知缺口：**越界回退是本仓策略**（原版无回退、无夹取，RE A 级），保留仅为「标题用 −1000 藏引擎面板」的兜底，属 C 级未闭合假设（docs/re/LAYOUT_METRICS.md §7.1）；超宽选项原版不截断不换行（与仓内一致）。
 下一步核对：在标题画面确认 op102 面板是否真的被隐藏（遮挡/坐标），再决定是否删掉居中回退。
 
 ### 2.4 1/10 UI 缩放规则
-现状依据：`coordinate_scale(screen)->(i32,i32)=((w/32).max(1),(h/24).max(1))`（crates/wolf-game/src/db.rs:159；message.rs:97 同式），1024x576→(32,24)；`LOGICAL_W=1024/LOGICAL_H=576`（crates/wolf-render/src/scaler.rs:21,23）；`ScaleMode{Integer,FitNearest,FitLinear}`（scaler.rs:27-35），`integer_scale`（:97）取 `min(win_w/1024,win_h/576).max(1)` 并居中，`fit_scale`（:134）取 `min(w/1024,h/576)`（<1 允许）。历史实现曾在 `Screen::ui_scale_for` 中按 chapter/大小判定 10x tenths 块；该函数及渲染二次 `/10` 已在当前工作区撤销，现行几何按 picture 自身坐标直接渲染。
+现状依据：`coordinate_scale(screen)->(i32,i32)=((w/32).max(1),(h/24).max(1))`（crates/wolf-game/src/db.rs::coordinate_scale()；message.rs::coordinate_scale() 同式），1024x576→(32,24)；`LOGICAL_W=1024/LOGICAL_H=576`（crates/wolf-render/src/scaler.rs::LOGICAL_W / ::LOGICAL_H）；`ScaleMode{Integer,FitNearest,FitLinear}`（scaler.rs:27-35），`integer_scale`（:97）取 `min(win_w/1024,win_h/576).max(1)` 并居中，`fit_scale`（:134）取 `min(w/1024,h/576)`（<1 允许）。历史实现曾在 `Screen::ui_scale_for` 中按 chapter/大小判定 10x tenths 块；该函数及渲染二次 `/10` 已在当前工作区撤销，现行几何按 picture 自身坐标直接渲染。
 历史块内几何语义（2026-11-02 逆向+实机核对，docs/re/SCREENSHOT_METRICS.md §6）：x 已由 VM 的 op121 缩放提前除回像素，旧 tenths 渲染层不再除；y/w/h 当时仍为十分之一，须除 10。该补偿现已撤销，不能作为现行实现描述。槽框与光标框仍用 `nine_slice`/`nine_slice_frame`（去中心填充，空心框，crates/wolf-game/src/window.rs），否则 CursorBase 会把整槽铺成黑块。
 已知缺口：取整用整除而非 round/floor 的差异在**非 32/24 整数倍**分辨率下**未实测**；`default_origin` 的 `trunc(rateY/10)` 项是**推断**公式。
 下一步核对：以 1280x720 等非整数倍分辨率实机截图量像素比；逆向 coordinate_scale 与 UI 缩放的乘除点。
 
 ### 2.5 过渡 / 淡入淡出语义
-现状依据（已按 RE 落地）：`ScreenTransition{kind,flags,duration,remaining,active,freeze_requested}`——`install(kind,flags)`（crates/wolf-game/src/transition.rs:70）只存参数，`prepare()`（:77）请求冻结当前帧，`execute()`（:86）起跑并把 `remaining` 置 `flags&0xffff` 帧，`alpha()=remaining/duration`（:135，旧帧不透明度 1→0 线性、整数除法、无 easing、无三角波）。opcode 侧 160/161/162 分别映射 `Host::transition_install/prepare/execute`（crates/wolf-vm/src/exec.rs:2115-2134），162 恒 `WaitState::Frames(duration)+Blocked`。本作唯一调用 CE48 `160 [-1,0x0001_000A]` → kind=-1、10 帧、无掩膜（均匀溶解；`wants_mask()` 仅 kind≥0 时为真，本作不可达）。`ScreenTint`：151 普通 ramp 到 `clamp(255+(p−100)*255/100,0,255)/255`（crates/wolf-game/src/tint.rs:106；p≥100 中性，**不是**百分比乘子）；bit24 flash 走独立整屏色块 overlay（:119，alpha=(剩余帧/总帧) 单向衰减）。合成：`apply_screen_tint`（crates/wolf-game/src/game.rs:1204）只把 151 亮度乘到 `quad.number<0`（屏幕层）；160/162 的溶解与新帧由 `screen_overlays()`（game.rs:1161）交给渲染侧 `ScreenOverlay`（crates/wolf-render/src/overlay.rs），CLI 每帧 `renderer.set_overlays()`（crates/wolf-cli/src/play.rs:813,991），161 时先 `renderer.freeze()`（play.rs:983-984，必须在上一帧 present 之后）。每帧 tick 顺序：`screen.tick()→screen.advance()→screen_tint.tick()→screen_transition.tick()`（game.rs:1985-1987）。
+现状依据（已按 RE 落地）：`ScreenTransition{kind,flags,duration,remaining,active,freeze_requested}`——`install(kind,flags)`（crates/wolf-game/src/transition.rs::ScreenTransition::install()）只存参数，`prepare()`（:77）请求冻结当前帧，`execute()`（:86）起跑并把 `remaining` 置 `flags&0xffff` 帧，`alpha()=remaining/duration`（:135，旧帧不透明度 1→0 线性、整数除法、无 easing、无三角波）。opcode 侧 160/161/162 分别映射 `Host::transition_install/prepare/execute`（crates/wolf-vm/src/exec.rs（op102 选项标签展开）），162 恒 `WaitState::Frames(duration)+Blocked`。本作唯一调用 CE48 `160 [-1,0x0001_000A]` → kind=-1、10 帧、无掩膜（均匀溶解；`wants_mask()` 仅 kind≥0 时为真，本作不可达）。`ScreenTint`：151 普通 ramp 到 `clamp(255+(p−100)*255/100,0,255)/255`（crates/wolf-game/src/tint.rs（tint 应用）；p≥100 中性，**不是**百分比乘子）；bit24 flash 走独立整屏色块 overlay（:119，alpha=(剩余帧/总帧) 单向衰减）。合成：`apply_screen_tint`（crates/wolf-game/src/game.rs（tint 应用处））只把 151 亮度乘到 `quad.number<0`（屏幕层）；160/162 的溶解与新帧由 `screen_overlays()`（game.rs:1161）交给渲染侧 `ScreenOverlay`（crates/wolf-render/src/overlay.rs），CLI 每帧 `renderer.set_overlays()`（crates/wolf-cli/src/play.rs（逐帧 capture 与 overlay 采集）），161 时先 `renderer.freeze()`（play.rs:983-984，必须在上一帧 present 之后）。每帧 tick 顺序：`screen.tick()→screen.advance()→screen_tint.tick()→screen_transition.tick()`（game.rs:1985-1987）。
 已知缺口：掩膜贴图 `[Transition]Fade.png`（640×480 L、单轴线性斜渐变）**未贴图**——本作 kind=-1 不需要；由于 GPU 离屏初始化不可用，play 路径的溶解视觉只在 wolf-render 单测里验证。
 下一步核对（如日后用到掩膜过渡）：把 Fade.png 作为 mask 贴到 dissolve 的 alpha 上，并逐帧摄录原版过渡曲线复核。
 
 ### 2.6 present / swapchain
-现状依据：两 pass（crates/wolf-render/src/renderer.rs:5-14）——Pass1 画进固定 1024x576 Rgba8Unorm 逻辑纹理，Pass2 把该纹理作为单 quad blit 到 swapchain 缩放居中（present :910）；`FRAME_FORMAT=Rgba8Unorm`（:55）刻意非 sRGB 以复现 DxLib 的 gamma 字节空间 alpha 混合（实测 Button01.png rgb0/α191 叠底色 251→gamma 63=retail 截图，linear 136）；present_mode=AutoVsync、latency=2（:196,199）；blit blend=REPLACE、letterbox 由 Pass2 clear BLACK（:566,976）；`capture_rgba` 读回 1024x576 RGBA8（:1041）。帧节奏由 crates/wolf-cli/src/play.rs:35 `FRAME_TIME=16_667µs` 与 `about_to_wait`（:991）驱动，落后>4 帧重置。
+现状依据：两 pass（crates/wolf-render/src/renderer.rs（文件头注释里的 Pass1/Pass2 说明））——Pass1 画进固定 1024x576 Rgba8Unorm 逻辑纹理，Pass2 把该纹理作为单 quad blit 到 swapchain 缩放居中（present :910）；`FRAME_FORMAT=Rgba8Unorm`（:55）刻意非 sRGB 以复现 DxLib 的 gamma 字节空间 alpha 混合（实测 Button01.png rgb0/α191 叠底色 251→gamma 63=retail 截图，linear 136）；present_mode=AutoVsync、latency=2（:196,199）；blit blend=REPLACE、letterbox 由 Pass2 clear BLACK（:566,976）；`capture_rgba` 读回 1024x576 RGBA8（:1041）。帧节奏由 crates/wolf-cli/src/play.rs `FRAME_TIME=16_667µs` 与 `about_to_wait`（:991）驱动，落后>4 帧重置。
 已知缺口：本作锁 60Hz/固定网格是否与原版可变帧（DxLib 默认 60）完全一致**未实测**；`window_size_for` 的 6%/10% 留边是本仓播放器策略，原版窗口模式尺寸未知。
 下一步核对：抓取原版帧率与窗口尺寸；对比 capture 与实机截图像素（已用于验证 gamma 空间）。
 
@@ -174,14 +179,14 @@
 | # | 项 | 原版结论 | 仓内现状/差异 | 等级 | 证据 |
 |---|---|---|---|---|---|
 | 1 | 九宫格内边距 | 皮肤 18×18、**3 px 对称九宫格**，绘制只有“角固定 + 中行列拉伸”，**无额外 padding**；文本位置来自 Sys1/Sys2；体区 alpha=223（必须混色）。选择支面板的固定内缩 = `0x1a` = **26 px**（`FUN_004c3d20:59-72`） | `window.rs` CORNER=3 正确；`choice.rs` 已改为实测内缩 **8/侧**（RE 0x1a 与实机宽度差冲突，取截图值），光标改用 CursorBase 九宫格 | A/实测 | `docs/re/RUNTIME_CONSTANTS.md` §4、`LAYOUT_METRICS.md` §3 |
-| 2 | 盒小于帧退化 | 原版**不折半、不钳制**：中段宽 = right − corner，可 ≤0，交给 blit 裁剪 | `window.rs:80` 角折半 `min(cw,w/2)` 是仓内自造 | C | `LAYOUT_METRICS.md` §4 |
+| 2 | 盒小于帧退化 | 原版**不折半、不钳制**：中段宽 = right − corner，可 ≤0，交给 blit 裁剪 | `window.rs::nine_slice()` 角折半 `min(cw,w/2)` 是仓内自造 | C | `LAYOUT_METRICS.md` §4 |
 | 3 | 标点避头尾（禁则） | 全量 dump（4,375 函数）**没有任何禁则字符常量**（0x3002/0x3001/0xFF0C/0x300C/0x300D/0xFF09/0x3010 零命中）；文本渲染只有显式 `'\n'` 分支 + 行首空格丢弃 → **原版无禁则** | 仓内 wrap() 无禁则，一致 | B（负证据强） | `TEXT_METRICS.md` §3 |
-| 4 | 行距缩放 | `line_pitch = 本行最大字号×S + trunc(行距配置×min(基准字号,32)/32)×S`；本作 Game.dat 行距配置=6、基准字号=16 → **额外行距 = 3 px**（即 16 号字行高 19，不是 22/26） | `message.rs:122` `font+6` **只在基准字号≥32 时等价**；基准 16 时应为 `font+3` | A（公式）/B（运行值） | `TEXT_METRICS.md` §1 |
-| 5 | 打字机 cps/preroll | 显示门限是 double 水位 `+0x88`；每帧 `水位 += DAT_0084b244 × speed / 30`；60 fps 下 **speed/2 字/秒**；**没有 preroll 减法**（用 `+0xe8` 帧片倒计时） | `message.rs:268` `(frames-preroll)*cps/60` → **约为原版一半速度**，且多了一个原版不存在的 preroll 项 | B/部分 | `TEXT_METRICS.md` §4 |
+| 4 | 行距缩放 | `line_pitch = 本行最大字号×S + trunc(行距配置×min(基准字号,32)/32)×S`；本作 Game.dat 行距配置=6、基准字号=16 → **额外行距 = 3 px**（即 16 号字行高 19，不是 22/26） | `message.rs::line_height()` `font+6` **只在基准字号≥32 时等价**；基准 16 时应为 `font+3` | A（公式）/B（运行值） | `TEXT_METRICS.md` §1 |
+| 5 | 打字机 cps/preroll | 显示门限是 double 水位 `+0x88`；每帧 `水位 += DAT_0084b244 × speed / 30`；60 fps 下 **speed/2 字/秒**；**没有 preroll 减法**（用 `+0xe8` 帧片倒计时） | `message.rs::revealed()` `(frames-preroll)*cps/60` → **约为原版一半速度**，且多了一个原版不存在的 preroll 项 | B/部分 | `TEXT_METRICS.md` §4 |
 | 6 | 选择面板越界回退 | op102 全链已定位：`FUN_00450460` case 0x66 → `FUN_00452970` → 尺寸 `FUN_004c3d20` / 锚点 `FUN_004c3fa0` / 绘制 `FUN_004c40f0` / 选行 `FUN_004c35c0`。原版**无回退、无夹取**：锚点来自选择支对象字段 `+0x8d8/+0x8dc`（默认 `(fontbase*10 − w/2, 0xaa/scale − h/2)`），**不读 Sys3/Sys4**；越界就按锚点画、被屏裁剪 | `choice.rs` 居中兜底保留（C 级）；锚点仍取 Sys3/Sys4（本作脚本显式写，RE 的对象字段路径未与本作调用对上）；标题为何看不到面板仍有 1 处未闭合（LAYOUT §7.1） | A | `LAYOUT_METRICS.md` §5 |
 | 7 | 超宽选项 | 布局侧**无最大宽、无截断、无换行**：面板宽 = 最宽选项 + 26，超宽伸出屏外被裁剪 | 仓内已无上限、无 MIN_WIDTH；加数为 2×8=16（原版 0x1a=26，差异记在 choice.rs 头注释与 LAYOUT §5） | A | `LAYOUT_METRICS.md` §6 |
-| 8 | coordinate_scale 取整 | **整除（i32 `idiv`，向零截断）**：`Sys116/32`、`Sys117/24`（CE48 pc30/31，op121 bits=0x3000=div）；320×240/640×480/800×600 另硬编码 10/20/25 | `db.rs:159` u32 整除**等价**（多了 `.max(1)`）；`message.rs:97` f32 除法在非 32/24 整倍数屏会偏 | A | `LAYOUT_METRICS.md` §1 |
-| 9 | default_origin 的 trunc(rateY/10) | **确认是原版公式**：`Sys2 = 17×rateY`，再 `Sys2 += rateY/10`（CE63 pc44-46，bits 0x3100 = 加 + 整除） | `message.rs:111` 结构一致但 rate 为浮点、取整口径不同 | A | `LAYOUT_METRICS.md` §2 |
+| 8 | coordinate_scale 取整 | **整除（i32 `idiv`，向零截断）**：`Sys116/32`、`Sys117/24`（CE48 pc30/31，op121 bits=0x3000=div）；320×240/640×480/800×600 另硬编码 10/20/25 | `db.rs::coordinate_scale()` u32 整除**等价**（多了 `.max(1)`）；`message.rs:97` f32 除法在非 32/24 整倍数屏会偏 | A | `LAYOUT_METRICS.md` §1 |
+| 9 | default_origin 的 trunc(rateY/10) | **确认是原版公式**：`Sys2 = 17×rateY`，再 `Sys2 += rateY/10`（CE63 pc44-46，bits 0x3100 = 加 + 整除） | `message.rs::default_origin()` 结构一致但 rate 为浮点、取整口径不同 | A | `LAYOUT_METRICS.md` §2 |
 | 10 | 过渡曲线与掩膜 | 语义 = **单程交叉溶解**：161 先把当前画面截图，162 用 mask/alpha 把旧帧溶解到新帧；`t = elapsed/duration` 是**线性整数除法，无 easing、非三角波**（`FUN_004c2a80` 13 行 + `FUN_004c28d0` 31 行），`elapsed` 每帧减 `DAT_0084b244`（60/fps）。掩膜 `[Transition]Fade.png` = 640×480 L、**单轴线性斜渐变**（等值线 x≈-0.397y+c，残差<1.2 px，方向≈21.5°，过渡带≈272 px，灰阶 0..251、峰值 250/251，无边框/图案/噪点）；拉伸到 1024×576 后斜率≈0.299。本作脚本唯一 transition 是 **kind=-1（无掩膜、均匀 alpha 溶解）** | 已改为单程溶解（`alpha=remaining/duration`）+ 渲染侧 overlay；本作 kind=-1 走均匀溶解 | A | `RUNTIME_CONSTANTS.md` §3、`TRANSITION.md` §1–§3 |
 | 11 | tint × transition 顺序 | **先 tint 后 fade，两段独立合成、不是逐像素相乘**：151 是 DxLib `SetDrawBright` 的绘制状态（`FUN_004bf5b0→FUN_005161e0`），fade 是画完场景后叠的旧帧 overlay（`FUN_004c28d0` 开头先 `SetDrawBright(255,255,255)` 复位 → tint 不污染 fade）。另：151 语义是 `bright=clamp(255+(p-100)*255/100,0,255)`（p>100 被钳到中性），**不是百分比乘子**；flash(bit24) 不是三角波，而是整屏色块 overlay、alpha=(剩余帧/总帧)*255 单向衰减 | 已改为钳制亮度 + 单向衰减 flash overlay；fade 从 `apply_screen_tint` 剥离到独立 overlay 阶段 | B | `TRANSITION.md` §4–§5 |
 | 12 | present 帧率与窗口尺寸 | 引擎**软件限帧 16.6 ms/帧（≈60 fps 上限）**：`timeGetTime`+1 ms 定时器 + QPC 忙等，非 vsync；帧步进 `DAT_0084b244 = 60/fps`（本机 fps=60）。窗口客户区 = **数据屏幕尺寸 1024×576 × 1.0**，`AdjustWindowRectEx` 后按显示器居中；Game.ini 只有 10 个键、**无尺寸/缩放项**；无任何 DPI 感知 API（150% 系统 DPI 虚拟化） | 仓内 `FRAME_TIME=16_667µs` 与原版 16.6 ms 一致；窗口留边是播放器策略，原版是 1:1 + 居中 | A/部分 | `RUNTIME_CONSTANTS.md` §2、`RE_GAME_EXE.md` §9 |
@@ -199,6 +204,27 @@
 | `choice.rs` | 内缩 8/侧、宽=最宽+16、无 MIN_WIDTH、行距 27、行起点 +6、去 "▶ " 前缀、光标换 CursorBase 九宫格 | **已落地**（实测 4 行 156×114、5 行 162×141，行距 27.18/26.87；居中回退先保留，LAYOUT §7.1） |
 | `window.rs` | 极小盒的“角折半”与原版不同（原版交给 blit 裁剪） | **不改**：本作数据不产生 <6 px 的盒，属于本作不触发的通用路径 |
 | 掩膜过渡（kind≥0） | 原版用 `[Transition]Fade.png` 斜渐变掩膜 | **不实现**：全作只有 1 次 op160 且 kind=−1，掩膜路径在本作不可达 |
+
+---
+
+## 3.5 开放项清单（OPEN-xx）
+
+> 本节把散落在上文的「未实现 / 未闭合 / 下一步核对」集中编号，便于交接与排期。
+> **编号只增不改**：关闭一条就在原行标注「已闭合（日期）」并写明依据，不要删除行。
+
+| 编号 | 主题 | 现状 | 关闭条件 |
+|---|---|---|---|
+| OPEN-01 | 九宫格窗口的**精确文字内缩** | 部分实现（3 px 边框 + 帧图整体决定，实测值待取） | 解包 `WindowBase.png` 逐像素量边框厚度，并用实机 1024×576 截图对齐消息框左上角与首字像素差 |
+| OPEN-02 | 打字机速率与原版的 **2× 差**、preroll 减法有无 | 未闭合（本作 CE48 把速度设 500，近似瞬间显示） | 定位 `Sys9 → p+0x80` 的写入点；或用长消息（CE 里调低 Sys9）录逐帧显字数曲线 |
+| OPEN-03 | 标点**禁则** | 不实现是对的——原版本就没有（4,375 个 ≥64B 函数对 `。、」` 等码点零命中） | 保持不实现；如需变更须先拿到原版证据 |
+| OPEN-04 | 选择面板**越界回退**是本仓自造策略（原版无回退、无夹取） | 保留兜底（C 级未闭合假设） | 在标题画面确认 op102 面板是否真的被隐藏（遮挡/坐标），再决定是否删掉居中回退 |
+| OPEN-05 | 1/10 缩放的**取整差异**（整除 vs round/floor）与 `default_origin` 的 `trunc(rateY/10)` | 部分实现 | 以 1280×720 等非 32/24 整数倍分辨率实机量像素比；逆向 `coordinate_scale` 与 UI 缩放的乘除点 |
+| OPEN-06 | **真实过渡掩膜**（`[Transition]Fade.png`）未贴图 | 本作路径已实现（kind=−1 均匀溶解），掩膜路径未用 | 若日后用到 kind≥0：把 Fade.png 作为 mask 贴到 dissolve 的 alpha 上，并逐帧摄录原版过渡曲线 |
+| OPEN-07 | 原版**帧率与窗口尺寸**、capture 与实机截图像素比对 | 部分实现 | 抓取原版帧率与窗口尺寸做逐帧对照 |
+| OPEN-08 | 原版选择面板的**文字内缩实测值** | 未取到（见 `docs/re/LAYOUT_METRICS.md` §5） | 实机量测或逆向原版绘制函数 |
+| OPEN-09 | 超宽选项 / 超宽文本的**原版截断·滚动·换行策略** | 未实现（仓内不截断） | 实机造超长选项 + 逆向；见 `docs/re/TEXT_METRICS.md` §4 |
+| OPEN-10 | opcode 101 是否含**标点提前一字的预处理** | 未定位（低优先级） | 在 101 的字符串准备函数里再确认一次 |
+| OPEN-11 | 过渡侧三处未闭合：全局/渲染对象 `+0xf8/+0xfc` 计数器的对应关系、`this+0x108` 标志的写入点、`FUN_004bf5b0` 的两个分支 | 未闭合 | 见 `docs/re/TRANSITION.md` §6 |
 
 ---
 

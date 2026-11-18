@@ -1,0 +1,170 @@
+Unicode true
+ManifestDPIAware true
+SetCompressor /SOLID lzma
+SetCompressorDictSize 64
+XPStyle on
+
+!include "MUI2.nsh"
+!include "FileFunc.nsh"
+
+!define APP_NAME "@APP_NAME@"
+!define APP_VERSION "@APP_VERSION@"
+!define APP_VERSION4 "@APP_VERSION4@"
+!define APP_PUBLISHER "@PUBLISHER@"
+!define APP_COPYRIGHT "@COPYRIGHT@"
+!define SOURCE_DIR "@SOURCE_DIR@"
+!define OUTPUT_FILE "@OUTPUT_FILE@"
+!define SETUP_ICON "@SETUP_ICON@"
+!define APP_REG_KEY "Software\Imouto Life\Godot"
+!define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Imouto Life Godot"
+
+Name "${APP_NAME}"
+Caption "${APP_NAME} 安装程序"
+OutFile "${OUTPUT_FILE}"
+InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
+InstallDirRegKey HKCU "${APP_REG_KEY}" "InstallDir"
+RequestExecutionLevel user
+BrandingText "${APP_NAME}"
+Icon "${SETUP_ICON}"
+UninstallIcon "${SETUP_ICON}"
+
+VIProductVersion "${APP_VERSION4}"
+VIAddVersionKey /LANG=2052 "ProductName" "${APP_NAME}"
+VIAddVersionKey /LANG=2052 "FileDescription" "${APP_NAME} 安装程序"
+VIAddVersionKey /LANG=2052 "CompanyName" "${APP_PUBLISHER}"
+VIAddVersionKey /LANG=2052 "LegalCopyright" "${APP_COPYRIGHT}"
+VIAddVersionKey /LANG=2052 "FileVersion" "${APP_VERSION4}"
+VIAddVersionKey /LANG=2052 "ProductVersion" "${APP_VERSION4}"
+
+!define MUI_ABORTWARNING
+!define MUI_ICON "${SETUP_ICON}"
+!define MUI_UNICON "${SETUP_ICON}"
+!define MUI_WELCOMEPAGE_TITLE "欢迎安装 ${APP_NAME}"
+!define MUI_WELCOMEPAGE_TEXT "安装程序将把游戏安装到您选择的文件夹。$\r$\n$\r$\n游戏存档保存在安装目录的 Data\\Save 中，升级或卸载不会删除编号存档。"
+!define MUI_DIRECTORYPAGE_TEXT_TOP "请选择安装位置。安装程序会在所选位置下建立「${APP_NAME}」游戏文件夹；若所选文件夹本身已使用该名称，则直接安装到其中。"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\Imouto Life.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "启动 ${APP_NAME}"
+
+!insertmacro MUI_PAGE_WELCOME
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE EnsureGameFolder
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_COMPONENTS
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_PAGE_FINISH
+
+!insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_INSTFILES
+
+!insertmacro MUI_LANGUAGE "SimpChinese"
+
+Function EnsureGameFolder
+    ; The directory page selects an installation location. Keep the game in
+    ; its own subfolder, but do not append the name twice when the player
+    ; accepts the default path or returns to this page.
+    ${GetFileName} $R0 "$INSTDIR"
+    StrCmp $R0 "${APP_NAME}" ensure_game_folder_done
+    StrCpy $R1 "$INSTDIR" 1 -1
+    StrCmp $R1 "\" 0 ensure_game_folder_append
+    StrCpy $INSTDIR "$INSTDIR" -1
+    ensure_game_folder_append:
+    StrCpy $INSTDIR "$INSTDIR\${APP_NAME}"
+    ensure_game_folder_done:
+FunctionEnd
+
+Section "游戏文件" SEC_GAME
+    SectionIn RO
+    SetShellVarContext current
+    SetOutPath "$INSTDIR"
+    SetOverwrite on
+
+    ; Preserve the previous System.sav while the replacement files are copied.
+    IfFileExists "$INSTDIR\Data\Save\System.sav" 0 no_system_backup
+        Delete "$INSTDIR\Data\Save\System.sav.bak"
+        Rename "$INSTDIR\Data\Save\System.sav" "$INSTDIR\Data\Save\System.sav.bak"
+    no_system_backup:
+
+    File /r "${SOURCE_DIR}\*.*"
+
+    IfFileExists "$INSTDIR\Data\Save\System.sav.bak" 0 no_system_restore
+        Delete "$INSTDIR\Data\Save\System.sav"
+        Rename "$INSTDIR\Data\Save\System.sav.bak" "$INSTDIR\Data\Save\System.sav"
+    no_system_restore:
+
+    WriteUninstaller "$INSTDIR\uninstall.exe"
+    WriteRegStr HKCU "${APP_REG_KEY}" "InstallDir" "$INSTDIR"
+    WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "${APP_NAME}"
+    WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${APP_VERSION}"
+    WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "${APP_PUBLISHER}"
+    WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\Imouto Life.exe,0"
+    WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
+    WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
+    WriteRegDWORD HKCU "${UNINST_KEY}" "NoModify" 1
+    WriteRegDWORD HKCU "${UNINST_KEY}" "NoRepair" 1
+SectionEnd
+
+Section "开始菜单快捷方式" SEC_STARTMENU
+    SetShellVarContext current
+    ClearErrors
+    CreateDirectory "$SMPROGRAMS\${APP_NAME}"
+    IfErrors startmenu_done
+    CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\Imouto Life.exe" "" "$INSTDIR\Imouto Life.exe" 0
+    CreateShortCut "$SMPROGRAMS\${APP_NAME}\卸载 ${APP_NAME}.lnk" "$INSTDIR\uninstall.exe"
+    startmenu_done:
+SectionEnd
+
+Section /o "桌面快捷方式" SEC_DESKTOP
+    SetShellVarContext current
+    ClearErrors
+    CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\Imouto Life.exe" "" "$INSTDIR\Imouto Life.exe" 0
+    IfErrors desktop_done
+    desktop_done:
+SectionEnd
+
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+    !insertmacro MUI_DESCRIPTION_TEXT ${SEC_GAME} "游戏主程序、Rust GDExtension 与发行数据。"
+    !insertmacro MUI_DESCRIPTION_TEXT ${SEC_STARTMENU} "在开始菜单中创建游戏和卸载快捷方式。"
+    !insertmacro MUI_DESCRIPTION_TEXT ${SEC_DESKTOP} "在桌面上创建游戏快捷方式。"
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+Section "Uninstall"
+    SetShellVarContext current
+
+    Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
+    Delete "$SMPROGRAMS\${APP_NAME}\卸载 ${APP_NAME}.lnk"
+    RMDir "$SMPROGRAMS\${APP_NAME}"
+    Delete "$DESKTOP\${APP_NAME}.lnk"
+
+    Delete "$INSTDIR\Imouto Life.exe"
+    Delete "$INSTDIR\README.txt"
+    Delete "$INSTDIR\按键功能指引.txt"
+    Delete "$INSTDIR\checksums.txt"
+    RMDir /r "$INSTDIR\bin"
+
+    ; Move the whole Save folder out of Data before removing release data.
+    ; This preserves System.sav and every numbered save. If the move fails
+    ; (for example because a save is locked), leave Data untouched rather
+    ; than risk deleting the player's progress.
+    IfFileExists "$INSTDIR\Data\Save" 0 uninstall_delete_data
+    ClearErrors
+    Rename "$INSTDIR\Data\Save" "$INSTDIR\.save-keep"
+    IfErrors uninstall_keep_data
+    RMDir /r "$INSTDIR\Data"
+    CreateDirectory "$INSTDIR\Data"
+    Rename "$INSTDIR\.save-keep" "$INSTDIR\Data\Save"
+    Goto uninstall_data_done
+
+    uninstall_delete_data:
+        RMDir /r "$INSTDIR\Data"
+        Goto uninstall_data_done
+
+    uninstall_keep_data:
+        ; Leave Data in place when the Save folder cannot be moved safely.
+
+    uninstall_data_done:
+
+    Delete "$INSTDIR\uninstall.exe"
+    DeleteRegKey HKCU "${UNINST_KEY}"
+    DeleteRegKey HKCU "${APP_REG_KEY}"
+    RMDir "$INSTDIR"
+SectionEnd

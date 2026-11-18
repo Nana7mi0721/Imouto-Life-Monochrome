@@ -273,7 +273,7 @@ FUN_00526390(0,0,DAT_0084b230,DAT_0084b234,col);    // = DrawBox / 整屏填充�
 （Confidence: 强——`FUN_00543f70`/`FUN_00526390` 两个被调函数全文已核。）
 
 **已确认的实例**：本作 dungeon 事件 1 的 flash `0x0196_C896`（R150 G200 B150，20 帧，见
-`crates/wolf-game/src/tint.rs:150` 的注释）在原版是 **R=255*150/100→255、G=255*200/100→255、B=255*150/100→255
+`crates/wolf-game/src/wolf-game/src/tint.rs（tint 应用）` 的注释）在原版是 **R=255*150/100→255、G=255*200/100→255、B=255*150/100→255
 的纯白 flash，20 帧内 alpha 线性衰减**；仓内却把它当成"亮度乘到 1.5/2.0/1.5 再回来"，视觉上会是过曝彩色脉冲
 而不是白色闪光。这是一个**可观测的行为差异**（同时回答了 §6 的 TODO 6：`p>100` 的 151 确实存在）。
 
@@ -311,7 +311,7 @@ FUN_00526390(0,0,DAT_0084b230,DAT_0084b234,col);    // = DrawBox / 整屏填充�
 | wait 位 | 没建模（总是阻塞 frames 帧，162 无条件 Blocked） | `flags & 0x10000` = wait，**存在非阻塞过渡** | 本作唯一调用 wait=1，无影响；但可在 162 分支里按位决定是否 Blocked |
 | 151 语义 | `tint.rs`：`channel = byte/100`，RGB **百分比乘子** | `bright = clamp(255 + (p-100)*255/100, 0, 255)`，DxLib draw-bright | p≤100 时两者近似等价；p>100 时原版会**钳到中性色**（`p=150` 不更亮），仓内会乘 1.5。本作是否有 p>100 需要脚本统计，见 TODO |
 | 151 flash | `flash` = 同一 duration 的三角波 lerp（先升后降） | **整屏纯色块 overlay（颜色 = 各通道 p% 的 255 钳顶），alpha 从 255 单向衰减到 0** | 形态**不同**。实例：dungeon 事件 1 的 `0x0196C896`（R150/G200/B150）在原版=**纯白闪一下然后 20 帧淡掉**，仓内=亮度乘到 1.5/2.0/1.5 的彩色脉冲 |
-| 151 作用域 | 只乘 `quad.number < 0` 与地图层（`game.rs:1165 apply_screen_tint`） | tint 是 draw-bright 全局状态，作用于**之后画的所有 sprite**（含窗口/HUD，除非该层被显式复位） | **可能过窄**。`FUN_004bf5b0` 有两个分支（含 `SetDrawBlendMode(2,0xff)` 的 HUD 路径），说明至少还有"不受 tint"的分支存在；仓内"仅画面层"是否等价未证实 |
+| 151 作用域 | 只乘 `quad.number < 0` 与地图层（`wolf-game/src/game.rs（tint/fade 应用处） apply_screen_tint`） | tint 是 draw-bright 全局状态，作用于**之后画的所有 sprite**（含窗口/HUD，除非该层被显式复位） | **可能过窄**。`FUN_004bf5b0` 有两个分支（含 `SetDrawBlendMode(2,0xff)` 的 HUD 路径），说明至少还有"不受 tint"的分支存在；仓内"仅画面层"是否等价未证实 |
 | tint × fade | 同一个 `apply_screen_tint` 里把 tint、fade **逐 quad 相乘** | 两阶段：tint 在 sprite 上，fade 是之后的一层 overlay，且 overlay 前 SetDrawBright 被复位 | **应该改**：fade 不应乘以 tint（也不该乘到 HUD 的 `quad.tint` 上）；理想实现是"先画带 tint 的场景 → 再画一层 mask/alpha 的旧帧 overlay" |
 
 ### 5.2 落地后的实现（**已执行**，2026-11-02）
@@ -340,4 +340,4 @@ FUN_00526390(0,0,DAT_0084b230,DAT_0084b234,col);    // = DrawBox / 整屏填充�
 5. ~~151 的 flash 配色 `FUN_00543f70` 语义~~ → **已核实**：它就是 DxLib `GetColor(r,g,b)`（`all/00543f70` 全文，
    按 `DAT_00a37d78==1` 走 `(r<<16)|(g<<8)|b` 快路径），`FUN_00526390` 就是整屏填充。
 6. ~~脚本里是否存在 `p > 100` 的 151~~ → **已确认存在**（dungeon 事件 1 的 flash `0x0196C896` = R150/G200/B150，
-   `crates/wolf-game/src/tint.rs:150` 注释），但全数据集里 `p>100` 的**非 flash** 151 仍未枚举（需扫全部 CE 的 151 参数）。
+   `crates/wolf-game/src/wolf-game/src/tint.rs（tint 应用）` 注释），但全数据集里 `p>100` 的**非 flash** 151 仍未枚举（需扫全部 CE 的 151 参数）。

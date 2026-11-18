@@ -31,6 +31,13 @@ use crate::bytes::Reader;
 use crate::error::{Error, Result};
 use key::{key_conv, key_create, KEY_BYTES};
 
+/// CRC-32 helper shared with formats outside DXArchive (currently the media
+/// pack index). The DXArchive implementation stays private to this module.
+#[must_use]
+pub(crate) fn crc32_for_pack(data: &[u8]) -> u32 {
+    crc32::crc32(data)
+}
+
 /// Decode CP932 (Shift-JIS) bytes into a string.
 ///
 /// Exposed crate-wide for the .project name tables: the 2.00 generation stores

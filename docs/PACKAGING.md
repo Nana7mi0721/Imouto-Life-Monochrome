@@ -149,8 +149,9 @@ bash tools/package-godot.sh --dry-run
 work/out/dist/godot/<version>/
   Imouto Life.exe        # Godot release 导出（PCK 内嵌）
   bin\wolf_gdext.dll     # release GDExtension；GDExtension 清单按 res://bin/ 解析
-  Data\                  # release-data.manifest 精确白名单；Save\ 仅含 System.sav
+  Data\                  # 15 个明文清单文件 + Save\System.sav + media.pak
   README.txt
+  按键功能指引.txt        # F4/F11/F8/F5 等显示快捷键与游戏操作
   checksums.txt          # 包内所有文件的 SHA-256
 work/out/dist/godot/Imouto Life setup.zip
 work/out/dist/godot/Imouto Life setup.zip.sha256
@@ -161,14 +162,36 @@ work/out/dist/godot/Imouto Life setup.exe.sha256
 `Imouto Life setup.zip` 的顶层目录固定为
 `妹！生活 ～单色～ Godot/`；解压后直接进入该文件夹运行。
 
-### 8.1 Data 白名单
+### 8.1 发行 Data 结构与 media.pak
 
-`tools/package/release-data.manifest` 是发行包的唯一 Data 来源。当前清单为
-**746 个文件 / 127,928,202 B**，再加干净的 `Data/Save/System.sav`
-（155,615 B）后共 **747 个文件 / 128,083,817 B**。脚本不会复制完整
-`work/Data`，只逐条复制清单中的相对路径。
+`tools/package/release-data.manifest` 仍是发行包的唯一 Data 来源。当前清单为
+**746 个文件 / 127,928,202 B**。打包时固定把以下 7 个媒体前缀从明文 staging
+中排除，交给 `media-pack` 写入 `Data/media.pak`：
 
-相对完整 `work/Data` 当前排除 **618 个文件 / 55,684,128 B**，其中包含：
+```text
+Picture/  cg/  BGM/  SE/  CharaChip/  SystemFile/  BalloonBase_CafeLatte/
+```
+
+这 7 个前缀当前共 **731 个文件 / 113,002,329 B**，是媒体包的 payload。
+其余 **15 个文件 / 14,925,873 B** 保持明文：9 个 `BasicData/` 文件、
+5 个已注册 `MapData/` 地图和 `◆GenJyuuGothicX-P-Bold.ttf`。最终 Data 结构为：
+
+```text
+Data\
+  BasicData\                  # 9 个数据库/工程/瓦片集文件（明文）
+  MapData\                    # 5 张已注册地图（明文）
+  Save\System.sav             # 唯一允许的干净存档模板（明文，155,615 B）
+  ◆GenJyuuGothicX-P-Bold.ttf   # 字体（明文）
+  media.pak                   # Picture/cg/BGM/SE/CharaChip/SystemFile/
+                              # BalloonBase_CafeLatte 的只读媒体包
+```
+
+即 **17 个文件** = 15 个明文清单文件 + `Save/System.sav` + `media.pak`。
+`media.pak` 的 payload 是 113,002,329 B；容器本身还有头部/索引等开销，
+实际大小以构建输出和 `checksums.txt` 为准，不在文档里写死。
+
+相对完整 `work/Data` 当前排除 **619 个文件 / 55,910,216 B**（含未列入
+manifest 的媒体和模板资源），其中包含：
 
 - `MapChip/` 整目录：当前 Godot 发行路径不调用 `tile_quads()`，只画
   scenery/picture；因此 102 个瓦片图都不会进入发行包。原始 `work/Data`
@@ -181,11 +204,12 @@ work/out/dist/godot/Imouto Life setup.exe.sha256
   和 `BasicData` 图标/辅助文件。
 
 `Data/Save/` 由脚本单独注入，只允许一个 `System.sav`；所有本地
-`SaveData*.sav` 都不会复制。
-
-白名单校验器 `tools/package/release_data.py` 会拒绝绝对路径、`..`、
-反斜杠、盘符、重复路径和符号链接逃逸；复制后再次比较目标文件集合，必须与
-“清单 + `Save/System.sav`”完全相同。
+`SaveData*.sav` 都不会复制。staging 使用 `--exclude-prefix` 排除媒体前缀，
+并以 `--defer-verify` 先复制明文；`media-pack` 生成 `media.pak` 后再调用
+`release_data.py verify --exclude-prefix ... --extra media.pak`。校验器会拒绝
+绝对路径、`..`、反斜杠、盘符、重复路径和符号链接逃逸，最终文件集合必须精确等于
+“过滤后的清单 + `Save/System.sav` + `media.pak`”；任何散落的媒体文件都会作为
+unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不存在。
 
 ### 8.2 Godot 导出预设
 
@@ -198,14 +222,22 @@ work/out/dist/godot/Imouto Life setup.exe.sha256
 - `application/icon="res://icon_windows.png"`，源图从
   `work/Data/icon_windows.png` 复制到 `godot/icon_windows.png`；
   Godot 4.7.2 会把 2048×2048 PNG 自动转换成多尺寸 Windows 图标，无需预生成 ICO；
-- 运行时窗口图标使用 `application/config/windows_native_icon="res://window_icon.ico"`：
-  32/48/64/128/256 帧来自 `work/Data/icon_windows.png`（任务栏/Alt-Tab），
-  16×16 帧保留为无 GDExtension 时的后备标题栏图标。正常 Windows GUI 启动后，
-  `GameView.gd` 会把 `res://icon_titlebar.png`（`inusuku.png` 的 256×256 头部
-  裁切）经 GDExtension 以高分辨率 `WM_SETICON ICON_SMALL` 设置到标题栏，
-  `ICON_BIG` 仍保持 ICO 的大帧；F11 切换窗口模式后会重新应用。
+- 运行时窗口图标使用 `application/config/windows_native_icon="res://window_icon.ico"`。
+  该 ICO 由 `tools/package/make_windows_icon.py` 重建，含
+  16/20/24/32/40/48/64/128/256 九帧，**每一帧**都来自
+  `work/Data/icon_windows.png`。它是程序/任务栏/Alt-Tab 图标，
+  不得混入 inusuku 头像；NSIS 的 `tools/package/icon_windows.ico`
+  使用同一套九帧。
+  正常 Windows GUI 启动后，`GameView.gd` 通过 GDExtension 的
+  `titlebar_icon_size()`（`GetDpiForWindow` +
+  `GetSystemMetricsForDpi(SM_CXSMICON)`）取得实际物理尺寸，优先加载
+  `res://icon_titlebar_{16,20,24,32,40,48}.png` 中对应的小图，再以
+  `WM_SETICON ICON_SMALL` 设置标题栏；缺失对应尺寸时才回落到
+  `res://icon_titlebar.png`（256×256，inusuku 头像裁切）的 Lanczos
+  缩放。inusuku 只用于这一层标题栏覆盖；`ICON_BIG` 仍保持
+  `icon_windows` ICO 的大帧；F4/F11 切换窗口模式后会重新应用。
   exe 文件图标仍由上面的 `application/icon` 单独控制；
-- Windows 资源字段从 `export_presets.cfg` 读取并同步给 Inno Setup：
+- Windows 资源字段从 `export_presets.cfg` 读取并同步给 NSIS 安装器：
   `file_version` / `product_version` 为 Cargo 版本补足四段（当前 `0.1.0.0`），
   `product_name` 与 `file_description` 为 `妹！生活 ～单色～ Godot`，
   公司名和版权使用当前预设中的 `Inusuku` / `Copyright (c) 2026 Inusuku`；
@@ -246,42 +278,96 @@ work/out/dist/godot/Imouto Life setup.exe.sha256
    或重复的 DLL；新增 `window_icon.ico`、`icon_titlebar.png` 后当前实际为 16 个文件；
 2. 把 exe 的版本资源语言改为简体中文，并复核 PE checksum 与 PCK 完整；
 3. 检查 `bin\wolf_gdext.dll` 与构建 DLL 的 SHA-256 相同；
-4. staging 精确白名单并复核 `Data/Save/` 只能有 `System.sav`；
-5. 生成包内 `checksums.txt`，可用 `sha256sum -c` 复核；
-6. 校验便携 zip 可读、顶层目录正确，并生成 zip 外部 `.sha256`；
-7. 如生成安装版，调用 Inno Setup 编译 `Imouto Life setup.exe` 并生成外部 `.sha256`。
+4. 以 `--exclude-prefix` 和 `--defer-verify` staging 15 个明文清单文件 +
+   `Data/Save/System.sav`，并复核 `Data/Save/` 只能有 `System.sav`；
+5. 构建并调用 `target/release/media-pack.exe`，从源 `--data-root` 和同一个
+   manifest 生成 `Data/media.pak`；
+6. 调用 `release_data.py verify --exclude-prefix ... --extra media.pak`，要求最终
+   文件集合精确为 17 个文件，并额外检查 7 个媒体前缀目录/文件都不存在；
+7. 生成包内 `checksums.txt`，可用 `sha256sum -c` 复核；
+   `tools/package/KEYBOARD_GUIDE.txt` 会以 CRLF 写为包内
+   `按键功能指引.txt`，并同样进入校验和；
+8. 校验便携 zip 可读、顶层目录正确，并生成 zip 外部 `.sha256`；
+9. 如生成安装版，调用 NSIS 编译 `Imouto Life setup.exe` 并生成外部 `.sha256`。
 
-### 8.4 Inno Setup 安装版
+媒体打包器由 `tools/package-godot.sh` 构建：
+`cargo build -q --release -p wolf-format --bin media-pack`，产物固定为
+`target/release/media-pack.exe`。`--skip-build` 只表示复用现有
+`godot/bin/wolf_gdext.dll`；如果 packer 尚不存在，脚本仍会单独构建它。
+调用接口为
+`media-pack --root DIR --manifest FILE --include-prefix PREFIX ... --output FILE`，
+其中 `--include-prefix` 固定重复 7 次，`--output` 为 `Data/media.pak`。
 
-安装脚本模板是 `tools/package/ImoutoLife.iss.in`，由
-`tools/package/render_inno.py` 注入实际路径、版本、发布者、版权和图标；
+### 8.4 NSIS 安装版
+
+安装脚本模板是 `tools/package/ImoutoLife.nsi.in`，由
+`tools/package/render_nsis.py` 注入实际路径、版本、发布者、版权和图标；
 安装包图标来自 `tools/package/icon_windows.ico`（16/24/32/48/64/128/256）。
 
-- 语言固定为简体中文（`ChineseSimplified.isl`，不显示语言选择页）；
-- 默认安装目录为 `{autopf}\妹！生活 ～单色～ Godot`，用户可在安装向导中
-  选择其它位置；游戏文件直接落在该 `app` 目录；
-- 创建开始菜单快捷方式，桌面快捷方式为可选任务；
-- `Data\Save\` 不参与覆盖式安装；首次安装只补充不存在的 `System.sav`，
-  并标记为卸载时保留，避免升级或卸载删除玩家存档；
+- 语言固定为简体中文（MUI `SimpChinese`，不显示语言选择页），使用标准
+  NSIS 目录页，用户可以在向导中自由选择安装位置；
+- 默认安装目录为 `$LOCALAPPDATA\Programs\妹！生活 ～单色～ Godot`；如果用户
+  选择的是父目录，离开目录页时会自动追加「妹！生活 ～单色～ Godot」游戏
+  文件夹，避免游戏文件直接散落在所选根目录；
+- 创建开始菜单快捷方式（默认勾选），桌面快捷方式为可选组件；
+- 覆盖安装时先备份再恢复 `Data\Save\System.sav`，编号存档不参与覆盖；
+  卸载时先把整个 `Data\Save` 改名为 `.save-keep`，删除其余 `Data` 内容后
+  再恢复；若改名失败则保留整个 `Data`，避免误删玩家存档；
 - 安装包使用和 exe 相同的高清图标，并写入版本、公司、产品名和版权。
+- 安装信息写入 HKCU 卸载注册表项，卸载器同时删除开始菜单和可选桌面快捷方式。
+- 卸载器删除 `README.txt`、`按键功能指引.txt` 与 `checksums.txt`；玩家存档
+  仍按上面的 `.save-keep` 流程保留。
 
-生成安装版需要 Inno Setup 6 的 `ISCC.exe`。脚本依次查找
-`ISCC_BIN`、`--iscc PATH`、项目内 `work/out/tools/InnoSetup6/ISCC.exe`
-以及常见系统安装路径；缺失时真实打包会停止，`--no-setup` 可只生成便携包。
-本轮只完成脚本与配置准备，尚未实际编译 `Setup.exe`。
+生成安装版需要 NSIS 3.x 的 `makensis.exe`。脚本依次查找
+`MAKENSIS_BIN`、`--makensis PATH`、项目内
+`work/out/tools/nsis-3.11/nsis-3.11/makensis.exe` 以及常见系统安装路径；
+缺失时真实打包会停止，`--no-setup` 可只生成便携包。编译时脚本把
+`TEMP`/`TMP` 指向 `work/out/nsis/temp`，避免本机临时目录权限导致
+`Internal compiler error #12345`。
+本机 `work/out` 还带有 Low Mandatory Level 完整性标签和禁止删除子项的 ACL。
+从该目录双击 `Setup.exe` 时，安装器会继承低完整性级别，无法写普通
+`%TEMP%`，表现为 `NSIS Error: Error writing temporary file` 或错误码 2。
+实机测试或交付前必须把 Setup/ZIP 复制到普通用户目录（例如
+`D:\REISEN\Downloads\...`）再运行。
 
-`--dry-run` 只报告模板是否存在并继续打印数据计划，用于在无模板环境中检查过滤逻辑；
-真实 release 导出仍会因模板缺失而失败。上一轮导出已验证的底层数据：
+`--dry-run` 只报告模板是否存在，并打印媒体包前缀、pack payload、明文 staging
+文件数/字节与最终 Data 文件数；它不构建、不导出、不打包、不复制数据。packer
+尚未构建时 dry-run 会明确提示，并跳过实际打包。真实 release 导出仍会因模板
+缺失而失败。
 
-- `Imouto Life.exe` 109,299,944 B，PCK 内嵌；
-- `bin\wolf_gdext.dll` 6,517,248 B；
-- `Data/` 747 个文件，约 124 MiB；
-- 旧命名 zip 约 141 MiB；新命名便携包与安装包将在下次正式打包时生成。
+当前输出预期（体积会随构建变化，不在文档中写死最终 Setup 大小或哈希）：
+
+- `Data/` 17 个文件：15 个明文清单文件 + `Save/System.sav` + `media.pak`；
+- `media.pak` 的 payload 为 731 个文件 / 113,002,329 B，容器大小另含头部/索引；
+- `Imouto Life.exe`、`bin\wolf_gdext.dll`、便携 ZIP 与 NSIS Setup 的体积
+  以实际构建输出为准；
+- 包内 `checksums.txt` 和各外部 `.sha256` 是最终校验依据。
 
 精简 Data 验证：`smoke.gd` 输出 `pictures=4 sprites=4`；
 `save_roundtrip.gd` 新游戏自动走到卧室并保存/重载均为 38 张图片，
 `System.sav` 哈希前后不变。
 
-其它选项：`--no-zip`、`--no-setup`、`--iscc PATH`、`--skip-build`、`--force`、
+其它选项：`--no-zip`、`--no-setup`、`--makensis PATH`、`--skip-build`、`--force`、
 `--out-dir`、`--zip-dir`、`--manifest`、`--system-save`、`--preset`。
+
+### 8.5 media.pak 的格式边界与图标格式
+
+- `Data/media.pak` 是由 `media-pack` 从同一份 release manifest 中筛选 7 个媒体
+  前缀生成的只读单文件包。包内只包含媒体条目；`BasicData`、`MapData`、`Save`
+  和字体仍以明文散文件发布，Godot PCK 仍只包含脚本/场景/运行资源。
+- 该包使用固定密钥 XOR 混淆。**它是混淆，不是强加密，也不提供 DRM**：密钥在
+  客户端中，能提高直接浏览/复制素材的门槛，但无法抵抗有意的逆向或提取。
+- Mod overlay 仍可用：玩家/Mod 可以继续按原 `Data/` 目录结构放置同名散文件覆盖；
+  `media.pak` 是只读后备，不应手工修改，需要更新内容时用 packer 重新生成。
+- 打开 Godot 的 `encrypt_pck` 不能替代媒体包：它只覆盖 PCK 内的脚本/场景等资源，
+  且官方导出模板不支持；它不能保护外部 `Data/media.pak`。
+- Windows 的可执行文件/窗口图标最终使用 ICO（内部为多尺寸位图），不接受
+  SVG。`work/Data/inusuku.png` 本身是 400×400 位图，转成 SVG 不会恢复细节；
+  只有拿到真正的矢量源文件时，才值得从矢量逐档渲染。当前
+  `tools/package/make_windows_icon.py` 会把 `icon_windows.png` 采样成
+  程序/安装器 ICO 的全部九帧；inusuku 的
+  `icon_titlebar_{16,20,24,32,40,48}.png` 仅用于运行时标题栏覆盖。
+  两组资源不得交叉：安装器/程序图标必须是 `icon_windows` 系列。
+  `GameView.gd` 再按实际 DPI 选择标题栏尺寸，避免把 256×256 图交给
+  Windows 标题栏现场缩小。
 

@@ -17,32 +17,39 @@
 | Ghidra 工程 | `work/out/ghidra/` | 166 MB | 已删除；**不是丢弃反编译成果**：4,375 个函数的 C 伪码保留在 `work/out/re_all/`，工程可用 `tools/re/ghidra` 从原版 `Game.exe` 重新 import（约 4 分钟）。 |
 | 游戏截图/回归/一次性探测输出 | `work/out/play_gpu/`、`m14_visual/`、`shots/`、顶层 615 个临时文件等 | 约 400+ MB | 已删除；保留少量最终截图与报告，见 §3.5。 |
 
-**清理后项目体积：约 250 MB**（不含 `target/`，未重新构建）。其中 `work/Data` 176 MB、`work/out` 42 MB、`prt sc` 17 MB、`.git` 11 MB、源码/文档/工具约 5.4 MB。
+**清理后项目体积：约 260 MB**（不含 `target/` 与 `work/out/`）。其中 `work/Data` 182 MB、
+`ptr_sc` 21 MB、`.git` 32 MB、源码/文档/工具约 25 MB。
+（`work/out` 另有 679 MB：发布产物 `dist/` 631 MB + 复现材料 48 MB。）
 
 已保留、未删除的关键输入：
 
 - 日文原版：`E:\EROGAME\限界!？お兄ちゃん 「妹!せいかつ」～モノクローム～2.03`（180 MB）
 - 中文版：`E:\EROGAME\Imouto! Life ~Monochrome~ zh-CN Ver`（178 MB）
-- 解包数据：`work/Data`（176 MB）
-- 实机截图：`prt sc/`（34 个文件，17 MB）
+- 解包数据：`work/Data`（182 MB）
+- 实机截图：`ptr_sc/`（39 个文件，21 MB）
 
 ---
 
-## 2. 源码资产：8 个 Rust crate，约 10.5 万行
+## 2. 源码资产：9 个 Rust crate，约 12.8 万行
 
-源码在 `crates/`，共 **172 个 Rust 文件、104,651 行**；集成测试文件 **86 个**，源码内 `#[test]` 标记 **939 处**。
+源码在 `crates/`，共 **209 个 Rust 文件、128,135 行**；集成测试文件 **117 个**，
+源码内 `#[test]` 标记 **1,241 处**；Godot 前端另有 **18 个 `.gd` / 4,767 行**。
 当前基线：`cargo test -q --workspace` 在清理前 **exit 0**；`WOLF_DATA_ROOT="$PWD/work/Data" wolf-cli verify` 为 **PASS 64 / 1 SKIP**。
+
+> 数字为 **2026-11-18 实测**（逐 crate 统计 `crates/**/*.rs`）；早先的 8 crate / 104,651 行
+> 是 2026-11-04 的快照，`wolf-gdext` 与 `wolf-launcher` 当时尚未并入统计。
 
 | crate | 行数 | 可复用价值 | 主要能力 |
 |---|---:|---|---|
-| `crates/wolf-format` | 35,531 | ★★★★★ | WOLF 数据格式：Game.dat / CommonEvent / Database / CDataBase / mps / tileset / DXArchive VER6 解密与解包；CP932/GBK 混排文本解码。 |
-| `crates/wolf-vm` | 6,720 | ★★★★★ | WOLF 字节码解释器、opcode 语义、变量与 magic 地址、选择肢/文本展开。 |
-| `crates/wolf-save` | 6,025 | ★★★★★ | `.sav` 存档编解码、vardb、checksum、写入与往返保真。 |
-| `crates/wolf-render` | 5,377 | ★★★☆☆ | 软件/离屏渲染、文本 shaping（fontdb + 字重/字号/行距）、图像 diff。 |
-| `crates/wolf-audio` | 2,171 | ★★★☆☆ | BGM/SE 混音与 SoundCmd 语义、音频覆盖。 |
-| `crates/wolf-game` | 41,129 | ★★☆☆☆ | 游戏层：Game、地图运行时、HUD、设置、存档界面、输入、事件状态机；体量最大、与“完整复刻”目标耦合最深。 |
-| `crates/wolf-cli` | 7,532 | ★★★★☆ | `wolf-cli` 子命令：`verify` / `list` / `capture` / `play` / `run` / `assets` / `precompile` 等。 |
-| `crates/wolf-launcher` | 166 | ★☆☆☆☆ | 上次发布包用的 GUI 启动器；很小，可保留也可删。 |
+| `crates/wolf-format` | 35,683 | ★★★★★ | WOLF 数据格式：Game.dat / CommonEvent / Database / CDataBase / mps / tileset / DXArchive VER6 解密与解包；CP932/GBK 混排文本解码。 |
+| `crates/wolf-game` | 59,515 | ★★☆☆☆ | 游戏层：Game、地图运行时、HUD、设置、存档界面、输入、事件状态机；体量最大、与"完整复刻"目标耦合最深。 |
+| `crates/wolf-vm` | 9,714 | ★★★★★ | WOLF 字节码解释器、opcode 语义、变量与 magic 地址、选择肢/文本展开。 |
+| `crates/wolf-cli` | 7,936 | ★★★★☆ | `wolf-cli` 子命令：`verify` / `list` / `capture` / `play` / `run` / `assets` / `precompile` 等。 |
+| `crates/wolf-save` | 6,054 | ★★★★★ | `.sav` 存档编解码、vardb、checksum、写入与往返保真。 |
+| `crates/wolf-render` | 5,390 | ★★★☆☆ | 软件/离屏渲染、文本 shaping（fontdb + 字重/字号/行距）、图像 diff。 |
+| `crates/wolf-audio` | 2,448 | ★★★☆☆ | BGM/SE 混音与 SoundCmd 语义、音频覆盖。 |
+| `crates/wolf-gdext` | 1,228 | ★★☆☆☆ | Godot 4 GDExtension 桥 `WolfGame`：每帧返回 sprites/texts/overlays/sounds，供 GDScript 绘制。 |
+| `crates/wolf-launcher` | 167 | ★☆☆☆☆ | 发布包用的 Windows GUI 启动器（无 console，转发给 `runtime\wolf-cli.exe`）。 |
 
 **最高复用价值不在 `wolf-game`，而在 `wolf-format` + `wolf-vm` + `wolf-save` + `wolf-cli`。**
 换句话说：这套代码作为“WOLF 游戏数据提取/翻译/改档工具”比作为“游戏引擎”更成熟。
@@ -130,21 +137,21 @@
 
 ```
 E:\Study\github program\Imouto Life
-├─ crates/                    8 个 crate，172 个 .rs，104,651 行
-├─ docs/                      68 个文件；规范、里程碑、逆向证据、翻译
-├─ tools/                     env、Ghidra 脚本、PE 探针、打包脚本（约 130 KB）
-├─ prt sc/                    34 张实机截图（17 MB）
+├─ crates/                    9 个 crate，209 个 .rs，128,135 行
+├─ docs/                      规范、里程碑、逆向证据、翻译、审查与归档（索引见 docs/README.md）
+├─ godot/                     Godot 4.7 工程 + 18 个 .gd（4,767 行）
+├─ tools/                     env、Ghidra 脚本、PE 探针、打包脚本
+├─ ptr_sc/                    39 张实机截图（21 MB）
 ├─ work/
-│  ├─ Data/                   176 MB，解包数据与存档样本
-│  └─ out/                    42 MB
-│     ├─ _archive/            报告/证据/历史提交信息（4.2 MB）
-│     ├─ event_reach/         事件可达性报告（208 KB）
+│  ├─ Data/                   182 MB，解包数据与存档样本
+│  └─ out/                    679 MB（构建产物 / 发布包 / 复现材料）
+│     ├─ dist/                发布产物（631 MB，**勿删**）
+│     ├─ _archive/            报告/证据/历史提交信息
+│     ├─ event_reach/         事件可达性报告
 │     ├─ re_all/              4,375 个 Ghidra C 伪码（27 MB）
-│     ├─ re_anchor/           锚点反编译证据（972 KB）
-│     ├─ re_dump_gdi/         GDI 反编译证据（128 KB）
 │     ├─ shot_metrics/        截图度量脚本与标注图（8.2 MB）
-│     └─ wolfmanual/          官方说明书归档（1.1 MB）
-└─ .git/                      41 个提交（11 MB）
+│     └─ wolfmanual/          官方说明书归档（16 MB）
+└─ .git/                      提交历史（32 MB）
 ```
 
 项目外保留：
@@ -156,6 +163,7 @@ E:\Study\github program\Imouto Life
 
 ## 6. 备注
 
-- 本次清理**没有**删除 `work/Data`、`prt sc/`、`docs/`、`crates/`、`tools/`、`.git/`。
-- `work/out` 下仍有若干“可再删”的复现材料（`shot_metrics` 8.2 MB、`re_all` 27 MB）；若只保留源码与数据，可再释放约 36 MB。
-- 发布包相关的 `crates/wolf-launcher`（166 行）与 `tools/package-playable.sh` 仍保留在源码中，属于小体积、可随时删除的附属资产。
+- 本次清理**没有**删除 `work/Data`、`ptr_sc/`、`docs/`、`crates/`、`tools/`、`.git/`。
+- `work/out` 下仍有若干"可再删"的复现材料（`shot_metrics` 8.2 MB、`re_all` 27 MB）；
+  但 `work/out/dist/` 是发布产物，**不要删**。
+- 发布包相关的 `crates/wolf-launcher`（167 行）与 `tools/package-playable.sh` 仍保留在源码中，属于小体积、可随时删除的附属资产。

@@ -10,6 +10,7 @@
 #   8. new-game save -> fresh-session load round trip.
 #   9. the front-end save-slot confirmation (click a used slot, cancel, load).
 #  10. the P0 black-cover/scenery and night-UI interaction regressions.
+#  11. the F4/F8/F5/W/F11 presentation hotkey dispatch and sizing cycle.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -38,6 +39,8 @@ fi
 "$GODOT" --headless --path godot --script res://tests/key_map.gd
 
 "$GODOT" --headless --path godot --script res://tests/mouse_latch.gd
+
+"$GODOT" --headless --path godot --script res://tests/display_hotkeys.gd
 
 "$GODOT" --headless --path godot --script res://tests/title_wheel.gd -- \
     --data-root="$DATA_ROOT"

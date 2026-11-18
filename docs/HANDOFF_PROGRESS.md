@@ -1018,7 +1018,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     真实数据下两项 `db` 姊妹作占位串差异也仍在；均未在本轮改期望。
 
 * 2026-11-13（第二轮静态审查回归修复）：
-  * **审查报告闭环**：处理 `docs/code_review_cb5ecb4_141c524.md` 的 P1/P2/P3：
+  * **审查报告闭环**：处理 `docs/archive/reviews/CODE_REVIEW_cb5ecb4_141c524_superseded.md` 的 P1/P2/P3：
     Op121 恢复通用 SelfVar 批量语义并撤销 tenths 渲染二次缩放；CE223 仅在
     `Picture(100000)` 存在时接管滚轮；气球框改为仅渲染层扩高，不再修改逻辑
     Picture 36000；瞬时 Move 清空残留 Erase transition；存档网格光标写穿
@@ -1053,7 +1053,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **文档口径**：`reviews/README.md` 编号表拆成「报告 §六基线」与「旧台账（2026-11-11）」两行；`CODE_REVIEW_4ROUND.md` 第六章标题改为“本报告 §六”，章首增两套编号不得互套的警示，§5.4 的 `Field 11/12` 由“窗口内坐标 / 移出窗口 -1”修正为帧间位移 `dx/dy`，§六 BUG-21 行标注已实现；`HANDOFF_DEEP_REVIEW_FIX.md`、`docs/README.md`、`HANDOFF_PROGRESS.md` 旧条目均补注同号不同义。
   * **验证**：`cargo check -q -p wolf-game` exit 0；`WOLF_DATA_ROOT=<abs>/work/Data` 下 `m16_old_bug_review` 4/4、`m17_ui_regressions` 21/21、`m18_t18_regressions` 6/6。未 commit。
   * **m14 既有红（非本次引入）**：HEAD `1a9fafe` 上 `day_command` nonblack 531398（基线 533187）、`hud` 552738（基线 554890）。把 `assets.rs`/`game.rs` 回退到 HEAD 后两次数值完全一致，确认与 T12 补丁无关；`work/out/m14_visual/*.log` 显示两场景各多 1 个零字形 text item/line，字形数（76/44）与图片数、四叉数、atlas 数均未变，nonblack 反降 0.34%/0.39%，指向文本栅格变薄或基线过期，待视觉确认后再决定重钉或回查。（已于同日收口，见本文件末尾 2026-11-13「T12 续查」条目。）
-  * **会话存档**：判断过程、A/B 证据、改动清单与复现命令见 `docs/HANDOFF_T12_PATCH_AND_LEDGER.md`。
+  * **会话存档**：判断过程、A/B 证据、改动清单与复现命令见 `docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md`。
 
 * 2026-11-13（T12 续查：m14 收口、停靠侧栏 alpha 复原、gdext 去双 clone）：
   * **m14 由 2 红转 5 绿**：`day_command` 533187 / 24 text pics / 23 items / 23 lines，`hud` 554890 / 15 / 14 / 14；**像素基线一位未改**，只重钉文本计数。
@@ -1065,7 +1065,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **gdext**：`crates/wolf-gdext/src/lib.rs` 的 `frame()` 不再对 `choice_options` 双 clone，改为直接借用 `game.choices`（`overlay_at_sized` 传 `game.choice_cursor()`）；`cargo check -q -p wolf-gdext` exit 0。`tools/build-godot.sh` 重建 `godot/bin/wolf_gdext.dll` 后 headless `smoke-godot.sh` **exit 0**（`load_save: pictures=50 texts=15`、save→load 往返 38/38）；本机 console 包装器报 `CreateProcess failed, error 193`，把 `GODOT_BIN` 指向 `Godot_v4.7.2-stable_win64.exe` 主程序即可。
   * **全量状态**：`cargo fmt --all -- --check` 通过；`cargo test -q --workspace` 只余既有的 `m3_manual_rules::late_night_bedtime_skips_to_next_evening`（04:30 就寝期望次日 19:00）。本机补充：`work/out` 下的 `std::fs::remove_dir_all` 会在 os error 145「目录不是空的」上无限重试，`font_lookup_prefers_the_games_face_and_scans_unexpected_names` 收尾清理因此挂死，workspace 全量用 `-- --skip` 跑过；该现象已用仓库外独立 `rustc` 小程序复现，与项目代码无关，PowerShell 手动删同一目录是瞬时的。
   * **清理**：删除 `work/out/ee808fe_tree`（带探针的 detached worktree）、`work/out/target_ee808fe`（302.8 MB）、`C:\Users\REISEN\AppData\Local\Temp\t12_old_target`（1,324.8 MB），另按里程碑惯例清 `target/debug/incremental`、`target/release`、`target/ver6` 与 `work/out` 下的探针产物；清理后仓库合计 **7.96 GB**（target 仍占大头）。`work/out/m14_ab/` 保留作证据。
-  * **文档**：`docs/HANDOFF_T12_PATCH_AND_LEDGER.md` §1 / §4 / §4.1 / §5 / §6 / §7 / §8 重写；`docs/HANDOFF_M0.md` §11.1 增补，§11.3 的 m14 项改为已收口。未 commit。
+  * **文档**：`docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md` §1 / §4 / §4.1 / §5 / §6 / §7 / §8 重写；`docs/HANDOFF_M0.md` §11.1 增补，§11.3 的 m14 项改为已收口。未 commit。
 
 * 2026-11-13（审计修复轮：截图 6 项 + 全量审查 P1/P2）：
   * **选项**：`choice::layout_at_sized` 把 `(0,0)` 与屏外锚点同样回退居中（新增单测，3 行面板中心 512,288）；`Game::show_choices` 翻译后走 `messagetext::strip` 剥离控制码/图标码，保留空白与 `sources` 索引。
@@ -1096,7 +1096,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **19:00 首句黑底**：`work/out/ev0_newgame.tsv` 证明 pc305/306 台词在 pc318 画 `bg_001_06` 之前，pc326 才淡出 `-1` 黑幕，pc348 才画卧室；属序章脚本顺序，不是渲染 bug，本轮不改。
   * **仍未处理**：连续同人第二句 `message` 名牌缺零售逐帧证据；茶摊左侧物品图标列未定位；夜间身体点击/底部姿势图标需运行态日志；随机事件固定需反汇编 CE249/`9000082`；`m3_status_panel::ce238_relative_panel_lands_at_the_left_edge` 仍失败。
   * **验证**：`cargo test -q -p wolf-game --lib message` 38 passed；`m4_hud_status` 3 passed；`m17_ui_regressions` 21 passed；`cargo test -q --workspace -- --skip font_lookup_prefers...` 只余既有 `m3_manual_rules::late_night_bedtime_skips_to_next_evening`。`target/godot/wolf_gdext.dll` 已构建为 `A93C401F...`；因 Godot 进程占用，尚未替换 `godot/bin/wolf_gdext.dll`。
-  * **报告**：`docs/ROUND_T12_AND_SCREENSHOT_FIX_REPORT.md`。本轮改动已提交 `beb9693`、推送状态文档 `7eb2395`、最终报告 `e5b4d61`，`origin/master` 已同步；`godot/bin/wolf_gdext.dll` 已在 Godot 关闭后替换为 `A93C...`（7,707,648 B）。
+  * **报告**：`docs/archive/ROUND_T12_AND_SCREENSHOT_FIX_REPORT.md`。本轮改动已提交 `beb9693`、推送状态文档 `7eb2395`、最终报告 `e5b4d61`，`origin/master` 已同步；`godot/bin/wolf_gdext.dll` 已在 Godot 关闭后替换为 `A93C...`（7,707,648 B）。
 
 * 2026-11-14（实机证据三轮排查与关键 P0/P1 全面闭环）：
   * **P0 开场孤立行动力空槽（彻底闭环）**：确认 `picture_quads` 与 `hud_action_points()` 在黑幕槽位 9000/10000 活跃时完全抑制，实际视口截图 `capture_prologue_f150.png` 经像素级核对为纯黑（0 行动力泄漏）。
@@ -1715,3 +1715,195 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     Inno Setup 安装目录位于用户 LocalAppData，因 EFS 继承属性导致首次
     `Setup.e32` 复制失败；已用普通属性副本 `work/out/tools/InnoSetup6` 编译，
     并补入 `ChineseSimplified.isl`。
+
+* **NSIS 安装器替换 Inno Setup（2026-11-18）**：
+  * 新增 `tools/package/ImoutoLife.nsi.in` 与 `render_nsis.py`；删除不再使用的
+    `ImoutoLife.iss.in` / `render_inno.py`。`tools/package-godot.sh` 改用
+    `makensis.exe`，参数改为 `--makensis PATH` / `MAKENSIS_BIN`。
+  * 安装向导使用标准 NSIS 目录页，默认
+    `$LOCALAPPDATA\Programs\妹！生活 ～单色～ Godot`；若用户选择父目录，离开
+    目录页时自动追加游戏文件夹名。固定简体中文，开始菜单快捷方式默认创建，
+    桌面快捷方式为可选组件。
+  * 覆盖安装先备份再恢复 `Data\Save\System.sav`，编号存档不参与覆盖；卸载先把
+    整个 `Data\Save` 改名为 `.save-keep`，删除其余 `Data` 后恢复；若改名失败则
+    保留整个 `Data`。
+  * 编译时把 `TEMP`/`TMP` 指向 `work/out/nsis/temp`，避免本机临时目录权限导致
+    `Internal compiler error #12345`。移除失败的 `.onInit` 自复制方案。
+  * 验证：NSIS 3.11 完整编译 exit 0；从普通用户目录静默安装到自定义路径
+    exit 0；覆盖安装后 `System.sav` 与 `SaveData03.sav` 哈希不变；卸载后仅保留
+    `Data/Save`；开始菜单与 HKCU 卸载项创建/删除正确。
+  * 正式产物：`Imouto Life setup.exe` 118,628,544 B，SHA-256
+    `817e957f964f2ee3cd0420d9d3367c30cb0a0f361ecb83bdd21a9544944c6348`；
+    `Imouto Life setup.zip` 147,355,141 B，SHA-256
+    `aed01eebcb69be96e5a1d129f21fc99952fce3ae6e8d806d20312c8ccf049754`。
+    `Data/Save` 仍仅含干净 `System.sav`，发行目录 235 MiB。
+  * 因 `work/out` 的 Low Mandatory Level 完整性标签会让 Setup 继承低完整性、
+    无法写普通 `%TEMP%`（表现为 NSIS temporary-file 错误或错误码 2），另复制了
+    一份可运行交付副本到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`；已在该目录
+    完成静默安装、启动校验与哈希复核。
+
+* **2026-11-18（工作区空间清理，16 GB → 7.6 GB）**：
+  * **规模**：清理前 `du -sh .` = **16 GB**（target 11.5 / work 3.5），
+    清理后 **7.6 GB**（target 5.9 / work 1.7），降幅 53%。这是本仓库自
+    9.4 GB 预警线以来的一次性深度清理。
+  * **删除的构建缓存（可再生）**：`target/debug/incremental`（1.8 GB）、
+    `target/release`（887 MB）、`target/ver6`（不存在）、
+    `work/out/saveprobe`（不存在）；另外删掉 `target/` 下 **310 个 `.pdb`
+    调试符号文件（3.05 GB）**——这是 `target/debug/deps` 里的最大单项，
+    纯调试信息、零功能影响，删后不触发任何重新编译（rlib / rmeta / 测试
+    可执行文件全部保留，`cargo build` / `cargo test` 仍走增量）。
+  * **删除的垃圾产物**：`nul`（0 字节，Windows 保留名重定向残渣，已在
+    `.gitignore`）、`tools/debug/`（202 MB 本地调试构建）、`tools/package/__pycache__`、
+    `work/out/lang-test{,2,3}.exe`（315 MB 构建测试二进制）、
+    `work/out/probe_ev14/`（642 MB 临时探针 crate 工程）、
+    `work/out/retail_probe/`（66 MB 临时探针 crate 工程）、
+    `work/out/nsis-test/`（114 MB NSIS 编译器试验产物）、
+    `work/out/audit-Data/`（177 MB，`work/Data` 的审计副本）、
+    `work/out/godot_icon_ico_235037/` + `godot_icon_test_234448/`（35 MB 图标试验）、
+    `work/out/review_bundle_upload/`（230 MB，11-13 沙箱分片包，已被
+    `gemini_upload_2026-11-15` 取代）、`work/out/cloud_sandbox_upload_2026-11-13/`
+    （21 MB，同上）、`work/out/imouto_life_{sandbox,media,offline_deps}.zip`
+    （230 MB，可由 `tools/pack_*.py` 重新生成）。
+  * **明确保留**：`work/Data`（182 MB）、`work/out/dist`（631 MB，发布产物）、
+    `work/out/portable` 与 `work/out/nsis-smoke`（各 235 MB，本轮 NSIS 打包
+    与安装冒烟的当前状态）、`work/out/gemini_upload_2026-11-15`（25 MB，交付包）、
+    `work/out/nsis`、`work/out/tools`、`godot/bin/wolf_gdext.dll`、
+    `docs/`、`crates/`、`ptr_sc/`、`review/`，以及全部小于 50 MB 的证据目录
+    （`m14_visual`、`shot_metrics`、`parity`、`re_all`、`wolfmanual` 等）。
+  * **验证**：未触发重新编译——用现存 `target/debug/wolf-cli.exe` 直接跑
+    `WOLF_DATA_ROOT="$PWD/work/Data" wolf-cli verify`，**PASS 64 / 1 SKIP**
+    （与 M0 基线一致）；`cargo metadata --no-deps` 正常；工作区 tracked 改动
+    （NSIS 打包迁移的 7 改 + 2 新）未受影响。
+  * **注意**：下次 `cargo build` / `cargo test` 会重新生成 `.pdb` 与
+    `target/debug/incremental`，约回升 1.8 GB，属正常现象。
+
+* **二次空间清理（2026-11-18）**：
+  * 用 `cargo clean` 删除整个 `target/`：15,227 files / **5.9 GiB**。
+  * 删除重复暂存与旧包：`work/out/nsis-smoke`、`work/out/portable`（各
+    235 MB）、`gemini_upload_2026-11-15`（25 MB）、旧 review 源码 ZIP、
+    旧命名 `Imouto Life-0.1.0-godot.zip`（147 MB）、旧 Inno 工具与
+    `nsis-3.11.zip`，以及临时探针/试验目录（`cua`、`parity`、
+    `m17_godot_crop_verify_185112`、`_probe_out`、`nsis*` 等）。
+  * 参考 `docs/` 与 `review/` 的引用关系，删除未被引用的派生
+    `*.atlas.png`、旧测试 `.log`、`.err`、试验 `.pck/.exe` 与辅助输出：
+    **471 files / 97.1 MiB**。普通截图、`.sav`、S 级 `.json/.tsv/.csv`
+    与审计 Markdown 保留。
+  * 清理后 `du -sh .` = **960 MB**；`work/out/dist` 490 MB，`work/Data`
+    182 MB。`work/out/dist/godot/Imouto Life setup.exe`、
+    `Imouto Life setup.zip` 与 `0.1.0/` 发行目录完整保留。
+  * `target/` 不存在，后续构建/测试会重新生成；不影响已生成的发行包。
+
+* 2026-11-18（文档全面整理轮，三代理并行 + Lead 集成）：
+  * **目标**：把「散落 + 索引失真」的文档树整理成零断链、零孤儿的结构；
+    全程只改文档，**未改任何代码**。
+  * **并行拆分**（写作用域互不重叠，AGENTS.md §0）：
+    子代理 A 做归档与目录归位，子代理 B 做资料层（攻略正文 / 调研 / 逆向证据 /
+    翻译），子代理 C 做**只读**一致性审计并出 `work/out/_consistency_report.md`；
+    Lead 负责 `docs/README.md` 总索引、`docs/reviews/README.md`、
+    `docs/HANDOFF_M0.md`、`docs/HANDOFF_PROGRESS.md`、根 `README.md`
+    与最终集成。
+  * **目录归位**：根目录 `review/`（16 份云端审查产物）删除，11-17 轮整组进
+    `docs/archive/reviews/cloud_audit_2026-11-17_2411996/`，11-18 轮进
+    `docs/reviews/cloud_audit_2026-11-18_e716f08/`；`docs/` 根目录 7 份被取代
+    文档移入 `docs/archive/`；21 份归档件顶部加「归档说明」块（正文一字未改）。
+    仓库根现在只剩 `README.md` 与 `AGENTS.md`。
+  * **索引**：`docs/README.md` 新增 §0 状态约定、§1.2 云端审查轮次、§1.3 归档区、
+    §5.1 opcode 契约；原先 **27 份未登记文档全部登记**（现为 0 孤儿）。
+    新建 `docs/re/README.md`、`docs/攻略/README.md` 两个子目录索引；
+    `docs/research/README.md` 补 gpt-reports 逐篇对照表。
+  * **行号漂移**：`ENGINE_BEHAVIOR.md` 与 `docs/re/*` 里 60 余处 `file.rs:NNN`
+    引用经逐条核对（20 余处失准，其中 `game.rs:1290`、`exec.rs:1540`、
+    `exec.rs:2934` 指到完全无关的代码），**全部改为 `文件::符号` 引用**，
+    并在两处加常驻约定：行号会漂移，以符号名为准（指向**原版** Game.exe 的
+    伪码行号属逆向证据，保留）。
+  * **新增** `ENGINE_BEHAVIOR.md` §3.5 开放项清单 `OPEN-01..11`
+    （把散落的「未实现 / 未闭合 / 下一步核对」编号化，便于交接排期）。
+  * **修正的过期结论**：`ce238_relative_panel_lands_at_the_left_edge`
+    早在 11-15 就已从红转绿（`REVIEW_9a817e4_FIX_REPORT.md` 仍列为开放项）；
+    `TASKS_REMAINING_BUGS.md` §0 的「当前工作区测试状态」改标为「快照（非现行）」；
+    11-17 云端审计把 11-14 的旧结论当现状转发（已在归档说明里注明）；
+    `docs/README.md` §2 的「25 个 Game.dat 参数」更正为 **9 个分组**（实测
+    `BASELINE.json`）；`docs/REFERENCE.md` 截图段从已不存在的 `prt sc/`
+    改为实际的 `ptr_sc/`（39 张）。
+  * **数字刷新**：`PROJECT_ASSETS.md` 与根 `README.md` 按实测更新：
+    **9 crate / 209 个 .rs / 128,135 行 / 1,241 个 `#[test]` / 117 个集成测试文件 /
+    Godot 18 个 .gd / 4,767 行**。
+  * **验证**：全仓 118 份 .md 扫描 → **0 断链、0 孤儿、0 索引指向缺失路径、
+    0 处残留旧路径引用**（`work/out/_doc_audit.py` 与 `_stale_refs.py`，已随本轮删除）。
+    **本轮未发现真 bug**，所有发现都是文档过期。
+  * **未 commit**：文档改动 + `tools/pack_gemini_review.py` 均待 Lead 统一提交。
+
+* 2026-11-18（显示快捷键与发行指引）：
+  * `GameView.gd` 新增 F4 窗口尺寸循环（按原版手册 100% 逐级 +100%，超出桌面
+    可用区后进入无边框全屏；1080p 通常为 100%↔全屏）、F8 标题栏运行信息、
+    F5/W 在 60/30/15 fps 三档渲染上限间循环；F11 保留，并在退出全屏时恢复
+    进入前的窗口尺寸与位置。标题栏正常状态显示
+    `F4:Change Display / F8:Change Info`。
+  * 新增 `godot/tests/display_hotkeys.gd`，覆盖 F4 在 1080p/1440p 下的尺寸
+    状态机、F8/F5/W/F11 的事件分发和 Alt+F4 不拦截；已接入
+    `tools/smoke-godot.sh`。定向验证：display_hotkeys、startup_error_and_f11、
+    smoke、gameview_title_wheel 均 exit 0。
+  * 新增 `tools/package/KEYBOARD_GUIDE.txt`，打包时以 CRLF 写为
+    `按键功能指引.txt`，进入 checksums 与便携 ZIP/NSIS 安装包；NSIS 卸载器
+    同步删除该文件。`docs/PACKAGING.md` 补充素材加密/ICO/SVG 边界说明。
+  * 素材保护结论：当前 `Data/` 不进入 PCK，打开 `encrypt_pck` 不能保护素材，
+    且官方模板不支持 PCK 加密；如后续需要，应采用 Rust 侧自定义加密归档。
+    `inusuku.png` 为 400×400 位图，转 SVG 不会增加清晰度；Windows 窗口图标
+    最终仍使用 ICO。本轮未改素材加密与图标文件。
+  * 已重打 `0.1.0`：`Setup.exe` 118,603,565 B / SHA-256
+    `c294c60d5084a743bcd85d78d62196470007e60383410b5cb924fe4f5717db0c`；
+    `Setup.zip` 147,360,652 B / SHA-256
+    `c0c5f0e15585d4b3ed248e9710282c13e01ae698f3f1c12a308c9c52301a8a66`。
+    包内 `checksums.txt` 全量通过，`按键功能指引.txt` 1669 B、CRLF。
+
+* 2026-11-18（媒体只读包 + 高 DPI 小图标，正式重打 `0.1.0`）：
+  * **媒体包**：新增 `crates/wolf-format/src/media_pack.rs` 与
+    `crates/wolf-format/src/bin/media-pack.rs`。格式 v1 为明文 32 B 头
+    （`WOLFMPK1`）+ 16 B 对齐数据区 + 尾部混淆索引；文件体按**绝对 offset**
+    生成固定 32 B seed 的 splitmix64 XOR 流，索引同样混淆并带 CRC-32。
+    `Assets` 自动读取 `<root>/media.pak`，优先级固定为
+    **Mod overlay 散文件 > 基础目录散文件 > media.pak**；新增
+    `Game::read_media_bytes()` 与 GDExtension `read_media()`，
+    `GameView.gd::_load_audio()` 先尝试内存缓冲再回落文件路径，
+    因此发行包可删除全部松散 `BGM/`、`SE/` 文件。
+  * **打包**：`tools/package-godot.sh` 将 7 个媒体前缀从明文 staging 排除：
+    `Picture/ cg/ BGM/ SE/ CharaChip/ SystemFile/ BalloonBase_CafeLatte/`；
+    当前 **731 文件 / 113,002,329 B** 打成 **113,038,832 B** 的
+    `Data/media.pak`。最终 `Data/` 精确为 **17 文件**：15 个明文清单文件 +
+    `Save/System.sav` + `media.pak`；7 个媒体目录若残留松散文件会直接失败。
+    `release_data.py` 新增 `--exclude-prefix`、`--defer-verify`、`--extra`
+    与最终精确集合校验。
+  * **小图标**：新增 `tools/package/make_windows_icon.py`，确定性绘制
+    `godot/icon_titlebar_{16,20,24,32,40,48}.png`；全部从 inusuku 的
+    256 px 头像裁切直接做 LANCZOS 缩小，不重绘形状，仅用于运行时标题栏；
+    重建
+    `godot/window_icon.ico` 与 `tools/package/icon_windows.ico` 为
+    16/20/24/32/40/48/64/128/256 九帧，**全部**取
+    `icon_windows.png`（程序/安装器/任务栏图标）。GDExtension 新增
+    `titlebar_icon_size()`：
+    `GetDpiForWindow` + `GetSystemMetricsForDpi(SM_CXSMICON)`；
+    `GameView.gd` 按物理尺寸加载对应 PNG，缺失时才 Lanczos 缩放 256 图。
+    打包校验现在强制 6 张专用小图都进入 PCK，防止静默退回模糊图。
+  * **验证**：`cargo test -q -p wolf-format` 全过；
+    `cargo test -q -p wolf-game --test media_pack` 9/9；包内
+    `sha256sum -c checksums.txt` 21 项全 OK；用**只有 `media.pak`、
+    没有任何松散媒体目录**的正式 `Data/` 跑
+    `smoke.gd`，结果 `pictures=4 sprites=4 texts=0`，确认图片从包内读取。
+    导出 exe 版本资源为 `0.1.0.0`、产品名
+    `妹！生活 ～单色～ Godot`、语言“简体中文（中国大陆）”；便携 ZIP 的
+    中文顶层目录使用 UTF-8 标志。
+  * **正式产物**：`Imouto Life setup.exe` **148,083,098 B** / SHA-256
+    `aa1bcda54bd5bd71e526cebb3ea9011a2179cc8c42280f65fa4dca67bdbe3591`；
+    `Imouto Life setup.zip` **159,788,921 B** / SHA-256
+    `fe4dea402cc29b5784bdaa2984ec021be332a93d48eb4164ba5710e4e9d088a4`。
+    安装版、便携版及两个外部 `.sha256` 已复制到
+    `D:\REISEN\Downloads\Imouto Life 0.1.0\`。
+  * **清理**：删除 `work/out/portable/0.1.0` 暂存（234 MB）、
+    `target/release`（888 MB）、`target/debug/incremental`（626 MB）；
+    仓库由 3.4 GB 降至 **1.9 GB**，其中 `work` 900 MB、`work/out` 718 MB、
+    `work/out/dist` 529 MB、`target/debug` 887 MB。发行包与 `work/Data`
+    完整保留。本轮未 commit。
+  * **回修**：首版 16–48 px 是脚本重绘的近似图，实机标题栏显示与原画不符；
+    已改为从 `godot/icon_titlebar.png` 直接 LANCZOS 采样。随后又纠正了
+    资源归属：inusuku 只用于运行时标题栏覆盖，程序/安装器/任务栏 ICO
+    的全部九帧必须来自 `icon_windows.png`。两组资源已分离并重打 Setup/ZIP。

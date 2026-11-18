@@ -7,7 +7,7 @@
 > **2026-11-18 更新**：`F-11`（`\img` 纯图片条/图文混排、
 > anchor/scale/alpha）已在本轮重新落地，并有 `textpic` 单测与 Godot smoke
 > 覆盖。本文件下方“当前没有”的逐条状态是 2026-11-15 的回退快照，不再是
-> 当前源码状态；以 `00_executive_summary.md` §2.2/§2.5 与
+> 当前源码状态；以 `docs/reviews/cloud_audit_2026-11-18_e716f08/00_EXECUTIVE_SUMMARY.md` §2.2/§2.5 与
 > `docs/HANDOFF_M0.md` §11.1 为准。
 
 > **状态说明（2026-11-15 晚）**：本报告对应的实现提交 `f52db44` 已按用户要求在 `b23a1e1`
@@ -267,11 +267,15 @@
   `textpic::tests::inline_box_images_survive_as_box_glyphs_in_text_picture`。
   前三条是实现早已改成「面板宽 +4 px 防折行」「U+FFFD 剥离」而断言没跟上，
   第四条是 `\img` 改走贴图后旧断言失效；本轮已全部对齐/重写，**HEAD 的 4 项红灯归零**。
-* `cargo test -q --workspace --no-fail-fast`：仅剩 **3 项既有失败**
+* `cargo test -q --workspace --no-fail-fast`（**本报告成稿时点**）：仅剩 **3 项既有失败**
   （均在 `docs/HANDOFF_PROGRESS.md` 长期记录，非本轮引入）：
   `m3_manual_rules::late_night_bedtime_skips_to_next_evening`、
   `m3_save_load::save_data_01_and_02_differ_in_hud_time_and_money`、
   `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge`。
+  > **时点限定（2026-11-18 补）**：本报告写于 11-15 上午，当日稍后 `picture.rs` 的
+  > Draw 分支改成零售语义后，`ce238_relative_panel_lands_at_the_left_edge`
+  > **已从红转绿**（见 `docs/HANDOFF_PROGRESS.md` 2026-11-15 条目）。
+  > 当前测试状态以 `docs/HANDOFF_M0.md` §11.1 为准。
 * `WOLF_DATA_ROOT=<绝对路径> cargo test -q -p wolf-game --lib`：
   **369 passed / 2 failed**，两项均为既有 `db::tests::*` 姊妹作期望差异。
 * `wolf-cli verify`：**PASS 64 / 1 SKIP**（`dxarchive.header` loader pending）。
@@ -288,8 +292,10 @@
 ## 5. 仍开放（与本轮无关）
 
 * 上述 3 + 2 项既有姊妹作/陈旧期望差异。
-* `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge`（面板停在 -305，
-  属 `picture.rs` 相对绘制路径，待单独排查）。
+* ~~`m3_status_panel::ce238_relative_panel_lands_at_the_left_edge`（面板停在 -305，
+  属 `picture.rs` 相对绘制路径，待单独排查）~~ —— **已于 2026-11-15 当日修复**
+  （Draw 分支改为零售语义后转绿，见 `docs/HANDOFF_PROGRESS.md` 2026-11-15 条目）。
+  本条列出时该用例仍红，现划掉以免重复排查。
 * 评审 §5 的两条原版证据缺口（其他角色头像底边、夜间姿势/相册可用性）仍需实机比对。
 * **因回退重新开放**：Opcode 122 的首行截取（`0xFFF0` 掩码）、`\img` 贴图分层、
   动作键绕过范围收窄、`150 Move` 活跃槽位遍历、Godot 回归脚本接入 smoke。

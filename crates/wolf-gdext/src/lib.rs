@@ -59,11 +59,27 @@ impl IRefCounted for WolfGame {
 
 #[godot_api]
 impl WolfGame {
+    /// Physical pixel size Windows uses for `ICON_SMALL` at the window's DPI.
+    ///
+    /// Returning 0 tells the scene to use its original 256x256 fallback. On
+    /// Windows this is normally 16/20/24/32 px depending on desktop scale.
+    #[func]
+    fn titlebar_icon_size(&self) -> i32 {
+        #[cfg(windows)]
+        {
+            windows_titlebar_icon::small_icon_size().unwrap_or(0)
+        }
+        #[cfg(not(windows))]
+        {
+            0
+        }
+    }
+
     /// Replaces only the Windows caption icon with a high-resolution HICON.
     ///
     /// Godot's native-icon path picks an exact 16x16 frame for `ICON_SMALL`,
     /// which looks coarse when Windows scales the caption for high DPI. This
-    /// bridge sends the full source image as `WM_SETICON ICON_SMALL`; the taskbar
+    /// bridge sends a DPI-sized HICON as `WM_SETICON ICON_SMALL`; the taskbar
     /// and Alt-Tab keep Godot's large `ICON_BIG`. It is a no-op off Windows and
     /// in headless mode.
     #[func]
@@ -262,6 +278,29 @@ impl WolfGame {
         for message in game.message_history() {
             let line = GString::from(message.text.as_str());
             out.push(&line);
+        }
+        out
+    }
+
+    /// Reads one raw media file from the mod/loose/`media.pak` lookup chain.
+    ///
+    /// `GameView.gd` uses this for audio buffers so a release can delete the
+    /// loose BGM/SE files. A failed read returns an empty array, which makes the
+    /// scene fall back to its normal file loader before reporting a warning.
+    #[func]
+    fn read_media(&self, name: GString) -> PackedByteArray {
+        let mut out = PackedByteArray::new();
+        let Some(game) = self.game.as_ref() else {
+            return out;
+        };
+        match game.read_media_bytes(&name.to_string()) {
+            Ok(bytes) => {
+                out.resize(bytes.len());
+                out.as_mut_slice().copy_from_slice(&bytes);
+            }
+            Err(error) => {
+                godot_warn!("wolf-gdext: read_media {name}: {error}");
+            }
         }
         out
     }
@@ -868,6 +907,7 @@ impl WolfGame {
 
 #[cfg(windows)]
 mod windows_titlebar_icon {
+    use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
 
     use godot::classes::display_server::HandleType;
@@ -877,12 +917,16 @@ mod windows_titlebar_icon {
 
     const WM_SETICON: u32 = 0x0080;
     const ICON_SMALL: usize = 0;
+    const SM_CXSMICON: i32 = 49;
     const BI_RGB: u32 = 0;
     const ICON_RESOURCE_VERSION: u32 = 0x0003_0000;
 
     #[link(name = "user32")]
     extern "system" {
         fn SendMessageW(window: isize, message: u32, wparam: usize, lparam: isize) -> isize;
+        fn GetDpiForWindow(window: isize) -> u32;
+        fn GetSystemMetricsForDpi(index: i32, dpi: u32) -> i32;
+        fn GetSystemMetrics(index: i32) -> i32;
         fn CreateIconFromResourceEx(
             resource: *const u8,
             size: u32,
@@ -894,35 +938,56 @@ mod windows_titlebar_icon {
         ) -> isize;
     }
 
-    // The HICON is referenced by the live window until the process exits. Create
-    // it once and re-send the same handle after window-mode changes.
-    static TITLEBAR_ICON: OnceLock<Mutex<Option<isize>>> = OnceLock::new();
+    // HICONs are referenced by the live window until the process exits. Cache one
+    // per physical size so a DPI or window-mode change can re-send the matching
+    // handle without recreating it.
+    static TITLEBAR_ICONS: OnceLock<Mutex<HashMap<u32, isize>>> = OnceLock::new();
+
+    pub(super) fn small_icon_size() -> Option<i32> {
+        let window = window_handle()?;
+        let dpi = unsafe { GetDpiForWindow(window) };
+        let size = if dpi > 0 {
+            unsafe { GetSystemMetricsForDpi(SM_CXSMICON, dpi) }
+        } else {
+            unsafe { GetSystemMetrics(SM_CXSMICON) }
+        };
+        (size > 0).then_some(size)
+    }
 
     pub(super) fn set(image: &mut Gd<Image>) -> bool {
-        let display = DisplayServer::singleton();
-        if display.get_name().to_string() == "headless" {
+        let Some(window) = window_handle() else {
             return false;
-        }
-        let window = display.window_get_native_handle(HandleType::WINDOW_HANDLE);
-        if window == 0 {
+        };
+        let Ok(key) = u32::try_from(image.get_width()) else {
             return false;
-        }
-
-        let cache = TITLEBAR_ICON.get_or_init(|| Mutex::new(None));
+        };
+        let cache = TITLEBAR_ICONS.get_or_init(|| Mutex::new(HashMap::new()));
         let mut cached = cache
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if cached.is_none() {
-            *cached = create_icon(image);
-        }
-        let Some(icon) = *cached else {
-            return false;
+        let icon = if let Some(icon) = cached.get(&key) {
+            *icon
+        } else {
+            let Some(icon) = create_icon(image) else {
+                return false;
+            };
+            cached.insert(key, icon);
+            icon
         };
 
         unsafe {
-            SendMessageW(window as isize, WM_SETICON, ICON_SMALL, icon as isize);
+            SendMessageW(window, WM_SETICON, ICON_SMALL, icon as isize);
         }
         true
+    }
+
+    fn window_handle() -> Option<isize> {
+        let display = DisplayServer::singleton();
+        if display.get_name().to_string() == "headless" {
+            return None;
+        }
+        let window = display.window_get_native_handle(HandleType::WINDOW_HANDLE);
+        (window != 0).then_some(window as isize)
     }
 
     fn create_icon(image: &mut Gd<Image>) -> Option<isize> {

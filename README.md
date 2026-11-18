@@ -15,6 +15,7 @@
 - M7 三项增强：完成（完整英语语言包 `docs/translations/en.full.tsv`、mod 记录级二进制补丁、模拟器热键重绑定 `--hotkeys`；本地提交）
 - **Godot 迁移：P0/P1/P2 完成**（GDExtension 混合前端；标题菜单与 Rust capture 基线 **99.779% 像素完全一致**；输入/读档/文字校准/600-1800 帧长程 parity 已通）。见 **[docs/GODOT_MIGRATION.md](docs/GODOT_MIGRATION.md)**
 - **深度审查 BUG-25..48：修复完成**（构建/默认测试全绿，真实数据仅 2 项既有姊妹作 `db` 差异；verify 64/1 SKIP、precompile 19/0、m14 5/5、Godot smoke/parity PASS）。见 **[docs/HANDOFF_DEEP_REVIEW_FIX.md](docs/HANDOFF_DEEP_REVIEW_FIX.md)**
+- **0.1.0 正式发包（2026-11-18）**：NSIS 3.11 安装器 + 便携 ZIP 已产出（`work/out/dist/godot/`），实机 UX 收口（live RNG / 光标 / 睡姿热区 / 存读档）与开场取消穿透已修，`wolf-cli verify` 64/1 SKIP、Godot smoke 全绿。打包流程见 **[docs/PACKAGING.md](docs/PACKAGING.md)**
 
 当前状态摘要与遗留事项见 **[docs/HANDOFF_M0.md](docs/HANDOFF_M0.md) §11**；完整历史进度见 **[docs/HANDOFF_PROGRESS.md](docs/HANDOFF_PROGRESS.md)**。
 开工前必读协作约定见 **[AGENTS.md](AGENTS.md)**。
@@ -25,6 +26,7 @@
 - **[docs/HANDOFF_M0.md](docs/HANDOFF_M0.md)** — 新会话交接：数据事实、世代差异、M0 清单、当前状态摘要
 - **[docs/HANDOFF_PROGRESS.md](docs/HANDOFF_PROGRESS.md)** — 完整进度日志（M0–M7 与 C 任务）
 - **[docs/reviews/CODE_REVIEW_4ROUND.md](docs/reviews/CODE_REVIEW_4ROUND.md)** — 第一至四轮深度代码审查（BUG-25..48，含历史基线）
+- **[docs/reviews/cloud_audit_2026-11-18_e716f08/](docs/reviews/cloud_audit_2026-11-18_e716f08/)** — 最新一轮云端只读全量复审（基线 `e716f08`）
 - **[docs/HANDOFF_DEEP_REVIEW_FIX.md](docs/HANDOFF_DEEP_REVIEW_FIX.md)** — 深度审查 BUG-25..48 的完成交接、语义证据与验证结果
 - **[docs/ENGINE_BEHAVIOR.md](docs/ENGINE_BEHAVIOR.md)** — 引擎行为规范；逆向细节见 [docs/RE_GAME_EXE.md](docs/RE_GAME_EXE.md) 与 [docs/re/](docs/re/)
 - **[docs/BASELINE.json](docs/BASELINE.json)** — 本作自己的 verify 基线（不是姊妹作的）
@@ -72,6 +74,7 @@ bash tools/parity-godot.sh    # 600/1200/1800 帧 VM 统计 + 600 帧像素对�
 | `crates/wolf-audio` | BGM/SE 混音与 SoundCmd 语义 |
 | `crates/wolf-game` | 游戏层：Game、地图运行时、HUD、设置、存档应用 |
 | `crates/wolf-cli` | `wolf-cli` 子命令：verify / precompile / list / capture / play / run |
+| `crates/wolf-launcher` | Windows 双击启动器 `imouto-life.exe`：无 console 窗口，转发参数给 `runtime\wolf-cli.exe` |
 | `crates/wolf-gdext` | Godot 4 GDExtension 桥：`WolfGame` 类 + 每帧绘制包 |
 | `godot/` | Godot 4.7 工程（1024x576，GDExtension 混合前端） |
 | `docs/` | 交接、里程碑说明、审计报告与调研资料 |

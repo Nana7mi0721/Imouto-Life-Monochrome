@@ -177,7 +177,7 @@ head -n 20 ../imouto-life-assets/MANIFEST.tsv 2>/dev/null || true
 6. `docs/TASKS_REMAINING_BUGS.md` 的 §0 和 §1 历史状态
 7. `docs/reviews/CODE_REVIEW_4ROUND.md`
 8. `docs/HANDOFF_DEEP_REVIEW_FIX.md`
-9. `docs/HANDOFF_T12_PATCH_AND_LEDGER.md`
+9. `docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md`
 10. `docs/LIVE_PLAY_FIX_REPORT.md`
 11. `docs/M25_LIVE_UX.md`
 12. `docs/REVIEW_9a817e4_FIX_REPORT.md`

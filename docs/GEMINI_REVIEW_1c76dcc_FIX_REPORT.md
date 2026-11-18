@@ -1,6 +1,6 @@
 # Gemini 全量审查 `1c76dcc` 处理报告
 
-- 审查输入：`docs/Full Code Review 1c76dcc.md`（基线 `141c524` + `1c76dcc` 22 文件增量，总评 Approve with changes）
+- 审查输入：`docs/archive/reviews/CODE_REVIEW_1c76dcc_superseded.md`（基线 `141c524` + `1c76dcc` 22 文件增量，总评 Approve with changes）
 - 处理基线：当前 `HEAD 1c76dcc`，工作区本轮只改 `crates/wolf-game/src/game.rs`、`crates/wolf-game/tests/m4_load_resume.rs`、`godot/scripts/GameView.gd`
 - 处理原则：先按当前源码核实报告条目，能确认的缺陷加回归测试后修复；报告里“待核对 `1a9fafe`”的条目以当前代码为准，不照抄旧基线行号；未被本作数据触达的 P3 只记录不扩大改动面。
 
@@ -234,7 +234,7 @@ child.is_parallel = self.instances[caller].is_parallel;
 
 - `crates/wolf-vm/src/exec.rs`（121 已闭环；125 保留）
 - `crates/wolf-game/src/picture.rs`（瞬时 Move 已闭环）
-- `docs/Full Code Review 1c76dcc.md`（Gemini 原始报告，保留原文）
+- `docs/archive/reviews/CODE_REVIEW_1c76dcc_superseded.md`（Gemini 原始报告，保留原文）
 
 ---
 
@@ -254,4 +254,5 @@ child.is_parallel = self.instances[caller].is_parallel;
 - 代码与测试：`game.rs`、`m4_load_resume.rs`、`GameView.gd`
 - 文档：本报告、`HANDOFF_PROGRESS.md`、`HANDOFF_M0.md` §11.1、`README.md`
 
-**尚未 push 到 `origin/master`。** `docs/Full Code Review 1c76dcc.md` 为 Gemini 原始输入，保持未跟踪，未纳入提交。
+**尚未 push 到 `origin/master`。** Gemini 原始输入 `docs/archive/reviews/CODE_REVIEW_1c76dcc_superseded.md`
+当时保持未跟踪、未纳入提交；**2026-11-18 文档整理轮已将其归档入库**（见 `docs/archive/README.md`）。
