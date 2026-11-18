@@ -263,6 +263,16 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-18）
 
+* **2026-11-18 开场 SE 多行 cell 的 CRLF 文件名修复（当前状态）**：
+  `DataBase.dat` 的用户 DB 音效行形如
+  `SystemFile/[SE]Cancel.ogg\r\n80\r\n100`；opcode 140 之前把整段 cell 当作
+  文件名字符串，Godot 侧扩展名变成 `ogg\r\n80\r\n100`，导致
+  `[SE]Cancel`/`[SE]Cursor` 等 16 个 SE 报 `unsupported extension`。
+  `crates/wolf-vm/src/exec.rs` 的 `split_sound_cell()` 现在按首行取文件名、
+  后两行取音量/音高；`split_first_line()` 同时修正 122 首行截取的 CRLF 行尾。
+  新增 3 条回归，`smoke-godot.sh` exit 0 且不再出现该 audio warning。
+  发行包仍需 Inno Setup 6 的 `ISCC.exe` 才能生成 `Setup.exe`；便携 ZIP 不受影响。
+
 * **2026-11-18 开场取消穿透与窗口图标（当前状态）**：`102` 无 `421` 时，
   Esc/右键/框外点击不再回落到块尾；VM 只有拿到真实 cancel/choice 目标才解除等待，
   宿主同时消费输入边沿。修复前会跳过 `SampleMapA ev0 pc32-92` 的职业 flag、金钱

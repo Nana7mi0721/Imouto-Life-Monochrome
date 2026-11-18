@@ -2030,10 +2030,28 @@ fn store_str(
 
 /// Splits the first line off `text`, dropping the newline that ended it.
 fn split_first_line(text: &str) -> (&str, &str) {
-    match text.find('\n') {
+    let (line, rest) = match text.find('\n') {
         Some(at) => (&text[..at], &text[at + 1..]),
         None => (text, ""),
-    }
+    };
+    // WOLF databases store multi-line cells with CRLF. The `\r` belongs to the
+    // line ending, not to the value the script is cutting out (the sound list
+    // is the visible case: `[SE]Cancel.ogg\r\n80\r\n100`).
+    (line.strip_suffix('\r').unwrap_or(line), rest)
+}
+
+/// Splits a WOLF sound-list cell (`file\r\nvolume\r\npitch`) into its parts.
+///
+/// The editor's user-database sound rows carry the three values in one
+/// multi-line string. Opcode 140 accepts that whole cell as its literal file
+/// operand, so the interpreter has to split it before the host sees a filename
+/// (otherwise the extension becomes `ogg\r\n80\r\n100`).
+fn split_sound_cell(text: &str) -> (&str, Option<i32>, Option<i32>) {
+    let mut lines = text.lines();
+    let file = lines.next().unwrap_or("").trim_end();
+    let volume = lines.next().and_then(|line| line.trim().parse().ok());
+    let pitch = lines.next().and_then(|line| line.trim().parse().ok());
+    (file, volume, pitch)
 }
 
 /// Length of one display unit at the start of `text`.
@@ -3044,19 +3062,28 @@ fn execute(
                                 (file, vol, p)
                             }
                             _ => {
-                                let file = expand(
+                                let raw = expand(
                                     cmd.strings.first().map_or("", String::as_str),
                                     inst,
                                     vars,
                                     host,
                                 );
+                                let (file, cell_volume, cell_pitch) = split_sound_cell(&raw);
                                 let vol = if argc(cmd) >= 5 && raw_vol > 0 {
                                     raw_vol
+                                } else if cell_volume.unwrap_or(0) > 0 {
+                                    cell_volume.expect("checked above")
                                 } else {
                                     100
                                 };
-                                let p = if raw_pitch > 0 { raw_pitch } else { 100 };
-                                (file, vol, p)
+                                let p = if argc(cmd) >= 6 && raw_pitch > 0 {
+                                    raw_pitch
+                                } else if cell_pitch.unwrap_or(0) > 0 {
+                                    cell_pitch.expect("checked above")
+                                } else {
+                                    100
+                                };
+                                (file.to_owned(), vol, p)
                             }
                         };
                         host.sound(&SoundCmd {
@@ -5674,6 +5701,53 @@ two"],
     }
 
     #[test]
+    fn op140_user_db_sound_cell_splits_file_volume_and_pitch() {
+        let e = event(
+            1,
+            "se_cells",
+            vec![
+                cmd(
+                    140,
+                    &[0x0200_0020, 0, 0, 0, 0, 0],
+                    &["SystemFile/[SE]Cancel.ogg\r\n80\r\n100"],
+                ),
+                cmd(
+                    140,
+                    &[0x0200_0020, 0, 0, 0, 0, 0],
+                    &["SystemFile/[SE]Cursor.ogg\r\n50\r\n120"],
+                ),
+            ],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+
+        assert_eq!(host.sounds[0].file, "SystemFile/[SE]Cancel.ogg");
+        assert_eq!(host.sounds[0].volume, 80);
+        assert_eq!(host.sounds[0].pitch, 100);
+        assert_eq!(host.sounds[1].file, "SystemFile/[SE]Cursor.ogg");
+        assert_eq!(host.sounds[1].volume, 50);
+        assert_eq!(host.sounds[1].pitch, 120);
+    }
+
+    #[test]
+    fn split_sound_cell_accepts_crlf_and_plain_filenames() {
+        assert_eq!(
+            split_sound_cell("SystemFile/[SE]Cancel.ogg\r\n80\r\n100"),
+            ("SystemFile/[SE]Cancel.ogg", Some(80), Some(100))
+        );
+        assert_eq!(
+            split_sound_cell("SE/click.mp3"),
+            ("SE/click.mp3", None, None)
+        );
+        assert_eq!(
+            split_sound_cell("SE/click.mp3\r\n"),
+            ("SE/click.mp3", None, None)
+        );
+    }
+
+    #[test]
     fn bgm_play_reads_the_volume_from_slot_four() {
         let e = event(
             1,
@@ -6374,5 +6448,16 @@ two"],
             0,
             "normal batch stops after arg4 variables"
         );
+    }
+
+    #[test]
+    fn split_first_line_drops_the_cr_of_crlf_cells() {
+        assert_eq!(
+            split_first_line("SystemFile/[SE]Cancel.ogg\r\n80\r\n100"),
+            ("SystemFile/[SE]Cancel.ogg", "80\r\n100")
+        );
+        assert_eq!(split_first_line("plain.ogg\n80"), ("plain.ogg", "80"));
+        assert_eq!(split_first_line("plain.ogg\r"), ("plain.ogg", ""));
+        assert_eq!(split_first_line("plain.ogg"), ("plain.ogg", ""));
     }
 }

@@ -1671,3 +1671,14 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   Godot 窗口入口在 `open()` 后启用；CLI/headless/capture/`--auto-new-game` 保持
   确定性，`WOLF_LIVE_RNG=0` 可显式关闭。回归：`m25_live_rng` 16/16、
   `m27_opening_choice_cancel` 5/5、Godot smoke 全过。
+* **开场 SE 多行 cell 的 CRLF 文件名修复**：`DataBase.dat` 的
+  `SystemFile/[SE]Cancel.ogg\\r\\n80\\r\\n100` 这类用户 DB 音效行被 opcode 140
+  当成整段文件名字符串传给宿主，Godot 侧 `get_extension()` 得到
+  `ogg\\r\\n80\\r\\n100`，`[SE]Cancel`/`[SE]Cursor` 等 16 个 SE 条目报
+  `unsupported extension`/`cannot load`。`crates/wolf-vm/src/exec.rs` 新增
+  `split_sound_cell()`：opcode 140 的字面量音效串按首行取文件名，后两行取
+  音量/音高；同时修正 `split_first_line()` 对 122 首行截取的 CRLF 行尾。
+  回归：`op140_user_db_sound_cell_splits_file_volume_and_pitch`、
+  `split_sound_cell_accepts_crlf_and_plain_filenames`、
+  `split_first_line_drops_the_cr_of_crlf_cells` 全过；
+  `smoke-godot.sh` exit 0 且不再出现上述 audio warning。
