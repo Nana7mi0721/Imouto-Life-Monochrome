@@ -20,6 +20,8 @@
 /godot/bin/*.dll
 /godot/bin/*.pdb
 /godot/.import/
+__pycache__/
+*.pyc
 
 # Windows reserves the name `nul`, so a stray `> nul` redirect in a shell
 # leaves an empty file that cannot even be deleted. Keep it out of the repo.

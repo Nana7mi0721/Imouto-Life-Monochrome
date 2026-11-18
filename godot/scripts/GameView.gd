@@ -9,6 +9,10 @@ extends Control
 ## to the faces bundled in the data root and finally to a system font.
 
 const LOGICAL_SIZE := Vector2(1024.0, 576.0)
+## Windows' native-icon path uses the ICO's exact 16x16 frame for the caption.
+## A high-resolution HICON for ICON_SMALL keeps that title-bar icon crisp at
+## high DPI; the taskbar keeps the ICO's large icon_windows frame.
+const TITLEBAR_ICON_PATH := "res://icon_titlebar.png"
 ## The save-page notice sits above every game picture/text but below the pointer.
 const SAVE_NOTICE_Z := 99990
 const SAVE_NOTICE_RECT := Rect2(716.0, 96.0, 276.0, 216.0)
@@ -148,7 +152,8 @@ class _ModalLayer extends Node2D:
 	## A front-end modal dialog.
 	##
 	## The runtime draws every pixel itself, so a modal is hand-drawn too: a
-	## dimmed screen, one panel, a title, a line of body text and the buttons.
+	## dimmed screen, one panel, a title, body text and the buttons. Fatal startup
+	## errors reuse the same layer with a larger panel and multi-line details.
 	## It lives on its own canvas item with a high `z_index`, so it stays above
 	## the blend batches the runtime spawns for the mixed-blend path.
 	##
@@ -157,11 +162,16 @@ class _ModalLayer extends Node2D:
 
 	const LOGICAL_SIZE := Vector2(1024.0, 576.0)
 	const PANEL := Rect2(212.0, 160.0, 600.0, 250.0)
+	## Startup failures may happen before the runtime exists, so the error panel
+	## is wider and taller than the ordinary confirmations to fit a path/reason.
+	const ERROR_PANEL := Rect2(112.0, 96.0, 800.0, 384.0)
 	const BUTTON_SIZE := Vector2(160.0, 44.0)
 	const BUTTON_GAP := 30.0
 	const TOAST_RECT := Rect2(654.0, 12.0, 358.0, 40.0)
 
 	var open := false
+	## A fatal startup error has no cancel action and uses the larger panel.
+	var error_mode := false
 	var title := ""
 	var body := ""
 	var labels: Array[String] = []
@@ -171,15 +181,19 @@ class _ModalLayer extends Node2D:
 	var bold_font: Font
 	var regular_font: Font
 
+	func panel_rect() -> Rect2:
+		return ERROR_PANEL if error_mode else PANEL
+
 	## The clickable button boxes, left to right.
 	func button_rects() -> Array[Rect2]:
 		var rects: Array[Rect2] = []
 		var count := labels.size()
 		if count <= 0:
 			return rects
+		var panel := panel_rect()
 		var total := float(count) * BUTTON_SIZE.x + float(count - 1) * BUTTON_GAP
-		var left := PANEL.position.x + (PANEL.size.x - total) * 0.5
-		var top := PANEL.position.y + PANEL.size.y - BUTTON_SIZE.y - 28.0
+		var left := panel.position.x + (panel.size.x - total) * 0.5
+		var top := panel.position.y + panel.size.y - BUTTON_SIZE.y - 28.0
 		for index in range(count):
 			var x := left + float(index) * (BUTTON_SIZE.x + BUTTON_GAP)
 			rects.append(Rect2(Vector2(x, top), BUTTON_SIZE))
@@ -187,23 +201,33 @@ class _ModalLayer extends Node2D:
 
 	func _draw() -> void:
 		if open:
+			var panel := panel_rect()
 			draw_rect(Rect2(Vector2.ZERO, LOGICAL_SIZE), Color(0.0, 0.0, 0.0, 0.62))
-			draw_rect(PANEL, Color(0.09, 0.09, 0.11, 0.97), true)
-			draw_rect(PANEL, Color(0.82, 0.82, 0.86, 0.95), false, 2.0)
+			draw_rect(panel, Color(0.09, 0.09, 0.11, 0.97), true)
+			draw_rect(panel, Color(0.82, 0.82, 0.86, 0.95), false, 2.0)
 			_draw_label(
 				title,
-				Rect2(PANEL.position + Vector2(24.0, 26.0), Vector2(PANEL.size.x - 48.0, 34.0)),
+				Rect2(panel.position + Vector2(24.0, 26.0), Vector2(panel.size.x - 48.0, 34.0)),
 				26.0,
 				true
 			)
 			if not body.is_empty():
-				_draw_label(
-					body,
-					Rect2(PANEL.position + Vector2(24.0, 84.0), Vector2(PANEL.size.x - 48.0, 26.0)),
-					19.0,
-					false,
-					Color(0.72, 0.72, 0.78, 1.0)
-				)
+				if error_mode:
+					_draw_error_body(
+						body,
+						Rect2(
+							panel.position + Vector2(24.0, 76.0),
+							Vector2(panel.size.x - 48.0, 220.0)
+						)
+					)
+				else:
+					_draw_label(
+						body,
+						Rect2(panel.position + Vector2(24.0, 84.0), Vector2(panel.size.x - 48.0, 26.0)),
+						19.0,
+						false,
+						Color(0.72, 0.72, 0.78, 1.0)
+					)
 			var rects := button_rects()
 			for index in range(rects.size()):
 				var focused := index == focus_index
@@ -244,6 +268,27 @@ class _ModalLayer extends Node2D:
 				"font_px": size,
 				"weight": 700 if bold else 400,
 				"colour": colour,
+				"alpha": 1.0,
+				"outline": true,
+			},
+			bold_font,
+			regular_font
+		)
+
+	## The fatal-error body contains several lines (reason, failing path and the
+	## quit hint), so it uses the left-aligned paragraph path instead of the
+	## single-line centred label used by confirmations.
+	func _draw_error_body(text: String, box: Rect2) -> void:
+		if regular_font == null and bold_font == null:
+			return
+		WolfTextScript.draw_text(
+			self,
+			{
+				"text": text,
+				"rect": box,
+				"font_px": 18.0,
+				"weight": 400 if regular_font != null else 700,
+				"colour": Color(0.88, 0.88, 0.92, 1.0),
 				"alpha": 1.0,
 				"outline": true,
 			},
@@ -359,6 +404,11 @@ var _modal_release_guard := false
 ## The slot the daily auto-save writes to, 0 when it is off.
 var _auto_save_slot := 0
 var _modal_layer: _ModalLayer
+## A fatal startup failure keeps its reason/path here for diagnostics and for
+## the visible dialog. It is deliberately independent of `wolf`.
+var _startup_failed := false
+var _startup_error_reason := ""
+var _startup_error_path := ""
 
 var log_input := false
 var log_messages := false
@@ -388,6 +438,7 @@ var perf_draw_us_max: int = 0
 var perf_atlas_revision: int = -1
 var perf_atlas_revision_changes: int = 0
 var perf_last_report_frame: int = 0
+var _titlebar_icon_image: Image
 
 
 func _ready() -> void:
@@ -401,6 +452,9 @@ func _ready() -> void:
 	_mat_mul.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
 	# Parse first: the entry point and log switches are needed before the first frame.
 	_parse_args()
+	# Create the front-end layer before fonts, the data root or the runtime can
+	# fail. It has its own high z-index and never depends on `wolf`.
+	_ensure_modal_layer()
 	# The bundled font candidates live under the data root, so resolve it before
 	# loading text faces.
 	var root := _resolve_data_root()
@@ -413,30 +467,23 @@ func _ready() -> void:
 	var symbol_fallback := _make_symbol_font()
 	_attach_fallback(bold_font, symbol_fallback)
 	_attach_fallback(regular_font, symbol_fallback)
+	_assign_modal_fonts()
 	print("startup: godot_fonts_ms=", "%.1f" % ((Time.get_ticks_usec() - fonts_started) / 1000.0))
-	# The modal is a front-end layer of its own, so it is not part of the
-	# runtime's picture stack and can never be overwritten by a sprite.
-	_modal_layer = _ModalLayer.new()
-	_modal_layer.name = "ModalLayer"
-	# The blend batches the runtime spawns are ordinary children with
-	# `z_index` 0, so a high index keeps the modal on top of every picture.
-	_modal_layer.z_index = 100
-	_modal_layer.bold_font = bold_font
-	_modal_layer.regular_font = regular_font
-	add_child(_modal_layer)
 
 	if root.is_empty():
-		push_error("data root not found: pass `-- --data-root=<unpacked Data dir>`")
-		set_physics_process(false)
+		_fail_startup(
+			"未找到游戏数据目录（缺少包含 BasicData 的 Data 目录）。",
+			"（未指定 --data-root，默认候选目录均不存在）"
+		)
 		return
 
 	_setup_audio()
 	wolf = WolfGame.new()
 	var open_started := Time.get_ticks_usec()
 	if not wolf.open(root):
-		push_error("WolfGame.open failed: " + root)
-		set_physics_process(false)
+		_fail_startup("无法打开游戏数据（WolfGame.open 返回失败）。", root)
 		return
+	_apply_window_titlebar_icon()
 	print("startup: wolf_open_ms=", "%.1f" % ((Time.get_ticks_usec() - open_started) / 1000.0))
 	# The daily auto-save writes slot 1 after the evening meal. It overwrites a
 	# slot the player may have written by hand, so only a live session asks for
@@ -459,8 +506,10 @@ func _ready() -> void:
 		print("startup: prime_engine_ms=", "%.1f" % ((Time.get_ticks_usec() - prime_started) / 1000.0))
 		var load_started := Time.get_ticks_usec()
 		if not wolf.load_save(load_save_path):
-			push_error("WolfGame.load_save failed: " + load_save_path)
-			set_physics_process(false)
+			_fail_startup(
+				"无法读取指定存档（WolfGame.load_save 返回失败）。",
+				load_save_path
+			)
 			return
 		print("startup: load_save_ms=", "%.1f" % ((Time.get_ticks_usec() - load_started) / 1000.0))
 	elif entry == "menu":
@@ -474,12 +523,13 @@ func _ready() -> void:
 		print("startup: prime_engine_ms=", "%.1f" % ((Time.get_ticks_usec() - prime_started) / 1000.0))
 		print("wolf: prime_engine frames=", primed)
 		if not wolf.start_title():
-			push_error("WolfGame.start_title failed")
-			set_physics_process(false)
+			_fail_startup(
+				"标题画面初始化失败（WolfGame.start_title 返回失败）。",
+				root
+			)
 			return
 	elif not wolf.boot():
-		push_error("WolfGame.boot failed")
-		set_physics_process(false)
+		_fail_startup("游戏启动初始化失败（WolfGame.boot 返回失败）。", root)
 		return
 
 	# Move first-use picture decoding and the initial atlas upload out of the
@@ -495,6 +545,99 @@ func _ready() -> void:
 	set_physics_process(true)
 	print("startup: ready_ms=", "%.1f" % ((Time.get_ticks_usec() - startup_started) / 1000.0))
 	queue_redraw()
+
+
+## Creates the front-end modal layer once, without touching the runtime.
+func _ensure_modal_layer() -> void:
+	if _modal_layer != null:
+		return
+	# The modal is a front-end layer of its own, so it is not part of the
+	# runtime's picture stack and can never be overwritten by a sprite.
+	_modal_layer = _ModalLayer.new()
+	_modal_layer.name = "ModalLayer"
+	# The blend batches the runtime spawns are ordinary children with
+	# `z_index` 0, so a high index keeps the modal on top of every picture.
+	_modal_layer.z_index = 100
+	# Fonts are resolved after this layer so an error during font setup still
+	# has readable text instead of an empty panel.
+	_modal_layer.bold_font = _make_system_ui_font(true)
+	_modal_layer.regular_font = _make_system_ui_font(false)
+	_assign_modal_fonts()
+	add_child(_modal_layer)
+
+
+func _assign_modal_fonts() -> void:
+	if _modal_layer == null:
+		return
+	if bold_font != null:
+		_modal_layer.bold_font = bold_font
+	if regular_font != null:
+		_modal_layer.regular_font = regular_font
+
+
+## Handles one fatal startup failure.
+##
+## Headless callers get a nonzero exit code immediately instead of a scene that
+## waits forever with physics disabled. A GUI window gets a real panel with the
+## failing path/reason and an explicit quit action.
+func _fail_startup(reason: String, path: String) -> void:
+	_startup_failed = true
+	_startup_error_reason = reason
+	_startup_error_path = path
+	var log_detail := "startup failed: " + reason
+	if not path.is_empty():
+		log_detail += " (path: " + path + ")"
+	push_error(log_detail)
+	if DisplayServer.get_name() == "headless":
+		get_tree().quit(1)
+		return
+	_show_startup_error(reason, path)
+
+
+## Shows the fatal error without initialising or depending on `wolf`.
+func _show_startup_error(reason: String, path: String) -> void:
+	_startup_error_reason = reason
+	_startup_error_path = path
+	_ensure_modal_layer()
+	var shown_path := _wrap_startup_path(path) if not path.is_empty() else "（未提供）"
+	var body := "原因：%s\n失败路径：%s" % [reason, shown_path]
+	body += "\n\n请检查数据目录或启动参数。\n按“退出”、Esc 或 Enter 结束。"
+	_modal_kind = "startup_error"
+	_modal_actions = ["quit"]
+	_modal_slot = {}
+	_modal_click = Vector2i(-1, -1)
+	_modal_layer.error_mode = true
+	_modal_layer.title = "启动失败"
+	_modal_layer.body = body
+	_modal_layer.labels = ["退出"]
+	_modal_layer.focus_index = 0
+	_modal_layer.toast = ""
+	_modal_layer.open = true
+	_modal_layer.queue_redraw()
+	_reset_modal_input()
+	set_physics_process(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	queue_redraw()
+	print("ui: startup error dialog opened")
+
+
+## Keeps a long unbroken Windows path inside the panel. The text shaper wraps
+## at word boundaries, but an absolute path may contain no break opportunities.
+func _wrap_startup_path(path: String) -> String:
+	const WRAP_AT := 64
+	if path.length() <= WRAP_AT:
+		return path
+	var chunks: Array[String] = []
+	var offset := 0
+	while offset < path.length():
+		chunks.append(path.substr(offset, WRAP_AT))
+		offset += WRAP_AT
+	return "\n  ".join(chunks)
+
+
+func _quit_from_startup_error() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().quit()
 
 
 func _physics_process(_delta: float) -> void:
@@ -622,10 +765,17 @@ func _physics_process(_delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# F11 is a window-level presentation hotkey. Handle it before the modal
+	# branch so a dialog cannot swallow it, and mark the event handled here so
+	# it is never processed a second time at the unhandled-input stage.
+	if _is_fullscreen_toggle_event(event):
+		_toggle_fullscreen()
+		_mark_input_handled()
+		return
 	if not _modal_kind.is_empty():
 		# The modal owns the input while it is up.
 		_handle_modal_event(event)
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
@@ -667,8 +817,7 @@ func _input(event: InputEvent) -> void:
 		# OS auto-repeat echoes the key; the held set already has it.
 		if key_event.echo or held_keys.has(identity):
 			return
-		# F11 is a presentation hotkey consumed in `_unhandled_input`, and play.rs
-		# consumes its hotkeys before recording raw keys.
+		# F11 is consumed at the top of `_input`, before raw-key tracking.
 		if identity == KEY_F11:
 			return
 		if wolf != null and wolf.save_ui_active() and _is_confirm_key(identity):
@@ -738,6 +887,12 @@ func _handle_modal_event(event: InputEvent) -> void:
 		var identity := key_event.physical_keycode
 		if identity == 0:
 			identity = key_event.keycode
+		if _modal_kind == "startup_error":
+			# A fatal error cannot be dismissed into a black screen. Both the
+			# explicit button and the documented close keys end the process.
+			if identity == KEY_ESCAPE or identity == KEY_ENTER or identity == KEY_KP_ENTER:
+				_quit_from_startup_error()
+			return
 		var count := maxi(1, _modal_layer.labels.size())
 		match identity:
 			KEY_ESCAPE:
@@ -774,8 +929,10 @@ func _handle_modal_event(event: InputEvent) -> void:
 				_set_modal_focus(index)
 				_activate_modal_focus()
 				return
-		# A click outside the panel is a cancel, like Escape.
-		_close_modal()
+		# A click outside the panel is a cancel, like Escape. The fatal startup
+		# dialog has no cancel path, so it ignores clicks outside its button.
+		if _modal_kind != "startup_error":
+			_close_modal()
 
 
 ## Opens the "back to the title" confirmation.
@@ -898,6 +1055,9 @@ func _activate_modal_focus() -> void:
 	if index >= 0 and index < _modal_actions.size():
 		action = _modal_actions[index]
 	match _modal_kind:
+		"startup_error":
+			if action == "quit":
+				_quit_from_startup_error()
 		"return_title":
 			_close_modal()
 			if action == "title" and wolf != null:
@@ -1006,12 +1166,54 @@ func _save_settings_on_exit() -> void:
 		wolf.save_settings()
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
-		if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-		else:
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+func _is_fullscreen_toggle_event(event: InputEvent) -> bool:
+	if not (event is InputEventKey):
+		return false
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return false
+	return key_event.keycode == KEY_F11 or key_event.physical_keycode == KEY_F11
+
+
+func _toggle_fullscreen() -> void:
+	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	# Godot re-sends its cached 16x16 ICON_SMALL when the window style changes.
+	# Put the high-resolution caption icon back after every mode switch.
+	_apply_window_titlebar_icon()
+
+
+## Replaces only the Windows title-bar icon with the high-resolution inusuku head crop.
+##
+## The runtime ICO still supplies the taskbar/Alt-Tab icon. This bridge is a no-op
+## in headless/capture runs and on non-Windows hosts, and it is skipped when an older
+## GDExtension without the method is loaded.
+func _apply_window_titlebar_icon() -> void:
+	if DisplayServer.get_name() == "headless" or OS.get_name() != "Windows":
+		return
+	if wolf == null or not wolf.has_method("set_titlebar_icon"):
+		return
+	if _titlebar_icon_image == null:
+		var texture := load(TITLEBAR_ICON_PATH) as Texture2D
+		if texture == null:
+			push_warning("window icon: cannot load " + TITLEBAR_ICON_PATH)
+			return
+		_titlebar_icon_image = texture.get_image()
+	if _titlebar_icon_image == null:
+		push_warning("window icon: " + TITLEBAR_ICON_PATH + " is not readable")
+		return
+	if not wolf.set_titlebar_icon(_titlebar_icon_image):
+		push_warning("window icon: high-resolution title-bar icon was not applied")
+
+
+## Orphaned instances are used by headless input tests, so the viewport may be
+## absent even though the real scene always has one.
+func _mark_input_handled() -> void:
+	var viewport := get_viewport()
+	if viewport != null:
+		viewport.set_input_as_handled()
 
 
 func _process(_delta: float) -> void:
@@ -1680,13 +1882,18 @@ func _load_font(is_bold: bool) -> Font:
 			continue
 		print("font: %s <- %s" % [kind, path])
 		return font
+	var system := _make_system_ui_font(is_bold)
+	push_warning(
+		"font: no font file for %s, using SystemFont %s" % [kind, str(SYSTEM_FONT_NAMES)]
+	)
+	return system
+
+
+func _make_system_ui_font(is_bold: bool) -> Font:
 	var system := SystemFont.new()
 	system.font_names = PackedStringArray(SYSTEM_FONT_NAMES)
 	system.font_weight = 700 if is_bold else 400
 	system.allow_system_fallback = true
-	push_warning(
-		"font: no font file for %s, using SystemFont %s" % [kind, str(SYSTEM_FONT_NAMES)]
-	)
 	return system
 
 

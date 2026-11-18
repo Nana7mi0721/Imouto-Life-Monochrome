@@ -231,6 +231,15 @@ pub fn run(
             // entry has no equivalent of, so resume it explicitly from the snapshot.
             let started = game
                 .load_save(path)
+                .map(|loaded| {
+                    if !loaded.checksum_valid {
+                        eprintln!(
+                            "warning: save checksum mismatch in {}; loaded anyway",
+                            path.display()
+                        );
+                    }
+                    loaded
+                })
                 .and_then(|_| game.resume_loaded_map())
                 .map(|_| ())
                 .map_err(|err| err.to_string());

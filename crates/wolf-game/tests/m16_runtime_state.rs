@@ -646,3 +646,25 @@ fn range_erase_fades_every_live_slot_and_zero_fade_is_immediate() {
         );
     }
 }
+
+#[test]
+fn returning_to_title_drops_the_decoded_image_cache() {
+    let Some(mut game) = open_game() else {
+        return;
+    };
+    game.assets
+        .load("Picture/icon06.png")
+        .expect("decode a shipped HUD icon");
+    assert!(
+        !game.assets.is_empty(),
+        "the icon must be cached before the reset"
+    );
+
+    game.reset_to_title();
+
+    assert_eq!(
+        game.assets.len(),
+        0,
+        "returning to the title must release decoded images"
+    );
+}

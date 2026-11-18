@@ -25,6 +25,8 @@
 | [AUDIT_REBUILD_FIX_REPORT.md](AUDIT_REBUILD_FIX_REPORT.md) | 现行 · 两轮汇总 | T12 收口 + 审计轮：截图 6 项、RNG/缓存/键位/文本塑形落地、验证数字、未处理项与环境坑 |
 | [GEMINI_REVIEW_1c76dcc_FIX_REPORT.md](GEMINI_REVIEW_1c76dcc_FIX_REPORT.md) | 现行 · 第三轮 | Gemini `1c76dcc` 全量审查处理：人名牌缓存 P1、行动力三位数右对齐、`1a9fafe` 两条闭环核对、测试与遗留项 |
 | [reviews/README.md](reviews/README.md) | 现行 · 导读 | 审查轮次/缺陷编号对照、阅读注意、报告命名规则 |
+| [GEMINI_FULL_AUDIT_GUIDE.md](GEMINI_FULL_AUDIT_GUIDE.md) | 现行 · 云端审查任务书 | Gemini 只读全量审查：云端数据边界、需求闭环矩阵、正确性/性能/死代码/素材封包检查、证据等级与交付格式 |
+| [AUDIT_2411996_FIX_REPORT.md](AUDIT_2411996_FIX_REPORT.md) | 现行 · 全量审查修复 | `2411996` 审查处置：F-01 误报、Godot 导出、checksum 警告、发行包纯档、动作键门控/移动区间/资源缓存 |
 | [archive/README.md](archive/README.md) | 归档 · 索引 | 归档规则与全部归档项（旧交接、旧审查报告） |
 | [archive/HANDOFF_NEXT_AGENT.md](archive/HANDOFF_NEXT_AGENT.md) | 已归档 · 已完成 | 2026-11-11 POST_DEEPSEEK 19 项修复交接（BUG-02 闭环），仅作追溯 |
 | [archive/reviews/CODE_REVIEW_1_2ROUND_superseded.md](archive/reviews/CODE_REVIEW_1_2ROUND_superseded.md) | 已归档 · 被取代 | 第一、二轮审查单行本（BUG-25..40）；内容已并入现行四轮总报告 |

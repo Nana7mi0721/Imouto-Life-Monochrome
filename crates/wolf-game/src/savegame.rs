@@ -28,6 +28,12 @@ use crate::picture::{Picture, PictureKind, Screen};
 /// What a load restored, for the CLI to print and tests to assert.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LoadedSave {
+    /// Whether the file's stored checksum matched the decrypted body.
+    ///
+    /// A mismatch is reported to the host as a warning but never blocks the load:
+    /// the parser is deliberately tolerant so a damaged save can still be
+    /// inspected or recovered.
+    pub checksum_valid: bool,
     /// Pictures rebuilt from \`SavePart5\`.
     pub pictures: usize,
     /// Normal variables copied out of \`SavePart3\` row 0.
@@ -81,12 +87,23 @@ pub fn load_into(game: &mut Game, path: &Path) -> Result<LoadedSave, String> {
     // A load starts a different conversation; the M5-F transcript belongs to the scene
     // the player was in, not to the variables the save replaces.
     game.clear_message_history();
-    Ok(apply(game, &save))
+    let loaded = apply(game, &save);
+    if !loaded.checksum_valid {
+        let message = format!(
+            "SaveChecksum: {} has a mismatched checksum (stored {}, computed {}); loaded anyway",
+            path.display(),
+            save.stored_checksum,
+            save.computed_checksum
+        );
+        *game.diagnostics.entry(message).or_insert(0) += 1;
+    }
+    Ok(loaded)
 }
 
 /// Applies an already parsed save. Kept separate so tests can build a \`SaveFile\` in memory.
 pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
     let mut loaded = LoadedSave::default();
+    loaded.checksum_valid = save.checksum_ok();
 
     // Keep the save we loaded from as the template for the next save_to: it carries the
     // full runtime variable database (vardb, ~84 KB in SaveData01) plus the current map

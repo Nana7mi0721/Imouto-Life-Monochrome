@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 
 use godot::builtin::VarDictionary;
-use godot::classes::RefCounted;
+use godot::classes::{Image, RefCounted};
 use godot::prelude::*;
 
 mod localclock;
@@ -59,6 +59,26 @@ impl IRefCounted for WolfGame {
 
 #[godot_api]
 impl WolfGame {
+    /// Replaces only the Windows caption icon with a high-resolution HICON.
+    ///
+    /// Godot's native-icon path picks an exact 16x16 frame for `ICON_SMALL`,
+    /// which looks coarse when Windows scales the caption for high DPI. This
+    /// bridge sends the full source image as `WM_SETICON ICON_SMALL`; the taskbar
+    /// and Alt-Tab keep Godot's large `ICON_BIG`. It is a no-op off Windows and
+    /// in headless mode.
+    #[func]
+    fn set_titlebar_icon(&self, mut image: Gd<Image>) -> bool {
+        #[cfg(windows)]
+        {
+            windows_titlebar_icon::set(&mut image)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = image;
+            false
+        }
+    }
+
     /// Loads the WOLF data root and builds an idle VM.
     ///
     /// `root` is the unpacked data directory (the folder that contains `BasicData/`).
@@ -609,16 +629,24 @@ impl WolfGame {
             return false;
         };
         match game.load_save(Path::new(&path.to_string())) {
-            Ok(_) => match game.resume_loaded_map() {
-                Ok(map) => {
-                    godot_print!("wolf-gdext: loaded save, map {map}");
-                    true
+            Ok(loaded) => {
+                if !loaded.checksum_valid {
+                    godot_warn!(
+                        "wolf-gdext: save checksum mismatch in {}; loading anyway",
+                        path
+                    );
                 }
-                Err(err) => {
-                    godot_error!("wolf-gdext: resume after load failed: {err}");
-                    false
+                match game.resume_loaded_map() {
+                    Ok(map) => {
+                        godot_print!("wolf-gdext: loaded save, map {map}");
+                        true
+                    }
+                    Err(err) => {
+                        godot_error!("wolf-gdext: resume after load failed: {err}");
+                        false
+                    }
                 }
-            },
+            }
             Err(err) => {
                 godot_error!("wolf-gdext: load failed: {err}");
                 false
@@ -823,6 +851,152 @@ impl WolfGame {
             .get(&(ce_id as u32))
             .map(|b| b.get(idx as usize) as i64)
             .unwrap_or(0)
+    }
+}
+
+#[cfg(windows)]
+mod windows_titlebar_icon {
+    use std::sync::{Mutex, OnceLock};
+
+    use godot::classes::display_server::HandleType;
+    use godot::classes::{image, DisplayServer, Image};
+    use godot::obj::Singleton;
+    use godot::prelude::Gd;
+
+    const WM_SETICON: u32 = 0x0080;
+    const ICON_SMALL: usize = 0;
+    const BI_RGB: u32 = 0;
+    const ICON_RESOURCE_VERSION: u32 = 0x0003_0000;
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn SendMessageW(window: isize, message: u32, wparam: usize, lparam: isize) -> isize;
+        fn CreateIconFromResourceEx(
+            resource: *const u8,
+            size: u32,
+            icon: i32,
+            version: u32,
+            width: i32,
+            height: i32,
+            flags: u32,
+        ) -> isize;
+    }
+
+    // The HICON is referenced by the live window until the process exits. Create
+    // it once and re-send the same handle after window-mode changes.
+    static TITLEBAR_ICON: OnceLock<Mutex<Option<isize>>> = OnceLock::new();
+
+    pub(super) fn set(image: &mut Gd<Image>) -> bool {
+        let display = DisplayServer::singleton();
+        if display.get_name().to_string() == "headless" {
+            return false;
+        }
+        let window = display.window_get_native_handle(HandleType::WINDOW_HANDLE);
+        if window == 0 {
+            return false;
+        }
+
+        let cache = TITLEBAR_ICON.get_or_init(|| Mutex::new(None));
+        let mut cached = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if cached.is_none() {
+            *cached = create_icon(image);
+        }
+        let Some(icon) = *cached else {
+            return false;
+        };
+
+        unsafe {
+            SendMessageW(window as isize, WM_SETICON, ICON_SMALL, icon as isize);
+        }
+        true
+    }
+
+    fn create_icon(image: &mut Gd<Image>) -> Option<isize> {
+        let width = image.get_width();
+        let height = image.get_height();
+        if width <= 0 || height <= 0 {
+            return None;
+        }
+        let width = usize::try_from(width).ok()?;
+        let height = usize::try_from(height).ok()?;
+        let width_i32 = i32::try_from(width).ok()?;
+        let height_i32 = i32::try_from(height).ok()?;
+        let pixel_bytes = width.checked_mul(height)?.checked_mul(4)?;
+
+        image.convert(image::Format::RGBA8);
+        let pixels = image.get_data();
+        let pixels = pixels.as_slice();
+        if pixels.len() < pixel_bytes {
+            return None;
+        }
+
+        let mask_stride = width.div_ceil(32) * 4;
+        let mask_bytes = mask_stride.checked_mul(height)?;
+        let mut resource = Vec::with_capacity(40 + pixel_bytes + mask_bytes);
+        push_u32(&mut resource, 40);
+        push_u32(&mut resource, width as u32);
+        push_u32(&mut resource, height.checked_mul(2)? as u32);
+        push_u16(&mut resource, 1);
+        push_u16(&mut resource, 32);
+        push_u32(&mut resource, BI_RGB);
+        push_u32(&mut resource, pixel_bytes as u32);
+        push_u32(&mut resource, 0);
+        push_u32(&mut resource, 0);
+        push_u32(&mut resource, 0);
+        push_u32(&mut resource, 0);
+
+        let xor_start = resource.len();
+        resource.resize(xor_start + pixel_bytes, 0);
+        let destination = &mut resource[xor_start..xor_start + pixel_bytes];
+        for row in 0..height {
+            let source_row = height - row - 1;
+            let source_start = source_row * width * 4;
+            let destination_start = row * width * 4;
+            for column in 0..width {
+                let source = source_start + column * 4;
+                let target = destination_start + column * 4;
+                destination[target] = pixels[source + 2];
+                destination[target + 1] = pixels[source + 1];
+                destination[target + 2] = pixels[source];
+                destination[target + 3] = pixels[source + 3];
+            }
+        }
+
+        let mask_start = resource.len();
+        resource.resize(mask_start + mask_bytes, 0);
+        for row in 0..height {
+            let source_row = height - row - 1;
+            let source_start = source_row * width * 4;
+            for column in 0..width {
+                if pixels[source_start + column * 4 + 3] < 128 {
+                    resource[mask_start + row * mask_stride + column / 8] |= 0x80 >> (column % 8);
+                }
+            }
+        }
+
+        let resource_len = u32::try_from(resource.len()).ok()?;
+        let icon = unsafe {
+            CreateIconFromResourceEx(
+                resource.as_ptr(),
+                resource_len,
+                1,
+                ICON_RESOURCE_VERSION,
+                width_i32,
+                height_i32,
+                0,
+            )
+        };
+        (icon != 0).then_some(icon)
+    }
+
+    fn push_u16(data: &mut Vec<u8>, value: u16) {
+        data.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_u32(data: &mut Vec<u8>, value: u32) {
+        data.extend_from_slice(&value.to_le_bytes());
     }
 }
 

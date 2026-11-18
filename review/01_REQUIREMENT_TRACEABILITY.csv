@@ -1,0 +1,43 @@
+req_id,source,requirement,claimed_status,code_evidence,test_evidence,independent_result,residual_risk,notes
+REQ-001,CODE_REVIEW_4ROUND §1.1 BUG-02,对话框人名牌 36014 在消息期间持续可见（op112 剥离 bit 24）,已修复,crates/wolf-vm/src/exec.rs (eval_string_condition & 0x00FF_FFFF),crates/wolf-game/tests/m15_balloon_name.rs,FIXED_STATIC_ONLY,云端无 Rust/Data 未实跑,"固定底边模式 2002, op290 平移"
+REQ-002,CODE_REVIEW_4ROUND §1.1 BUG-04,日常卧室顶栏无独立体力图形条,NOT-A-BUG,crates/wolf-game/src/game.rs (hud_action_points 仅文本+宿主进度条),crates/wolf-game/tests/m3_hud_numeric.rs,NOT_A_BUG,无,原版设计行为
+REQ-003,CODE_REVIEW_4ROUND §六 BUG-20,ActionKey 与 Parallel 事件分离,已修复,crates/wolf-game/src/map_runtime.rs,crates/wolf-game/tests/m16_old_bug_review.rs,FIXED_STATIC_ONLY,云端未运行,注意区分历史台账 BUG-20
+REQ-004,CODE_REVIEW_4ROUND §六 BUG-21,install_map 按 MAP_SELF_BASE 清扫无主地图协程,已修复,crates/wolf-game/src/game.rs (install_map),crates/wolf-game/tests/m16_old_bug_review.rs,FIXED_STATIC_ONLY,云端未运行,2026-11-13 闭环
+REQ-005,CODE_REVIEW_4ROUND §六 BUG-22,op102 选项外部点击处理,已修复,crates/wolf-game/src/choice.rs & game.rs,crates/wolf-game/tests/m3_mouse_menu.rs,FIXED_STATIC_ONLY,云端未运行,
+REQ-006,CODE_REVIEW_4ROUND §六 BUG-23,CSelf5..9 字符串槽寻址,已修复,crates/wolf-vm/src/exec.rs,crates/wolf-game/tests/m16_runtime_state.rs,FIXED_STATIC_ONLY,云端未运行,
+REQ-007,CODE_REVIEW_4ROUND §六 BUG-24,Opcode 300 CallByName 实现,已修复,crates/wolf-vm/src/exec.rs:1573,crates/wolf-vm/src/exec.rs (unit tests),FIXED_STATIC_ONLY,云端未运行,
+REQ-008,HANDOFF_PROGRESS 2026-11-11 BUG-20,character_state 坐标查询,已修复/不依赖,crates/wolf-game/src/game.rs (character_state),crates/wolf-game/tests/m16_old_bug_review.rs,FIXED_STATIC_ONLY,云端未运行,人名牌不依赖此字段
+REQ-009,HANDOFF_PROGRESS 2026-11-11 BUG-21,鼠标滚轮 engine_state(10) 与 apply_wheel,已修复,crates/wolf-game/src/game.rs (apply_wheel / engine_state),crates/wolf-game/tests/m6_title_wheel.rs,FIXED_STATIC_ONLY,云端未运行,
+REQ-010,CODE_REVIEW_4ROUND BUG-25..48 (T0-T11),第一至四轮深水区 24 项缺陷修复,已修复(T0-T11落地),crates/wolf-vm/src/exec.rs; crates/wolf-game/src/{auto_events,game,picture,atlas,savegame}.rs,m16_vm_scheduler; m16_runtime_state; m16_parallel_input; m17_*,FIXED_STATIC_ONLY,云端无 Rust/Data/Godot 无法复验运行时; T13 刻意移除 tile 桥接代替 BUG-41,BUG-41 由 T13 有意去瓦片架构替代
+REQ-011,REVIEW_9a817e4_FIX_REPORT §2.1,Opcode 122 掩码应为 0xFFF0 且分支为 0x0010（首行截取）,已回退(未落地),crates/wolf-vm/src/exec.rs:2661 (mode & 0xFF00); :2715 (0x0200 =>),无有效回归（旧单测为 0x0201）,REVERTED,破坏 CE268 pc14 与 CE270 pc2000 首行截取,b23a1e1 回退 f52db44 后未恢复
+REQ-012,REVIEW_9a817e4_FIX_REPORT §2.2,\img 内联贴图与文字混排分层及 anchor/scale/alpha 处理,已回退(未落地),crates/wolf-game/src/atlas.rs:780 & game.rs:3275 (contains("\\img")),inline_box_images_survive_as_box_glyphs_in_text_picture,REVERTED,本作数据 0 混排但代码防御缺失,b23a1e1 回退后未恢复
+REQ-013,REVIEW_9a817e4_FIX_REPORT §2.3 & LIVE_PLAY F,读档后 current_map_path 补全 .mps 后缀,已修复,crates/wolf-game/src/game.rs (map_data_path),crates/wolf-game/tests/m23_map_path.rs,FIXED_STATIC_ONLY,云端未运行,由 live-play 轮重新落地
+REQ-014,REVIEW_9a817e4_FIX_REPORT §2.4 & LIVE_PLAY E,Sys77..Sys82 使用本地时间并支持 --clock 钉住时钟,已修复,crates/wolf-cli/src/localclock.rs; crates/wolf-gdext/src/localclock.rs; game.rs (install_local_clock),crates/wolf-game/tests/m20_clock.rs,FIXED_STATIC_ONLY,云端未运行,由 live-play 轮以宿主注入落地
+REQ-015,REVIEW_9a817e4_FIX_REPORT §2.5,动作键绕过范围收窄且仅忽略交互模式变量,已回退(未落地),crates/wolf-game/src/game.rs:3792 (matches!(event, 5|21|22|28|30|35)),无,REVERTED,脚本禁止阶段可能误触发保存/姿势/相册/数据,b23a1e1 回退后未恢复
+REQ-016,REVIEW_9a817e4_FIX_REPORT §2.6,150 Move 区间应改用活跃槽位 BTreeMap::range,已回退(未落地),crates/wolf-game/src/picture.rs:1433 (for n in lo..=hi),无,REVERTED,大跨度 span 导致百万次哈希查询卡顿,b23a1e1 回退后未恢复
+REQ-017,REVIEW_9a817e4_FIX_REPORT §2.7,Godot verify_*.gd 移除硬编码路径并接入 smoke-godot.sh,已回退(未落地),godot/tests/verify_p0_fixes.gd:6; godot/tests/verify_ui_and_interaction_fixes.gd:6; tools/smoke-godot.sh,未接入 smoke,REVERTED,回归脚本在非作者机器无法运行且未自动执行,b23a1e1 回退后未恢复
+REQ-018,REVIEW_9a817e4_FIX_REPORT §3.1,武器スキルセット / 防具スキルセット,NOT-A-BUG (误报),全作 33970 条指令串 0 命中,N/A,NOT_A_BUG,无,WOLF 通用模板残留
+REQ-019,GEMINI_REVIEW_1c76dcc_FIX_REPORT §2,TextQuadKey 提前计入 balloon_frame_growth 防止人名牌错位,已修复,crates/wolf-game/src/game.rs (text_quads),a_streaming_balloon_lifts_the_nameplate_through_the_text_cache,FIXED_STATIC_ONLY,云端未运行,
+REQ-020,GEMINI_REVIEW_1c76dcc_FIX_REPORT §3.1,Opcode 121 SelfVar 不再强制 batch_count=0,已修复,crates/wolf-vm/src/exec.rs,op121_self_range_updates_every_slot_in_the_range,FIXED_STATIC_ONLY,云端未运行,
+REQ-021,GEMINI_REVIEW_1c76dcc_FIX_REPORT §3.2,瞬时 Move 取消 Erase 残留 transition,已修复,crates/wolf-game/src/picture.rs,move_cancels_an_erase_fade,FIXED_STATIC_ONLY,云端未运行,
+REQ-022,GEMINI_REVIEW_1c76dcc_FIX_REPORT §5.1,Opcode 125 同协程同帧多次 123 仅消费一次 auto-key,已知边界(未改),crates/wolf-vm/src/exec.rs:2817,2822 (auto_keys_delivered),无,OPEN,本作未依赖但存在同帧二次 123 读 0 风险,保留为 P3 边界项
+REQ-023,GEMINI_REVIEW_1c76dcc_FIX_REPORT §5.2,Vm::spawn_child 继承 is_parallel,已修复,crates/wolf-vm/src/exec.rs (spawn_child),wolf-vm unit tests,FIXED_STATIC_ONLY,云端未运行,
+REQ-024,GEMINI_REVIEW_1c76dcc_FIX_REPORT §6.2,m3_status_panel::ce238_relative_panel_lands_at_the_left_edge 失败,已知失败(OPEN),crates/wolf-game/src/picture.rs (op150 相对绘制路径),crates/wolf-game/tests/m3_status_panel.rs,UNVERIFIED_ENV,云端无法运行 cargo test 验证当前是否仍失败,历史记录停在 x=-305
+REQ-025,LIVE_PLAY_FIX_REPORT #1,气泡模式全程屏蔽原生 19500..=19503 防止右下角闪现大头像,已修复,crates/wolf-game/src/game.rs (picture_quads),crates/wolf-game/tests/m19_balloon_ui.rs,FIXED_STATIC_ONLY,云端未运行,
+REQ-026,LIVE_PLAY_FIX_REPORT #2,气泡高 107 与头像底 558 对齐零售截图,已修复,crates/wolf-game/src/game.rs (BALLOON_FACE_*),crates/wolf-game/tests/m19_balloon_ui.rs,FIXED_STATIC_ONLY,云端无截图/Data 无法视觉复验,
+REQ-027,LIVE_PLAY_FIX_REPORT #3,夜袭格子进度条 500..=503 打断后自动清理,已修复,crates/wolf-game/src/raid_cleanup.rs,crates/wolf-game/tests/m22_raid_cleanup.rs,FIXED_STATIC_ONLY,云端未运行,
+REQ-028,LIVE_PLAY_FIX_REPORT #4,恶作剧光标移出热区回落 hand3 (var121=0),已修复(用户裁定),crates/wolf-game/src/cursor_fallback.rs,crates/wolf-game/tests/m21_cursor_hover.rs,FIXED_STATIC_ONLY,云端未运行,支持 WOLF_CURSOR_FALLBACK_OFF 关闭
+REQ-029,LIVE_PLAY_FIX_REPORT #5a/#5b,BAD/GOOD 框统一为 8 px；睡眠图标同图重绘保留呼吸动画,已修复,crates/wolf-game/src/picture.rs,m24_live_play_rulings; m19_picture_motion,FIXED_STATIC_ONLY,云端未运行,
+REQ-030,LIVE_PLAY_FIX_REPORT #6,GBK 启发式否决 U+FF61..FF64 消除中文乱码,已修复,crates/wolf-format/src/ (string decode),m3_string_decode,FIXED_STATIC_ONLY,云端未运行,
+REQ-031,LIVE_PLAY_FIX_REPORT #7/#8/#9,顶栏几何判定保留行动力条；150 Move 真实 alpha 渐变；侧栏双向补间,已修复,crates/wolf-game/src/{game,picture}.rs,m19_balloon_ui; m19_picture_motion; m24_live_play_rulings,FIXED_STATIC_ONLY,云端未运行,
+REQ-032,M25_LIVE_UX §一,WOLF_LIVE_RNG=1 opt-in 随机游标扰动（默认保持确定性）,已修复,crates/wolf-vm/src/rng.rs; crates/wolf-game/src/savegame.rs,crates/wolf-game/tests/m25_live_rng.rs,FIXED_STATIC_ONLY,云端未运行,
+REQ-033,M25_LIVE_UX §二,引擎自绘系统指针 pointer.rs（hand3 热点 4,1）与 2999 互斥,已修复,crates/wolf-game/src/pointer.rs; godot/scripts/GameView.gd,crates/wolf-game/tests/m25_cursor_follow.rs,FIXED_STATIC_ONLY,云端未运行,
+REQ-034,M25_LIVE_UX §三,站立立绘 900..903 仅作显示层，卧室按全身矩形命中,已修复,crates/wolf-game/src/game.rs (SISTER_BODY_RECTS),m25_sister_pose5; m25_sister_body_rects,FIXED_STATIC_ONLY,云端未运行,
+REQ-035,M25_LIVE_UX §四,存单弹窗防误覆盖 + Esc 返回标题确认 + 晚饭后槽 1 自动存档,已修复,crates/wolf-game/src/game.rs; crates/wolf-gdext/src/lib.rs; godot/scripts/GameView.gd,m25_save_slot; m25_return_to_title; godot/tests/save_slot_modal.gd,PARTIAL,模态期间 wolf.frame() 仍在运行且 F11 被拦截; 自动存档默认覆盖槽 1,模态隔离测试仅覆盖输入未覆盖 VM 暂停
+REQ-036,M25_LIVE_UX §五,行动力条 165x14 [531,15,165,14] 白色外框 + #646464 灰槽,已修复,crates/wolf-game/src/game.rs; godot/scripts/GameView.gd:93,hud_action_points_three_digit_value_clears_stamina_column,FIXED_STATIC_ONLY,云端无 Godot 无法截图确认,
+REQ-037,HANDOFF_M0 §11.3,打字机速度约 2x 偏差 & 选择面板 5.3 px 差异,不改/暂缓,crates/wolf-game/src/{message,choice}.rs,N/A,UNVERIFIED_ENV,缺原版逆向写点与测量基准,本作 CE48 速度 500 近似瞬显
+REQ-038,HANDOFF_M0 §11.3,kind>=0 过渡与极小窗口盒角折半,明确不实现,crates/wolf-game/src/window.rs,N/A,NOT_A_BUG,本作注册地图不触发,
+REQ-039,GUIDE §5.4 & §9.3,Godot 正式导出配置与第三方插件 godot_ai 发行隔离,未完成/开放,godot/project.godot:20,32 (无 export_presets.cfg); godot/bin/wolf_gdext.gdextension,无,OPEN,正式导出会带入 _mcp_game_helper Autoload 且仅配置 Windows DLL,发布阻断项
+REQ-040,GUIDE §5.4 & §6.3,SaveFile::parse 不校验 stored_checksum 与 computed_checksum,已知边界(OPEN),crates/wolf-save/src/lib.rs:342-363,crates/wolf-game/tests/m3_save_robustness.rs:255,OPEN,损坏存档可静默读档且无用户警告,
+REQ-041,GUIDE §5.4 & §7.2,Assets::clear() 生产生命周期与缓存上限,已知开放,crates/wolf-game/src/assets.rs:291,324,无生产调用者,OPEN,长会话/相册/反复重开内存只增不减,
+REQ-042,GUIDE §5.4 & §6.4,GameView 启动失败缺乏可观察错误 UI 与退出路径,未检查/开放,godot/scripts/GameView.gd:428-483,无,OPEN,缺数据/开档失败时窗口静默黑屏卡死,

@@ -1,0 +1,47 @@
+=== AUDIT ENVIRONMENT SNAPSHOT ===
+Date (UTC): 2026-11-17
+Archive: user_uploaded_files/ttl=63d/user_uploaded/imouto-life (Zip, 3203485 bytes)
+Exact Commit SHA (from archive root): 24119960904011cbf5c0d0d4a7246a9d11fcf22b
+OS: Linux ace 6.12.105+ #1 SMP Sat Sep 19 19:37:41 UTC 2026 x86_64 GNU/Linux
+CPU: 2 vCPU
+Memory: 7.8 GiB total, 6.9 GiB available
+rustc: NOT FOUND
+cargo: NOT FOUND
+godot: NOT FOUND
+work/Data: NOT PRESENT
+
+=== CRATE CODE & TEST STATIC INVENTORY ===
+Total .rs files (crates/): 206 (125,883 lines)
+Total Rust files with tests or in tests/: 165
+Total #[test]: 1215
+Total #[ignore]: 2
+Files with skipping/skip: 116 (occurrences: 363)
+
+Per-crate breakdown:
+  wolf-audio     :   9 .rs files,   2439 lines | test_files=  5, #[test]=  41, #[ignore]= 0, skip_files=  3, skip_occ=  8, prod_unwrap= 3
+  wolf-cli       :   6 .rs files,   7907 lines | test_files=  5, #[test]=  41, #[ignore]= 0, skip_files=  2, skip_occ=  5, prod_unwrap= 1
+  wolf-format    :  40 .rs files,  35588 lines | test_files= 25, #[test]= 113, #[ignore]= 1, skip_files= 14, skip_occ= 43, prod_unwrap=14
+  wolf-game      : 113 .rs files,  57983 lines | test_files=109, #[test]= 781, #[ignore]= 1, skip_files= 88, skip_occ=291, prod_unwrap= 3
+  wolf-gdext     :   2 .rs files,   1040 lines | test_files=  1, #[test]=   2, #[ignore]= 0, skip_files=  0, skip_occ=  0, prod_unwrap= 1
+  wolf-launcher  :   1 .rs files,    166 lines | test_files=  0, #[test]=   0, #[ignore]= 0, skip_files=  0, skip_occ=  0, prod_unwrap= 0
+  wolf-render    :  13 .rs files,   5377 lines | test_files=  7, #[test]=  58, #[ignore]= 0, skip_files=  3, skip_occ=  7, prod_unwrap= 2
+  wolf-save      :  13 .rs files,   6041 lines | test_files=  5, #[test]=  31, #[ignore]= 0, skip_files=  5, skip_occ=  8, prod_unwrap= 0
+  wolf-vm        :   9 .rs files,   9342 lines | test_files=  8, #[test]= 148, #[ignore]= 0, skip_files=  1, skip_occ=  1, prod_unwrap= 0
+
+=== KEY STATIC CODE LOCATIONS VERIFIED ===
+- crates/wolf-vm/src/exec.rs:2661 -> let operation = mode & 0xFF00;
+- crates/wolf-vm/src/exec.rs:2715 -> 0x0200 => (instead of 0x0010 =>)
+- crates/wolf-vm/src/exec.rs:2817,2822 -> auto_keys_delivered.contains(&inst.id)
+- crates/wolf-game/src/atlas.rs:780 -> if !picture.text.contains(r"\img")
+- crates/wolf-game/src/game.rs:3275 -> if picture.text.contains(r"\img")
+- crates/wolf-game/src/game.rs:3792 -> if started.is_none() && matches!(event, 5 | 21 | 22 | 28 | 30 | 35)
+- crates/wolf-game/src/picture.rs:1433 -> for n in lo..=hi
+- crates/wolf-game/src/assets.rs:324 -> pub fn clear(&mut self) [0 production callers]
+- crates/wolf-save/src/lib.rs:342-363 -> SaveFile::parse stores checksum_ok() without rejecting mismatch
+- godot/project.godot:20,32 -> _mcp_game_helper autoload & godot_ai plugin enabled
+- godot/bin/wolf_gdext.gdextension:9-10 -> windows-only DLL paths; no export_presets.cfg in godot/
+- godot/scripts/GameView.gd:428-483 -> push_error + set_physics_process(false) on startup failure
+- godot/scripts/GameView.gd:548 -> wolf.frame() still called when modal_open is true
+- godot/scripts/GameView.gd:625-629,1010 -> modal _input swallows events before _unhandled_input F11
+- godot/tests/verify_p0_fixes.gd:6 & verify_ui_and_interaction_fixes.gd:6 -> hardcoded E:/Study/... path
+- tools/package-playable.sh:131 -> cp -a "$DATA_ROOT/." "$OUT_DIR/Data/" (unfiltered copy)

@@ -33,6 +33,13 @@ use wolf_vm::{Magic, MagicKind, Program, SelfVars, Variables, Vm};
 
 use crate::tilemap::TILE_PX;
 
+/// The global variable the shipped map uses as the interaction-mode switch.
+///
+/// Magic `2000100` is ordinary variable slot 100, named `深夜1` in SysDatabase
+/// type 14. CE227 (the pose submenu) rewrites it to 0 while its menu is open,
+/// so it is the one condition a visible icon legitimately outlives.
+const INTERACTION_MODE_MAGIC: u32 = 2_000_100;
+
 /// What a page's trigger byte tells the runtime to do.
 ///
 /// Measured over the 134 shipped pages: 0 appears 14 times, 1 26 times, 2 90
@@ -420,8 +427,8 @@ impl MapRuntime {
         self.start_action_page(vm, index, page_index)
     }
 
-    /// Start an action-key page by event id even when its page conditions are not
-    /// currently active.
+    /// Start an action-key page by event id, ignoring only the interaction-mode
+    /// variable.
     ///
     /// The night end arrow is a visible picture button that belongs to action page
     /// 21. Entering a touch/clothes submenu changes v100 from the top-page value 1
@@ -430,7 +437,11 @@ impl MapRuntime {
     /// event owns the confirmation UI and teardown, so the picture bridge must be
     /// able to start that page from any submenu. This is intentionally narrow:
     /// normal map hotspots keep their condition gates.
-    pub fn action_key_event_ignoring_conditions(&mut self, vm: &mut Vm, event: u32) -> Option<u32> {
+    pub fn action_key_event_ignoring_interaction_mode(
+        &mut self,
+        vm: &mut Vm,
+        event: u32,
+    ) -> Option<u32> {
         let index = self.events.iter().position(|state| state.id == event)?;
         let state = self.events.get(index)?;
         if state.instance.is_some_and(|id| vm.instance(id).is_some()) {
@@ -440,6 +451,20 @@ impl MapRuntime {
             .pages
             .iter()
             .position(|page| page.trigger == Trigger::ActionKey && page.program.is_some())?;
+        let conditions = state.pages.get(page_index)?.conditions;
+        let live = state
+            .instance
+            .and_then(|id| vm.instance(id))
+            .map(|instance| &instance.self_vars);
+        let self_vars = live.or(state.self_vars.as_ref());
+        if !conditions_met_except(
+            &conditions,
+            self_vars,
+            &vm.vars,
+            Some(INTERACTION_MODE_MAGIC),
+        ) {
+            return None;
+        }
         self.start_action_page(vm, index, page_index)
     }
 
@@ -637,11 +662,31 @@ fn conditions_met(
     self_vars: Option<&SelfVars>,
     vars: &Variables,
 ) -> bool {
+    conditions_met_except(conditions, self_vars, vars, None)
+}
+
+/// True when every enabled condition holds, except the one on `skip`.
+///
+/// The picture bridge reaches an action page whose only failing condition is the
+/// interaction-mode variable a submenu rewrites. Skipping exactly that variable
+/// keeps the page reachable without turning the bridge into a way around every
+/// gate the script wrote.
+fn conditions_met_except(
+    conditions: &[PageCondition; CONDITION_SLOTS],
+    self_vars: Option<&SelfVars>,
+    vars: &Variables,
+    skip: Option<u32>,
+) -> bool {
     conditions.iter().all(|condition| {
-        !condition.enabled
-            || condition
-                .compare(condition_value(condition.variable, self_vars, vars))
-                .unwrap_or(false)
+        if !condition.enabled {
+            return true;
+        }
+        if skip == Some(condition.variable) {
+            return true;
+        }
+        condition
+            .compare(condition_value(condition.variable, self_vars, vars))
+            .unwrap_or(false)
     })
 }
 
@@ -1138,6 +1183,108 @@ mod tests {
             runtime.slots()[1].page,
             1,
             "action key page should switch after old coroutine finishes"
+        );
+    }
+
+    /// The night interface icons live on pages whose conditions name the
+    /// interaction-mode variable `深夜1` (magic 2000100) next to real gates:
+    /// `v176` (the stats window is up), `v69` (the forbidden stage) and `v125`
+    /// (the exception handler owns the screen).
+    fn gated_action_event() -> MapRuntime {
+        let map = map_with(vec![MapEvent {
+            id: 21,
+            name: "end".to_owned(),
+            x: 1,
+            y: 1,
+            pages: vec![page_with(
+                0,
+                // 0x21 is "== 1" (operator 2, enabled), 0x51 is "!= 1".
+                [0x21, 0x21, 0x21, 0x51],
+                [2_000_100, 2_000_176, 2_000_069, 2_000_125],
+                [1, 0, 0, 1],
+                vec![Slot::Blank],
+            )],
+        }]);
+        MapRuntime::collect(&map)
+    }
+
+    #[test]
+    fn the_bridge_ignores_only_the_interaction_mode_variable() {
+        let mut runtime = gated_action_event();
+        let mut vm = Vm::new(ProgramSet::default());
+        // The pose submenu holds `深夜1` at 0 while the icon stays on screen.
+        vm.vars.set(100, 0);
+        vm.vars.set(176, 0);
+        vm.vars.set(69, 0);
+        vm.vars.set(125, 0);
+        assert_eq!(
+            runtime.action_key_event_ignoring_interaction_mode(&mut vm, 21),
+            Some(21),
+            "the page starts when only the interaction-mode variable fails"
+        );
+    }
+
+    #[test]
+    fn the_bridge_still_honours_the_other_page_gates() {
+        // The stats window is up (`v176 == 1`): the script forbids the action.
+        let mut runtime = gated_action_event();
+        let mut vm = Vm::new(ProgramSet::default());
+        vm.vars.set(100, 0);
+        vm.vars.set(176, 1);
+        vm.vars.set(69, 0);
+        vm.vars.set(125, 0);
+        assert_eq!(
+            runtime.action_key_event_ignoring_interaction_mode(&mut vm, 21),
+            None,
+            "the stats gate must survive the bridge"
+        );
+
+        // The forbidden stage (`v69 == 1`): the script forbids the action.
+        let mut runtime = gated_action_event();
+        let mut vm = Vm::new(ProgramSet::default());
+        vm.vars.set(100, 0);
+        vm.vars.set(176, 0);
+        vm.vars.set(69, 1);
+        vm.vars.set(125, 0);
+        assert_eq!(
+            runtime.action_key_event_ignoring_interaction_mode(&mut vm, 21),
+            None,
+            "the stage gate must survive the bridge"
+        );
+
+        // The exception handler owns the screen (`v125 == 1`).
+        let mut runtime = gated_action_event();
+        let mut vm = Vm::new(ProgramSet::default());
+        vm.vars.set(100, 0);
+        vm.vars.set(176, 0);
+        vm.vars.set(69, 0);
+        vm.vars.set(125, 1);
+        assert_eq!(
+            runtime.action_key_event_ignoring_interaction_mode(&mut vm, 21),
+            None,
+            "the exception gate must survive the bridge"
+        );
+    }
+
+    #[test]
+    fn the_strict_path_still_refuses_a_page_the_interaction_mode_hides() {
+        // With `深夜1` at 0 the page's own conditions fail, so the ordinary
+        // selector finds nothing: this is exactly the case the bridge exists for.
+        let mut runtime = gated_action_event();
+        let mut vm = Vm::new(ProgramSet::default());
+        vm.vars.set(100, 0);
+        vm.vars.set(176, 0);
+        vm.vars.set(69, 0);
+        vm.vars.set(125, 0);
+        assert_eq!(
+            runtime.action_key_event(&mut vm, 21),
+            None,
+            "the strict action-key path must keep the page condition"
+        );
+        assert_eq!(
+            runtime.action_key_event_ignoring_interaction_mode(&mut vm, 21),
+            Some(21),
+            "only the interaction-mode variable may be skipped"
         );
     }
 }

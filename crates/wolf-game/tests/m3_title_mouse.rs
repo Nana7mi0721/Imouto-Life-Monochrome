@@ -22,11 +22,10 @@
 //! Map003 -> SampleMapA; menu2 (load) opens common event 14's read-a-save grid.
 //!
 //! Known current-behaviour facts, pinned here and reported to the lead:
-//!   * A right-button press cancels a 102-choice prompt, matching the keyboard
-//!     CANCEL key (edge-triggered). At the title it replies Cancel, CE42 unwinds
-//!     past its op102 into the [60] Sys4=150 instruction and the title event ends.
-//!     It also cancels the picture-driven load grid, because that grid polls
-//!     opcode 123 through the mouse->key bridge.
+//!   * A right-button press cancels a 102-choice prompt only when that block has a
+//!     421 cancel arm. CE42's title menu has none, so the title prompt ignores the
+//!     press and keeps the menu up. It still cancels the picture-driven load grid,
+//!     because that grid polls opcode 123 through the mouse->key bridge.
 //!   * Cancelling the load grid (cancel key or right click) closes it but does NOT
 //!     return to the title menu: CE42's load branch ends the title event chain and
 //!     this port has no "restart title" step, so the engine goes idle. The test
@@ -290,21 +289,22 @@ fn synthetic_relocation_makes_the_three_rows_mouse_hittable() {
     // Well away from the panel nothing is hit.
     assert_eq!(game.choice_row_at(10, 10), None);
 
-    // Right-button press cancels the 102-choice prompt, like the keyboard CANCEL key.
-    // CE42 then unwinds past its op102 into the [60] Sys4=150 instruction and ends.
+    // CE42's op102 has no 421 cancel arm. A right-button press is spent by the
+    // prompt but must not answer it: otherwise CE42 would unwind past its op102
+    // into the [60] Sys4=150 instruction and leave the title without a menu.
     press_right_button(&mut game);
     assert!(
-        game.choices.is_none(),
-        "a right click cancels the choice prompt"
+        game.choices.is_some(),
+        "a 102 without a 421 marker must ignore the right click"
     );
     assert!(
-        !live_events(&game).contains(&42),
-        "the title event (42) has unwound after the cancel"
+        live_events(&game).contains(&42),
+        "CE42 is still parked on its title menu"
     );
     assert_eq!(
-        game.sys(4),
-        150,
-        "control returned past op102 into [60] Sys4=150"
+        (game.sys(3), game.sys(4)),
+        (300, 200),
+        "the relocated choice-window anchor is unchanged"
     );
     assert_eq!(game.stats.warnings, 0);
 }

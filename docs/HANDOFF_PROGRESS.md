@@ -1521,3 +1521,146 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   `bash tools/build-godot.sh` 成功，`bash tools/smoke-godot.sh` exit 0
   （P0 `pictures=4 sprites=4`，存档弹窗脚本全通过）。本轮未回滚、覆盖或删除
   `work/Data/Save/` 下的玩家存档。
+
+### 2026-11-17 全量审查 `2411996` 修复（当前轮）
+
+* **F-01 判定误报，不改引擎**：`0x0010` 是“代入先を変数で指定”标志，不是
+  “上1行切り取り”；`0xFFF0` 曾在实机清空 CE270 名牌。只订正
+  `docs/OPCODE_122.md`，保留 `0xFF00` / `0x0200`。
+* **F-02/F-03 Godot 正式发布**：新增 `godot/export_presets.cfg` 与
+  `tools/package-godot.sh`；Windows Desktop release、PCK 内嵌、排除
+  `addons/godot_ai/*`、`tests/*`、`bin/~*`。子代理实跑 `--export-pack`，
+  包内无开发插件，`project.binary` 无 `_mcp_game_helper`。
+* **F-04/F-12 启动错误与 F11**：`GameView.gd` 统一 `_fail_startup()`；
+  headless `quit(1)`，GUI 显示中文错误面板与退出按钮；F11 在 `_input`
+  顶部优先处理，模态下只切换一次。新增 `startup_error_and_f11.gd`。
+* **F-05 checksum 只警告**：`LoadedSave::checksum_valid`；坏档仍加载，
+  `load_into` 写 `SaveChecksum:` 诊断，GDExt/CLI 打印警告；
+  `m3_save_robustness` 4/4。
+* **F-06 发行包纯档**：两个 package 脚本剔除 `Save/` 与所有
+  `SaveData*.sav`，只放干净 `System.sav`（优先
+  `work/out/retail_saves/System.sav`，SHA-256 `aaf62fc5...`），打包后校验
+  `Data/Save/` 只能有 `System.sav`。`--dry-run` 列过滤计划。
+* **F-08/F-09/F-10**：图片按钮回退收窄到 `5|21|22|28` 且只跳过 `v100`；
+  `150 Move` 改 `BTreeMap::range`；返回标题调用 `assets.clear()`。定向回归
+  全过（map_runtime 2、picture 5、m16 资源 1）。
+* **验证**：`cargo fmt --all --check` 与 `cargo check -q --workspace` 通过；
+  用 `work/out/retail_saves` 复制 `work/out/audit-Data` 跑全量，仅余长期基线
+  （choice×3 / db×2 / textpic×1 / m18 1 / m3_manual_rules 1）和两条旧存档
+  界面期望（`m3_hud_buttons` 1、`m3_menu_screens` 1）；本轮新增回归无失败。
+* **DLL/冒烟**：Godot 关闭后已同步 `godot/bin/wolf_gdext.dll`，与
+  `target/godot/wolf_gdext.dll` 同为 `ef6e9694...`；`smoke-godot.sh` exit 0
+  （`pictures=4 sprites=4`），`startup_error_and_f11.gd` 通过
+  （`error_ui=ok modal_f11=ok missing_data_exit=1`）。
+* **环境限制**：本机仍无 Godot 4.7.2 导出模板
+  （`%APPDATA%\Godot\export_templates\4.7.2.stable` 不存在），未生成最终 exe；
+  安装模板后运行 `bash tools/package-godot.sh`。
+* 报告：`docs/AUDIT_2411996_FIX_REPORT.md`。
+
+* **追加：新游戏标题闪回（2026-11-17）**：逐帧探针确认旧 `switch_map()` 在
+  `130 Teleport` 当帧清负号层，提前删掉标题背景 `-2`；Map003 随后把同一标题画到
+  `-1` 并淡入，造成“黑→标题闪回→黑”。`switch_map()` 现在保留图片层，由
+  Map003 的 `9000` 黑幕覆盖并自行 `Erase -1..-2`，进入 `SampleMapA` 后再由
+  事件 0 擦除 `9000`。新增 `m3_title_transition`，临时恢复旧清理逻辑时该测试
+  首帧失败；标题链 `m1_title_load`/`opening`/`m3_newgame_persistence`/
+  `m3_title_mouse`/`m3_title_visibility`/`m6_title_wheel`/`m3_endings`/
+  `m16_runtime_state` 全过。DLL 已重建为 `bc6d931e...`，`smoke-godot.sh` exit 0。
+
+* **追加：存档翻页残留 CE94 原始文本（2026-11-17）**：逐帧探针复现了页码先变、
+  `CE94` 后重建图片的两帧窗口。旧实现按新页查槽失败后回退到上一页的
+  `picture.text`，导致 `1`、`熊头` 等旧描述闪现。`save_slot_text_override()`
+  现在先核对标签图片末端的当前槽位号；标签仍是旧页时，标签/时长/状态三组文字
+  一起隐藏，标签重建后恢复正常覆盖；空槽仍保留“没有数据”。新增
+  `m25_save_slot::a_page_turn_never_shows_the_previous_pages_raw_text`，
+  覆盖右翻和左翻并逐帧断言。`m25_save_slot` 17/17、`m3_save_ui_roundtrip`
+  10/10、`m25_cursor_follow` 1/1、`m3_title_mouse` 8/8、
+  `m3_title_visibility` 4/4；`smoke-godot.sh` exit 0，DLL 重建为
+  `9c9e3281...`。`m3_hud_buttons` 两条读取 `screen` 原始文本的既有夹具断言和
+  `m3_menu_screens` 的旧全宽命中盒断言仍失败，均不经过本轮覆盖路径。
+
+* **Godot Windows x64 正式发行包（2026-11-17）**：新增
+  `tools/package/release-data.manifest` 与 `tools/package/release_data.py`，
+  发行 Data 从“整目录复制”改为 746 文件精确白名单 + 干净 `System.sav`
+  （747 文件 / 128,083,817 B）；完整 `work/Data` 不动，排除 618 文件 /
+  55,684,128 B，包括 `MapChip`、`FIcon`、`BattleEffect`、`Fog_BackGround`、
+  `SystemGraphic`、3 张未注册地图和未引用资源。`godot/export_presets.cfg`
+  使用 `work/Data/icon_windows.png` 复制的 `godot/icon_windows.png` 作为
+  exe 图标，图标源和 `bin/*.dll` 均不进入 PCK。导出器把 DLL 放根目录，
+  但 GDExtension 按 `res://bin/wolf_gdext.dll` 查找；脚本现重排到
+  `bin\wolf_gdext.dll` 并校验 SHA-256。PCK 仅 13 个运行文件，无
+  addons/tests/图标/重复 DLL。产物：
+  `work/out/dist/godot/0.1.0/Imouto Life.exe`（109,299,944 B）、
+  `bin/wolf_gdext.dll`（6,517,248 B，SHA-256 `348aa5d3...`）、
+  747 文件 Data、checksums 与 141 MiB zip（外部 `.sha256`
+  `ab7e9966...`）。验证：包内 `sha256sum -c` 750 项通过；
+  exe `--headless --quit-after 180` 成功加载 GDExtension；精简 Data
+  `smoke.gd` 为 `pictures=4 sprites=4`，`save_roundtrip.gd` 新游戏/重载均
+  38 图，`System.sav` 哈希前后不变。模板已安装，旧“模板缺失”记录作废。
+  收尾清理删除 `target/release`、`target/debug/incremental` 与临时
+  `work/out/package-stage-test-*`；保留 `work/Data`、`work/out/dist` 和最终包，
+  当前 `du -sh .` = **12 GB**。
+
+* **安装版准备（2026-11-17，未打包）**：应要求先只做发行准备，不构建、不导出。
+  `godot/export_presets.cfg` 已补全四段版本、产品名、文件描述、公司与版权；
+  当前 Godot 编辑器同步值为 `Inusuku` / `Copyright (c) 2026 Inusuku`，打包脚本
+  会从预设动态读取，避免编辑器覆盖后不一致。新增
+  `tools/package/ImoutoLife.iss.in`、`tools/package/render_inno.py` 与多尺寸
+  `tools/package/icon_windows.ico`；Inno Setup 语言固定简体中文，默认安装到
+  用户选择的 `妹！生活 ～单色～ Godot` 文件夹，安装/卸载保留 `Data/Save`。
+  `tools/package-godot.sh` 现规划输出 `Imouto Life setup.zip`（顶层为同名游戏
+  文件夹）和 `Imouto Life setup.exe`，并支持 `--no-setup` / `--iscc PATH`。
+  本机尚未安装 `ISCC.exe`，因此本轮没有生成新 ZIP 或 Setup，仅完成脚本、
+  图标和配置准备；`bash -n`、Python 渲染预览与 `--dry-run --no-setup` 通过。
+
+* **追加：exe 属性语言改为简体中文（2026-11-17）**：Godot 4.7.2 在
+  `VS_VERSIONINFO` 中固定写入 `0x0409`（英语美国），Explorer 的
+  “详细信息 → 语言”读取的是 PE 资源目录语言，而不是普通字符串字段。
+  新增 `tools/package/windows_version_language.py`，导出后把 `RT_VERSION`
+  资源目录语言、版本键 `040904b0` 与 `Translation` 一并改为
+  `0x0804` / `080404b0`，并按 PE 规范重算 checksum，保持文件大小和内嵌
+  PCK 不变。旧发行 exe 的副本验证：语言显示“简体中文（中国大陆）”，
+  第二次运行输出 `already 0x0804`，`pefile` checksum 校验通过，
+  `release_data.py verify-pck` 仍为 13 个运行文件。该工具已接入
+  `tools/package-godot.sh`，下次正式导出会自动执行；本轮未打包。
+
+### 2026-11-18 开场取消穿透、10000 余额与窗口图标
+
+* **取消穿透根因（VM + 宿主）**：`102` 没有 `421` cancel 标记时，
+  `ChoiceReply::Cancel` 在 VM 层错误回落到 choice 块尾，直接跳过
+  `SampleMapA ev0 pc32-92` 的职业 flag、`var7` roll、AP 和后续随机消费；
+  宿主右键与键盘 CANCEL 也没有检查 `choice_cancel_allowed()`。现在 VM 只有
+  `cancel_pc` 存在时才移动 PC/解除等待，宿主对无取消分支的 Esc、右键、框外点击
+  只消费输入边沿，不产生 CANCEL，也不关闭选项。有 `421` 的 CE245/CE250 仍正常取消。
+* **回归**：新增 `crates/wolf-vm/tests/m27_choice_cancel.rs` 3/3 与
+  `crates/wolf-game/tests/m27_opening_choice_cancel.rs` 5/5（真实数据）。
+  修复后控制组与 Esc 组的问题 2 都是混浴四选项，职业均为学生 `var7=3539`、
+  flags `[1,0,0,0]`；旧 bug 的随机偏移消失。
+* **`10000` 余额结论**：不是 VM 漏写或经济默认值。固定 `Game.dat` 随机表让
+  首称号抽到「熊头」扣 `-10000`，CE242 将负余额 clamp 到 `0`，随后
+  `ev0 pc300` 加伙食费 `+10000`，所以四行职业最终 HUD 都显示 `10000`；
+  职业 roll 本身不同（学生 3539、自由业 8718）。这让
+  `m3_newgame_persistence` 旧注释“随机分支被收尾覆盖”不准确，已改为固定种子
+  + clamp 的解释；若要每次不同，仍按既定 opt-in 使用 `WOLF_LIVE_RNG=1`。
+* **窗口图标**：`godot/window_icon.ico` 的 32/48/64/128/256 帧来自
+  `icon_windows.png`，用于任务栏/Alt-Tab；16×16 帧由 `inusuku.png` 头部生成，
+  作为无 GDExtension 时的后备标题栏图标。正常 Windows GUI 启动后，
+  `GameView.gd` 把 `icon_titlebar.png`（256×256 头部裁切）交给 GDExtension，
+  通过 `WM_SETICON ICON_SMALL` 设置高分辨率标题栏 HICON，F11 切换模式后重发；
+  这样不会再被 ICO 的 16×16 槽位强制放大。exe 文件图标继续由
+  `application/icon="res://icon_windows.png"` 控制。
+* **图标验证**：6 个 ICO 帧均能被 Windows `CreateIconFromResourceEx` 创建；
+  `icon_titlebar.png` 采用 premultiplied-alpha 头部裁切并保留透明边；
+  Godot headless 读取到 ICO 的 16×16 与 256×256 两档；headless smoke
+  `pictures=4 sprites=4`。临时 `--export-pack` 实跑确认 `window_icon.ico`
+  与 `icon_titlebar.png` 进入 PCK（16 个运行文件），已给
+  `tools/package-godot.sh` 增加两个 require。
+* **回归注意**：`m3_mouse_menu` 的 5 个硬编码 `10000` 断言在用户当前
+  `work/Data/Save/SaveData01.sav`（v7=16718）上失败；换用干净
+  `work/out/audit-Data` 后 14/14 全过，与本轮改动无关。
+* **标题栏图标小尺寸复核**：用户看到的块状图是 `32×32` 实际标题栏像素放大
+  8 倍后的检查图，不是 256×256 源文件被压缩。已重新收紧 `inusuku.png` 头部
+  裁切（去掉部分熊和肩部，保留脸、头发与领口），用 premultiplied-alpha
+  Lanczos 下采样和轻量锐化重制 `godot/icon_titlebar.png`；Godot headless
+  重新导入成功，`bash tools/smoke-godot.sh` 全过，`pictures=4 sprites=4`。
+  后续验收预览直接看 256×256 源图，32px 只按实际标题栏大小查看，不再用
+  最近邻放大图判断画质。

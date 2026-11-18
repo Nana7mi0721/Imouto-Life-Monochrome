@@ -281,6 +281,61 @@ fn the_second_page_counts_from_five() {
     assert_eq!(hit.path, save_file(7));
 }
 
+/// A page turn changes the grid's page before CE94 has redrawn the rows.
+///
+/// Until each row is rebuilt, the old pictures still carry the previous page's raw
+/// texts. The host override must hide that stale row instead of falling back to the
+/// script strings; otherwise the last frame shows the old slot number and brother
+/// title during the turn.
+#[test]
+fn a_page_turn_never_shows_the_previous_pages_raw_text() {
+    let Some(mut game) = grid() else { return };
+
+    game.key_bits = wolf_game::key::RIGHT;
+    game.frame();
+    game.key_bits = 0;
+    let first_slot = game
+        .selected_save_slot()
+        .expect("the keyboard cursor is on a slot")
+        .slot;
+    assert_eq!(first_slot, 5, "the right key turns to the second page");
+
+    for frame in 0..8 {
+        assert_visible_save_text_matches_page(&game, first_slot, frame);
+        game.frame();
+    }
+    assert_eq!(
+        slot_text(&game, 12052),
+        "数据 5",
+        "the rebuilt second page shows its own label"
+    );
+
+    game.key_bits = wolf_game::key::LEFT;
+    let mut first_slot = 5;
+    for frame in 0..12 {
+        game.frame();
+        first_slot = game
+            .selected_save_slot()
+            .expect("the keyboard cursor is on a slot")
+            .slot;
+        assert_visible_save_text_matches_page(&game, first_slot, frame);
+        if first_slot == 1 {
+            break;
+        }
+    }
+    game.key_bits = 0;
+    assert_eq!(first_slot, 1, "the left key returns to the first page");
+    for frame in 0..8 {
+        assert_visible_save_text_matches_page(&game, first_slot, frame);
+        game.frame();
+    }
+    assert_eq!(
+        slot_text(&game, 12052),
+        "数据 1 自动存档",
+        "the rebuilt first page shows its auto-save label"
+    );
+}
+
 /// A slot that holds a save says so.
 #[test]
 fn a_slot_with_a_save_reports_occupied() {
@@ -313,6 +368,34 @@ fn slot_text(game: &Game, number: i32) -> String {
         .map(|text| text.text)
         .collect::<Vec<_>>()
         .join("")
+}
+
+/// Asserts that every visible row belongs to `first_slot`'s page.
+///
+/// A row in the middle of a page turn may be blank while its pictures are waiting
+/// to be rebuilt, but it must never show the previous page's label, playtime or
+/// summary. Blanking all three at once also proves the stale row was suppressed as
+/// a unit rather than only its label.
+fn assert_visible_save_text_matches_page(game: &Game, first_slot: i32, frame: usize) {
+    for row in 0..4 {
+        let base = 12050 + 20 * row;
+        let label = slot_text(game, base + 2);
+        let detail = slot_text(game, base + 3);
+        let status = slot_text(game, base + 5);
+        if label.is_empty() {
+            assert!(
+                detail.is_empty() && status.is_empty(),
+                "frame {frame} row {row}: a stale row leaked text \
+                 (label={label:?}, detail={detail:?}, status={status:?})"
+            );
+            continue;
+        }
+        let slot = first_slot + row;
+        assert!(
+            label.starts_with(&format!("数据 {slot}")),
+            "frame {frame} row {row}: label {label:?} does not belong to slot {slot}"
+        );
+    }
 }
 
 #[test]

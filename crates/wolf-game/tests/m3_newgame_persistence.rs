@@ -374,8 +374,10 @@ fn title_new_game_reaches_sample_map_a_and_records_initial_state() {
     assert_no_unexpected_warnings(&game);
 
     // 初始节奏（与 m3_map_events / m6 实测一致）：第 1 天 周一 19:30。
-    // 初始金钱与妹妹位置（v14）都含随机抽样（事件脚本用 121 的 0x6000），零售 PRNG
-    // 移植后具体数值会变（旧 xorshift 采样是 15466 / 2），因此只约束合理区间。
+    // 初始金钱与妹妹位置（v14）都含随机抽样（事件脚本用 121 的 0x6000）。
+    // 本作固定随机表让首称号抽到「熊头」并扣 10000；低薪职业余额被 CE242 clamp 到
+    // 0 后，pc300 再加 10000 伙食费，所以可见余额落在 10000。职业 roll 本身由
+    // m27_opening_choice_cancel 单独验证，不能只看 HUD 余额。
     assert_eq!(var(&game, 99), 1, "初始同居天数 v99=1");
     assert_eq!(var(&game, 6), 0, "初始星期 v6=0 (周一)");
     assert_eq!(
@@ -386,7 +388,7 @@ fn title_new_game_reaches_sample_map_a_and_records_initial_state() {
     let money = var(&game, 7);
     assert!(
         (10_000..=20_000).contains(&money),
-        "初始金钱应为 10000（开场随机分支会被剧本收尾覆盖）, got {money}"
+        "固定种子下的开场余额应在 10000..=20000, got {money}"
     );
     let sister_position = var(&game, 14);
     assert!(

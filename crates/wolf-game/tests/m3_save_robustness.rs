@@ -2,10 +2,9 @@
 //!
 //! The matrix exercises the three public load entry points:
 //! SaveFile::parse, savegame::read_save and Game::load_save. Every malformed file
-//! must return Err without panicking. Two source-level gaps discovered while writing
-//! this test are pinned explicitly and reported to the Lead:
-//!   * a wrong stored checksum is detected by SaveFile::checksum_ok but is NOT
-//!     rejected by parse/read_save/Game::load_save;
+//! must return Err without panicking. Two checksum behaviours are pinned explicitly:
+//!   * a wrong stored checksum is detected by SaveFile::checksum_ok, but the parser
+//!     and every load entry point stay tolerant and load with a warning;
 //!   * Game::save_to creates a missing parent directory (game.rs:487), so only a
 //!     parent that cannot be created (a regular file in the path) is an error.
 //!
@@ -252,32 +251,31 @@ fn corrupt_save_files_return_err_without_panicking() {
     });
 }
 
-/// Pin the current checksum gap: the byte is exposed and checksum_ok sees it, but
-/// neither parser rejects the file and Game::load_save happily loads it.
+/// A mismatched checksum is reported, not rejected: parse/read_save/Game::load_save
+/// all keep the damage recoverable and the game layer adds a diagnostic warning.
 #[test]
-fn wrong_checksum_is_detected_but_not_rejected_by_current_load_paths() {
+fn wrong_checksum_is_detected_and_loaded_with_a_warning() {
     let Some(valid) = valid_save_bytes() else {
         return;
     };
     let Some(mut game) = open_game() else {
         return;
     };
-    let scratch = Scratch::new("checksum_gap");
+    let scratch = Scratch::new("checksum_warning");
 
-    preserve_save_dir("checksum gap", || {
+    preserve_save_dir("checksum warning", || {
         let mut bytes = valid.clone();
         bytes[2] = bytes[2].wrapping_add(1);
         let path = scratch.write("bad_checksum.sav", &bytes);
 
-        let save = SaveFile::parse(&bytes).expect("CURRENT GAP: parse accepts a bad checksum");
+        let save = SaveFile::parse(&bytes).expect("parse accepts a bad checksum for recovery");
         assert!(!save.checksum_ok(), "checksum_ok must report the mismatch");
         println!(
-            "checksum gap: stored={} computed={}",
+            "checksum mismatch: stored={} computed={}",
             save.stored_checksum, save.computed_checksum
         );
 
-        let read =
-            savegame::read_save(&path).expect("CURRENT GAP: read_save accepts a bad checksum");
+        let read = savegame::read_save(&path).expect("read_save accepts a bad checksum");
         assert!(
             !read.checksum_ok(),
             "read_save result must report checksum_ok=false"
@@ -285,10 +283,21 @@ fn wrong_checksum_is_detected_but_not_rejected_by_current_load_paths() {
 
         let loaded = game
             .load_save(&path)
-            .expect("CURRENT GAP: Game::load_save accepts a bad checksum");
+            .expect("Game::load_save accepts a bad checksum");
+        assert!(
+            !loaded.checksum_valid,
+            "the load result must flag the checksum mismatch"
+        );
         println!(
-            "checksum gap: Game::load_save returned pictures={}",
+            "checksum mismatch: Game::load_save returned pictures={}",
             loaded.pictures
+        );
+        assert!(
+            game.diagnostics
+                .keys()
+                .any(|message| message.starts_with("SaveChecksum:")),
+            "a mismatched checksum must surface as a diagnostic warning: {:?}",
+            game.diagnostics
         );
 
         let frame = catch_unwind(AssertUnwindSafe(|| game.frame()));
@@ -297,36 +306,6 @@ fn wrong_checksum_is_detected_but_not_rejected_by_current_load_paths() {
             "a bad-checksum load must not leave the game unusable"
         );
     });
-}
-
-/// Desired behaviour after the checksum gap is fixed. Keep ignored until then.
-#[test]
-#[ignore = "API gap: SaveFile::parse/read_save/Game::load_save do not validate the stored checksum"]
-fn wrong_checksum_is_rejected_by_all_load_paths() {
-    let Some(valid) = valid_save_bytes() else {
-        return;
-    };
-    let Some(mut game) = open_game() else {
-        return;
-    };
-    let scratch = Scratch::new("checksum_fixed");
-
-    let mut bytes = valid.clone();
-    bytes[2] = bytes[2].wrapping_add(1);
-    let path = scratch.write("bad_checksum.sav", &bytes);
-
-    assert!(
-        SaveFile::parse(&bytes).is_err(),
-        "SaveFile::parse must reject a bad checksum"
-    );
-    assert!(
-        savegame::read_save(&path).is_err(),
-        "read_save must reject a bad checksum"
-    );
-    assert!(
-        game.load_save(&path).is_err(),
-        "Game::load_save must reject a bad checksum"
-    );
 }
 
 #[test]

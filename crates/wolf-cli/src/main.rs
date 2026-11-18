@@ -4130,6 +4130,12 @@ fn run_capture(
                         "  loaded    : {} picture(s), {} normal variable(s), playtime {} frame(s), choice anchor {:?}",
                         loaded.pictures, loaded.normal_vars, loaded.playtime_frames, loaded.choice_anchor
                     );
+                    if !loaded.checksum_valid {
+                        eprintln!(
+                            "  warning   : save checksum mismatch in {}; loaded anyway",
+                            path.display()
+                        );
+                    }
                     // A bare load leaves the map runtime empty. The retail 220 path
                     // restarts the map from the save-menu coroutine; the CLI has no
                     // such coroutine, so rebuild it from the SavePart1 snapshot.
@@ -4467,10 +4473,18 @@ fn run_capture_map(
     }
     if let Some(path) = load_save {
         match game.load_save(path) {
-            Ok(loaded) => println!(
-                "  loaded    : {} picture(s), {} normal variable(s), playtime {} frame(s), choice anchor {:?}",
-                loaded.pictures, loaded.normal_vars, loaded.playtime_frames, loaded.choice_anchor
-            ),
+            Ok(loaded) => {
+                println!(
+                    "  loaded    : {} picture(s), {} normal variable(s), playtime {} frame(s), choice anchor {:?}",
+                    loaded.pictures, loaded.normal_vars, loaded.playtime_frames, loaded.choice_anchor
+                );
+                if !loaded.checksum_valid {
+                    eprintln!(
+                        "  warning   : save checksum mismatch in {}; loaded anyway",
+                        path.display()
+                    );
+                }
+            }
             Err(err) => {
                 eprintln!("{err}");
                 return ExitCode::FAILURE;

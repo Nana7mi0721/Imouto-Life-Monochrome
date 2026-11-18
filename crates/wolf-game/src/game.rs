@@ -2136,24 +2136,58 @@ impl Game {
     fn save_slot_text_override(&self, number: i32) -> Option<String> {
         let grid = self.save_grid_state()?;
         for row in 0..grid.per_page {
-            let label = 12052 + 20 * row;
-            let detail = 12053 + 20 * row;
+            let base = 12050 + 20 * row;
+            let label = base + 2;
+            let detail = base + 3;
+            let status = base + 5;
+            if number != label && number != detail && number != status {
+                continue;
+            }
             let slot = grid.slot_of_row(row);
-            if number == label && slot == 1 {
-                return Some("\\f[19]数据 1 自动存档".to_owned());
+            if !self.save_grid_label_is_current(label, slot) {
+                // CE131 changes the page before CE94 has rebuilt every row. Until the
+                // label picture itself carries the new slot number, the other text
+                // pictures still hold the previous page's raw strings; hiding the row
+                // avoids painting those stale labels, playtimes and titles for a frame.
+                return Some(String::new());
+            }
+            if number == label {
+                if slot == 1 {
+                    return Some("\\f[19]数据 1 自动存档".to_owned());
+                }
+                continue;
             }
             if number == detail {
                 if let Some(summary) = self.save_summary(slot) {
                     return Some(format!("\\f[19] {}", summary.playtime()));
                 }
+                continue;
             }
-            if number == 12055 + 20 * row {
+            if number == status {
                 if let Some(summary) = self.save_summary(slot) {
                     return Some(format!("\\f[16]{}", summary.status_line()));
                 }
             }
         }
         None
+    }
+
+    /// True when CE94 has redrawn this row's label for the current page.
+    ///
+    /// CE94 writes the slot number last in the label string. The picture and its
+    /// detail/status neighbours are rebuilt as one block, so a numeric suffix that
+    /// still names the previous page is a reliable sign that the whole row is stale.
+    fn save_grid_label_is_current(&self, label: i32, slot: i32) -> bool {
+        let Some(picture) = self.screen.get(label) else {
+            return false;
+        };
+        let text = picture.text.trim_end();
+        let number_start = text
+            .char_indices()
+            .rev()
+            .find(|(_, ch)| !ch.is_ascii_digit())
+            .map_or(0, |(index, ch)| index + ch.len_utf8());
+        text[number_start..].parse::<i32>() == Ok(slot)
     }
 
     /// Writes the daily auto-save when the evening meal ends.
@@ -2341,6 +2375,10 @@ impl Game {
         self.current_map_path = None;
         self.tilemap = None;
         self.screen.clear();
+        // The decoded-image cache is only useful while a session is running. Drop it
+        // on the way back to the title so a long session cannot keep every viewed CG
+        // and HUD frame resident; boot decodes what the title needs again.
+        self.assets.clear();
         self.screen_tint = ScreenTint::default();
         self.screen_transition = ScreenTransition::default();
         self.messages.clear();
@@ -2717,12 +2755,14 @@ impl Game {
     /// `130 Teleport` runs on the same VM, so the current map coroutines are stopped
     /// first: leaving them alive would keep a previous map parallel events
     /// drawing into the new map. Engine events are session-wide and keep running.
+    ///
+    /// Picture layers deliberately survive the switch. WOLF's `130` changes the map,
+    /// not the picture store: the new-game processing map draws its black overlay
+    /// over the still-visible title art and erases both itself. Dropping the negative
+    /// layers here made the title background vanish before that overlay was opaque,
+    /// so the title flashed back during the fade.
     fn switch_map(&mut self, path: &str) -> Result<(), GameError> {
         self.runtime.stop_all(&mut self.vm);
-        // Whole-screen layers belong to the map that drew them. The new map's
-        // events rebuild whatever overlay it needs; leaving the old map's title
-        // art in the negative slots painted it on top of the new scene.
-        self.screen.clear_screen_layers();
         let bytes = self.read(path)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, None);
@@ -3789,13 +3829,13 @@ impl Game {
             // an unrelated hotspot behind the icon.
             self.mouse_consumed = true;
             let mut started = self.runtime.action_key_event(&mut self.vm, event);
-            if started.is_none() && matches!(event, 5 | 21 | 22 | 28 | 30 | 35) {
-                // The night end arrow, pose button and save icon are visible in action
-                // submenus even when v100 is temporarily changed or page conditions
-                // require ignoring strict map conditions.
+            if started.is_none() && matches!(event, 5 | 21 | 22 | 28) {
+                // The visible night icons outlive the interaction-mode variable the
+                // submenu rewrites (v100/深夜1). Every other page gate keeps its
+                // script meaning; event 35 (album) is driven by its parallel page.
                 started = self
                     .runtime
-                    .action_key_event_ignoring_conditions(&mut self.vm, event);
+                    .action_key_event_ignoring_interaction_mode(&mut self.vm, event);
             }
             if let Some(id) = started {
                 self.last_action_event = Some(id);
@@ -4151,29 +4191,35 @@ impl Game {
             // A click outside the panel used to be swallowed and ignored, which felt
             // like a dead prompt. When the script allows cancelling (opcode 102 has a
             // 421 cancel marker) treat the outside click as cancel, just like a right
-            // click; when it does not, leave the edge unconsumed so a parallel event
-            // can still see it rather than having its input silently eaten.
+            // click. Without a marker it must be a complete no-op: the prompt still
+            // owns the edge, so consuming it here keeps a carried press from activating
+            // a map hotspot after the prompt closes, while no CANCEL reaches the VM.
             //
             // A 101 immediately followed by 102 keeps its message visible while the
             // options are already up. In that state the same click has to advance the
             // message first (`message_dismissed`), not cancel the prompt and throw the
             // options away. Once the body is gone, outside-click cancellation resumes.
-            if self.messages.is_empty() && self.choice_cancel_allowed() {
+            if self.messages.is_empty() {
                 self.mouse_consumed = true;
-                self.reply(ChoiceReply::Cancel);
-                self.choice_cursor = 0;
+                if self.choice_cancel_allowed() {
+                    self.reply(ChoiceReply::Cancel);
+                    self.choice_cursor = 0;
+                }
                 return;
             }
         }
-        // A right click cancels, exactly like the keyboard CANCEL key. The night menus open
-        // their prompt through opcode 102 (their own loop drives rows with key_code 123),
-        // so this is the only path a right click has to leave such a choice open. Like the
-        // keyboard, only a fresh press edge counts, not a held button.
+        // A right click cancels exactly like the keyboard CANCEL key, but only when the
+        // 102 block carries a 421 marker. The night menus have one, so this is the only
+        // path a right click has to leave such a choice open. A prompt without one owns
+        // the press all the same - otherwise the unconsumed edge could run a map hotspot
+        // once the prompt closes. Like the keyboard, only a fresh press edge counts.
         let right_clicked = self.mouse_buttons & 2 != 0 && self.previous_mouse_buttons & 2 == 0;
         if right_clicked {
             self.mouse_consumed = true;
-            self.reply(ChoiceReply::Cancel);
-            self.choice_cursor = 0;
+            if self.choice_cancel_allowed() {
+                self.reply(ChoiceReply::Cancel);
+                self.choice_cursor = 0;
+            }
             return;
         }
         // Hover highlight: when the pointer moved this frame and lands on a row, follow it so
@@ -4204,9 +4250,13 @@ impl Game {
             // edge; the player's next press is a new intent.
             self.key_bits &= !crate::key::OK;
         } else if pressed & crate::key::CANCEL != 0 {
-            self.reply(ChoiceReply::Cancel);
-            self.choice_cursor = 0;
+            // The prompt owns CANCEL even when it has no 421 branch: spend the key
+            // edge so a parallel key poll cannot see it, but do not answer the VM.
             self.key_bits &= !crate::key::CANCEL;
+            if self.choice_cancel_allowed() {
+                self.reply(ChoiceReply::Cancel);
+                self.choice_cursor = 0;
+            }
         }
     }
 
@@ -7087,9 +7137,11 @@ mod tests {
         );
     }
 
-    /// A right mouse press cancels an open choice exactly like the keyboard CANCEL key.
+    /// A prompt without a 421 marker has no cancel branch: the right press is
+    /// still spent by the prompt (so it cannot leak to a later map poll), but no
+    /// CANCEL reaches the VM and the options stay up.
     #[test]
-    fn a_right_click_cancels_an_open_choice() {
+    fn a_right_click_without_a_cancel_branch_is_consumed_and_ignored() {
         let Some(root) = have_data() else { return };
         let mut game = Game::new(&root).expect("game");
         game.choices = Some(Choices {
@@ -7099,9 +7151,44 @@ mod tests {
         });
         game.mouse_buttons = 2;
         game.previous_mouse_buttons = 0;
+        game.mouse_consumed = false;
         game.handle_choice_input();
-        assert_eq!(game.replies.back(), Some(&ChoiceReply::Cancel));
+        assert!(
+            game.replies.is_empty(),
+            "a 102 without a 421 marker must not receive CANCEL"
+        );
+        assert!(
+            game.mouse_consumed,
+            "the prompt must still own the right-button edge"
+        );
+        assert!(game.choices.is_some(), "the options must stay up");
         assert_eq!(game.choice_cursor(), 0);
+    }
+
+    /// The keyboard CANCEL path obeys the same rule: spend the key edge while a
+    /// choice is open, but only answer the VM when the block has a 421 marker.
+    #[test]
+    fn a_cancel_key_without_a_cancel_branch_is_spent_without_answering() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.choices = Some(Choices {
+            options: vec!["one".to_owned(), "two".to_owned(), "three".to_owned()],
+            sources: vec![0, 1, 2],
+            frames: 0,
+        });
+        game.key_bits = crate::key::CANCEL;
+        game.previous_keys = 0;
+        game.handle_choice_input();
+        assert!(
+            game.replies.is_empty(),
+            "a 102 without a 421 marker must not receive CANCEL"
+        );
+        assert_eq!(
+            game.key_bits & crate::key::CANCEL,
+            0,
+            "the open prompt must spend the CANCEL edge"
+        );
+        assert!(game.choices.is_some(), "the options must stay up");
     }
 
     /// A 101 immediately followed by 102 keeps the message and the options up

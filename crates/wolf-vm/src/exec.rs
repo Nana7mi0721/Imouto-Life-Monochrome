@@ -1467,12 +1467,16 @@ impl Vm {
                 }
                 WaitState::MessageWithChoices { block } => {
                     if let Some(reply) = host.choice_made() {
-                        let target = choice_target(&self.instances[i], block, reply);
-                        if let Some(target) = target {
+                        // A reply only resolves the wait when the block has a body
+                        // for it. A CANCEL on a 102 without a 421 marker has no
+                        // target: the original leaves the prompt up, so closing
+                        // the message or dropping the wait here would turn a
+                        // stray cancel into a skipped choice.
+                        if let Some(target) = choice_target(&self.instances[i], block, reply) {
                             self.instances[i].pc = target;
+                            host.close_message();
+                            self.instances[i].wait = WaitState::None;
                         }
-                        host.close_message();
-                        self.instances[i].wait = WaitState::None;
                     } else if host.message_dismissed() {
                         // A click on empty space only advances the text. The option
                         // window stays up and becomes the sole owner of the next click.
@@ -1482,11 +1486,10 @@ impl Vm {
                 }
                 WaitState::Choice { block } => {
                     if let Some(reply) = host.choice_made() {
-                        let target = choice_target(&self.instances[i], block, reply);
-                        if let Some(target) = target {
+                        if let Some(target) = choice_target(&self.instances[i], block, reply) {
                             self.instances[i].pc = target;
+                            self.instances[i].wait = WaitState::None;
                         }
-                        self.instances[i].wait = WaitState::None;
                     }
                 }
             }
@@ -3556,12 +3559,10 @@ fn choice_target(inst: &Instance, block: usize, reply: ChoiceReply) -> Option<us
             .get(block)
             .and_then(|b| b.case_target(index as i32 + 2))
             .or_else(|| inst.program.blocks.get(block).map(|b| b.end_target(len))),
-        ChoiceReply::Cancel => inst
-            .program
-            .blocks
-            .get(block)
-            .and_then(|b| b.cancel_pc)
-            .or_else(|| inst.program.blocks.get(block).map(|b| b.end_target(len))),
+        // Only a 421 marker gives CANCEL somewhere to go. Without one the
+        // original keeps the prompt open; falling back to the block end would
+        // skip every instruction in the selection block.
+        ChoiceReply::Cancel => inst.program.blocks.get(block).and_then(|b| b.cancel_pc),
     }
 }
 

@@ -1,0 +1,583 @@
+#!/usr/bin/env bash
+# tools/package-godot.sh - build and package the Godot front-end release.
+#
+# Produces:
+#   work/out/dist/godot/<version>/
+#     Imouto Life.exe       Godot release export (embedded PCK)
+#     wolf_gdext.dll         release GDExtension copied by the exporter
+#     Data/                  exact release whitelist + clean System.sav
+#     README.txt
+#     checksums.txt
+#   work/out/dist/godot/
+#     Imouto Life setup.zip  portable package with the game folder at the root
+#     Imouto Life setup.exe  Inno Setup installer (optional; needs ISCC.exe)
+#
+# The Windows Desktop export preset excludes addons/godot_ai/*, tests/*,
+# transient bin/~* libraries and the icon source used only to stamp the exe.
+# Data is staged from tools/package/release-data.manifest and contains exactly
+# that allowlist plus one clean Data/Save/System.sav.  The helper validates
+# every path, rejects symlink escapes, and checks the final file set exactly.
+# The script does not download Godot export templates; it stops with a clear
+# error when the matching 4.7.x templates are missing.
+#
+# Usage:
+#   tools/package-godot.sh [options]
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO"
+source tools/env.sh >/dev/null 2>&1
+
+VERSION=""
+DATA_ROOT="work/Data"
+OUT_DIR=""
+ZIP_DIR="work/out/dist/godot"
+SYSTEM_SAVE_OPT=""
+GODOT="${GODOT_BIN:-/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64.exe}"
+PRESET_NAME="Windows Desktop"
+MAKE_ZIP=1
+MAKE_SETUP=1
+SKIP_BUILD=0
+FORCE=0
+DRY_RUN=0
+MANIFEST="tools/package/release-data.manifest"
+ISCC_OPT=""
+
+usage() {
+    cat <<'USAGE'
+Usage: tools/package-godot.sh [options]
+
+  --version V          package version (default: [workspace.package])
+  --data-root DIR      unpacked game data (default: work/Data)
+  --manifest FILE      release Data allowlist
+                       (default: tools/package/release-data.manifest)
+  --out-dir DIR        release folder (default: work/out/dist/godot/<version>)
+  --zip-dir DIR        release archive folder (default: work/out/dist/godot)
+  --system-save FILE   clean System.sav to ship (default: retail template,
+                       then <data-root>/Save/System.sav)
+  --godot PATH         Godot editor executable (default: GODOT_BIN or 4.7.2)
+  --preset NAME        export preset (default: "Windows Desktop")
+  --no-zip             do not create the zip archive
+  --no-setup           do not create the Inno Setup installer
+  --iscc PATH          Inno Setup command-line compiler
+  --skip-build         reuse godot/bin/wolf_gdext.dll
+  --force              replace an existing --out-dir
+  --dry-run            data-plan only: print filters/template status without
+                       building, exporting, or copying the source data tree
+  -h, --help           show this help
+USAGE
+}
+
+die() {
+    echo "error: $*" >&2
+    exit 1
+}
+
+need_arg() {
+    if [ "$#" -lt 2 ]; then
+        echo "option requires a value: $1" >&2
+        exit 2
+    fi
+}
+
+abs_path() {
+    local path
+    case "$1" in
+        /*) path="$1" ;;
+        *) path="$REPO/$1" ;;
+    esac
+    realpath -m -- "$path"
+}
+
+preset_value() {
+    awk -v key="$1" '
+        index($0, key "=\"") == 1 {
+            value = substr($0, length(key) + 3)
+            sub(/"$/, "", value)
+            print value
+            exit
+        }
+    ' "$PRESET_FILE"
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --version)     need_arg "$@"; VERSION="$2"; shift 2 ;;
+        --data-root)   need_arg "$@"; DATA_ROOT="$2"; shift 2 ;;
+        --manifest)    need_arg "$@"; MANIFEST="$2"; shift 2 ;;
+        --out-dir)     need_arg "$@"; OUT_DIR="$2"; shift 2 ;;
+        --zip-dir)     need_arg "$@"; ZIP_DIR="$2"; shift 2 ;;
+        --system-save) need_arg "$@"; SYSTEM_SAVE_OPT="$2"; shift 2 ;;
+        --godot)       need_arg "$@"; GODOT="$2"; shift 2 ;;
+        --preset)      need_arg "$@"; PRESET_NAME="$2"; shift 2 ;;
+        --no-zip)      MAKE_ZIP=0; shift ;;
+        --no-setup)    MAKE_SETUP=0; shift ;;
+        --iscc)        need_arg "$@"; ISCC_OPT="$2"; shift 2 ;;
+        --skip-build)  SKIP_BUILD=1; shift ;;
+        --force)       FORCE=1; shift ;;
+        --dry-run)     DRY_RUN=1; shift ;;
+        -h|--help)     usage; exit 0 ;;
+        *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+if [ -z "$VERSION" ]; then
+    VERSION="$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml \
+        | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+        | head -n1)"
+fi
+[ -n "$VERSION" ] || die "cannot read [workspace.package] version from Cargo.toml"
+VERSION4="$VERSION"
+case "$VERSION4" in
+    *.*.*.*) ;;
+    *.*.*) VERSION4="$VERSION4.0" ;;
+    *.*)   VERSION4="$VERSION4.0.0" ;;
+    *)     VERSION4="$VERSION4.0.0.0" ;;
+esac
+
+DATA_ROOT="$(abs_path "$DATA_ROOT")"
+[ -d "$DATA_ROOT/BasicData" ] || die "data root has no BasicData: $DATA_ROOT"
+MANIFEST="$(abs_path "$MANIFEST")"
+[ -f "$MANIFEST" ] || die "release manifest not found: $MANIFEST"
+
+if [ -z "$OUT_DIR" ]; then
+    OUT_DIR="$REPO/work/out/dist/godot/$VERSION"
+fi
+OUT_DIR="$(abs_path "$OUT_DIR")"
+ZIP_DIR="$(abs_path "$ZIP_DIR")"
+GAME_FOLDER_NAME="妹！生活 ～单色～ Godot"
+ARTIFACT_BASE="Imouto Life setup"
+ZIP_PATH="$ZIP_DIR/$ARTIFACT_BASE.zip"
+SETUP_PATH="$ZIP_DIR/$ARTIFACT_BASE.exe"
+OUT_DIR_LOWER="$(printf '%s' "$OUT_DIR" | tr '[:upper:]' '[:lower:]')"
+ZIP_PATH_LOWER="$(printf '%s' "$ZIP_PATH" | tr '[:upper:]' '[:lower:]')"
+SETUP_PATH_LOWER="$(printf '%s' "$SETUP_PATH" | tr '[:upper:]' '[:lower:]')"
+for artifact in "$ZIP_PATH_LOWER" "$SETUP_PATH_LOWER"; do
+    case "$artifact" in
+        "$OUT_DIR_LOWER"/*)
+            die "--zip-dir must not be inside --out-dir: $ZIP_DIR"
+            ;;
+    esac
+done
+
+GODOT_PROJECT="$REPO/godot"
+PRESET_FILE="$GODOT_PROJECT/export_presets.cfg"
+GDEXT_FILE="$GODOT_PROJECT/bin/wolf_gdext.gdextension"
+DLL_FILE="$GODOT_PROJECT/bin/wolf_gdext.dll"
+EXPORT_EXE="$OUT_DIR/Imouto Life.exe"
+RELEASE_DATA_TOOL="$REPO/tools/package/release_data.py"
+[ -f "$RELEASE_DATA_TOOL" ] || die "release Data helper missing: $RELEASE_DATA_TOOL"
+VERSION_LANGUAGE_TOOL="$REPO/tools/package/windows_version_language.py"
+[ -f "$VERSION_LANGUAGE_TOOL" ] || \
+    die "Windows version-language helper missing: $VERSION_LANGUAGE_TOOL"
+ICON_FILE="$GODOT_PROJECT/icon_windows.png"
+INNO_TEMPLATE="$REPO/tools/package/ImoutoLife.iss.in"
+INNO_RENDERER="$REPO/tools/package/render_inno.py"
+SETUP_ICON="$REPO/tools/package/icon_windows.ico"
+
+SYSTEM_SAVE=""
+SYSTEM_SAVE_SOURCE=""
+if [ -n "$SYSTEM_SAVE_OPT" ]; then
+    SYSTEM_SAVE="$(abs_path "$SYSTEM_SAVE_OPT")"
+    SYSTEM_SAVE_SOURCE="--system-save"
+elif [ -f "$REPO/work/out/retail_saves/System.sav" ]; then
+    SYSTEM_SAVE="$REPO/work/out/retail_saves/System.sav"
+    SYSTEM_SAVE_SOURCE="work/out/retail_saves/System.sav"
+elif [ -f "$DATA_ROOT/Save/System.sav" ]; then
+    SYSTEM_SAVE="$DATA_ROOT/Save/System.sav"
+    SYSTEM_SAVE_SOURCE="$DATA_ROOT/Save/System.sav (fallback)"
+    echo "warning: clean retail template not found at work/out/retail_saves/System.sav" >&2
+    echo "warning: falling back to $SYSTEM_SAVE" >&2
+    echo "warning: the fallback may contain local system settings; prefer the retail template for release" >&2
+else
+    die "no clean System.sav template found (checked work/out/retail_saves/System.sav and $DATA_ROOT/Save/System.sav)"
+fi
+[ -s "$SYSTEM_SAVE" ] || die "System.sav template is empty: $SYSTEM_SAVE"
+[ "$(basename "$SYSTEM_SAVE" | tr '[:upper:]' '[:lower:]')" = "system.sav" ] || \
+    die "System.sav template must be named System.sav: $SYSTEM_SAVE"
+
+[ -x "$GODOT" ] || die "Godot executable not found: $GODOT"
+[ -f "$PRESET_FILE" ] || die "missing export preset: $PRESET_FILE"
+[ -f "$GDEXT_FILE" ] || die "missing GDExtension manifest: $GDEXT_FILE"
+[ -f "$ICON_FILE" ] || die "missing Windows executable icon: $ICON_FILE"
+[ -f "$INNO_TEMPLATE" ] || die "missing Inno Setup template: $INNO_TEMPLATE"
+[ -f "$INNO_RENDERER" ] || die "missing Inno Setup renderer: $INNO_RENDERER"
+[ -f "$SETUP_ICON" ] || die "missing Inno Setup icon: $SETUP_ICON"
+
+PRESET_SECTION="$(awk -v target="$PRESET_NAME" '
+    function emit() {
+        if (matched) {
+            printf "%s", buf
+            found = 1
+        }
+    }
+    /^\[preset\.[0-9]+\]$/ {
+        if (in_preset) emit()
+        in_preset = 1
+        matched = 0
+        buf = ""
+        next
+    }
+    /^\[/ {
+        if (in_preset) {
+            emit()
+            in_preset = 0
+        }
+        next
+    }
+    in_preset {
+        buf = buf $0 "\n"
+        if ($0 == "name=\"" target "\"") matched = 1
+    }
+    END {
+        if (in_preset) emit()
+        if (!found) exit 1
+    }
+' "$PRESET_FILE")" || die "export preset not found: $PRESET_NAME"
+
+for expected in \
+    'platform="Windows Desktop"' \
+    'export_filter="all_resources"' \
+    'include_filter="bin/*.gdextension"' \
+    'exclude_filter="addons/godot_ai/*,tests/*,bin/~*,bin/*.dll,icon_windows.png"'
+do
+    grep -Fq -- "$expected" <<< "$PRESET_SECTION" || \
+        die "export preset $PRESET_NAME is missing: $expected"
+done
+grep -Fq 'application/modify_resources=true' "$PRESET_FILE" || \
+    die "export preset $PRESET_NAME must enable Windows resource modification"
+grep -Fq 'application/icon="res://icon_windows.png"' "$PRESET_FILE" || \
+    die "export preset $PRESET_NAME must use res://icon_windows.png"
+PRESET_FILE_VERSION="$(preset_value application/file_version)"
+PRESET_PRODUCT_VERSION="$(preset_value application/product_version)"
+APP_PUBLISHER="$(preset_value application/company_name)"
+PRESET_PRODUCT_NAME="$(preset_value application/product_name)"
+PRESET_FILE_DESCRIPTION="$(preset_value application/file_description)"
+APP_COPYRIGHT="$(preset_value application/copyright)"
+[ "$PRESET_FILE_VERSION" = "$VERSION4" ] || \
+    die "export preset $PRESET_NAME must set application/file_version=$VERSION4"
+[ "$PRESET_PRODUCT_VERSION" = "$VERSION4" ] || \
+    die "export preset $PRESET_NAME must set application/product_version=$VERSION4"
+[ -n "$APP_PUBLISHER" ] || die "export preset $PRESET_NAME must set application/company_name"
+[ "$PRESET_PRODUCT_NAME" = "$GAME_FOLDER_NAME" ] || \
+    die "export preset $PRESET_NAME must set application/product_name"
+[ "$PRESET_FILE_DESCRIPTION" = "$GAME_FOLDER_NAME" ] || \
+    die "export preset $PRESET_NAME must set application/file_description"
+[ -n "$APP_COPYRIGHT" ] || \
+    die "export preset $PRESET_NAME must set application/copyright"
+grep -Fq 'binary_format/embed_pck=true' "$PRESET_FILE" || \
+    die "export preset $PRESET_NAME must embed the PCK in the executable"
+grep -Fq 'binary_format/architecture="x86_64"' "$PRESET_FILE" || \
+    die "export preset $PRESET_NAME must target x86_64 Windows"
+grep -Fq 'windows.release.x86_64 = "res://bin/wolf_gdext.dll"' "$GDEXT_FILE" || \
+    die "$GDEXT_FILE does not declare the release Windows DLL"
+
+check_export_templates() {
+    local version_line template_key template_root
+    local missing=0
+    local name
+
+    version_line="$("$GODOT" --version 2>/dev/null | head -n1 | tr -d '\r')"
+    template_key="$(printf '%s\n' "$version_line" \
+        | sed -E 's/^([0-9]+\.[0-9]+(\.[0-9]+)?)\.(stable|beta[0-9]+|rc[0-9]+).*/\1.\3/')"
+    if [ "$template_key" = "$version_line" ] || [ -z "$template_key" ]; then
+        echo "error: cannot derive the Godot export-template version from: $version_line" >&2
+        return 1
+    fi
+    template_root="${GODOT_EXPORT_TEMPLATES:-${APPDATA:-$HOME/AppData/Roaming}/Godot/export_templates}"
+    TEMPLATE_DIR="$template_root/$template_key"
+
+    for name in windows_release_x86_64.exe windows_debug_x86_64.exe; do
+        if [ ! -f "$TEMPLATE_DIR/$name" ]; then
+            echo "  missing: $TEMPLATE_DIR/$name" >&2
+            missing=1
+        fi
+    done
+    if [ "$missing" -ne 0 ]; then
+        echo "error: Godot export templates for $template_key are not installed." >&2
+        echo "       Expected directory: $TEMPLATE_DIR" >&2
+        echo "       Install the matching official templates from Godot's" >&2
+        echo "       Editor > Manage Export Templates menu. This script never" >&2
+        echo "       downloads the template archive." >&2
+        return 1
+    fi
+    echo "==> export templates: $TEMPLATE_DIR"
+}
+
+find_iscc() {
+    local candidate
+    if [ -n "$ISCC_OPT" ]; then
+        candidate="$(abs_path "$ISCC_OPT")"
+        [ -x "$candidate" ] || return 1
+        ISCC="$candidate"
+        return 0
+    fi
+    for candidate in \
+        "${ISCC_BIN:-}" \
+        "$REPO/work/out/tools/InnoSetup6/ISCC.exe" \
+        "$REPO/work/out/tools/InnoSetup-6.7.4/ISCC.exe" \
+        "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+        "/c/Program Files/Inno Setup 6/ISCC.exe"
+    do
+        [ -n "$candidate" ] || continue
+        if [ -x "$candidate" ]; then
+            ISCC="$candidate"
+            return 0
+        fi
+    done
+    candidate="$(command -v ISCC.exe 2>/dev/null || true)"
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+        ISCC="$candidate"
+        return 0
+    fi
+    return 1
+}
+
+check_iscc() {
+    if ! find_iscc; then
+        echo "error: Inno Setup compiler (ISCC.exe) was not found." >&2
+        echo "       Install Inno Setup or pass --iscc PATH / set ISCC_BIN." >&2
+        return 1
+    fi
+    echo "==> Inno Setup compiler: $ISCC"
+}
+
+echo "==> version $VERSION"
+echo "==> Godot preset: $PRESET_NAME"
+echo "==> Data manifest: $MANIFEST"
+echo "==> System.sav template: $SYSTEM_SAVE_SOURCE"
+echo "    $SYSTEM_SAVE"
+echo "    sha256=$(sha256sum "$SYSTEM_SAVE" | awk '{print $1}')"
+
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo "==> dry-run (data plan only; not a full release preflight)"
+    python "$RELEASE_DATA_TOOL" plan --root "$DATA_ROOT" --manifest "$MANIFEST"
+    echo "    would add one clean Data/Save/System.sav"
+    if check_export_templates; then
+        echo "==> dry run: export templates available"
+    else
+        echo "warning: a real export would stop because export templates are missing" >&2
+    fi
+    if [ "$SKIP_BUILD" -eq 0 ]; then
+        echo "==> dry run: would build GDExtension with: bash tools/build-godot.sh --release"
+    else
+        echo "==> dry run: would reuse godot/bin/wolf_gdext.dll (--skip-build)"
+    fi
+    echo "==> dry run: would export to: $EXPORT_EXE"
+    echo "==> dry run: would create package in: $OUT_DIR"
+    if [ -e "$OUT_DIR" ] && [ "$FORCE" -ne 1 ]; then
+        echo "    note: output exists; a real run requires --force"
+    fi
+    if [ "$MAKE_ZIP" -eq 1 ]; then
+        echo "==> dry run: would create portable zip: $ZIP_PATH"
+    fi
+    if [ "$MAKE_SETUP" -eq 1 ]; then
+        if check_iscc; then
+            echo "==> dry run: would create installer: $SETUP_PATH"
+        else
+            echo "warning: a real run would stop because ISCC.exe is missing" >&2
+        fi
+    fi
+    exit 0
+fi
+
+if [ -e "$OUT_DIR" ] && [ "$FORCE" -ne 1 ]; then
+    echo "output folder already exists: $OUT_DIR" >&2
+    echo "pass --force to replace it" >&2
+    exit 2
+fi
+
+check_export_templates || exit 1
+if [ "$MAKE_SETUP" -eq 1 ]; then
+    check_iscc || exit 1
+fi
+
+if [ "$SKIP_BUILD" -eq 0 ]; then
+    echo "==> building release GDExtension"
+    bash tools/build-godot.sh --release
+else
+    echo "==> skipping GDExtension build (--skip-build)"
+fi
+[ -f "$DLL_FILE" ] || die "release GDExtension DLL missing: $DLL_FILE"
+
+if [ ! -f "$GODOT_PROJECT/.godot/extension_list.cfg" ]; then
+    echo "==> importing Godot project"
+    "$GODOT" --headless --path "$GODOT_PROJECT" --import
+fi
+
+if [ -e "$OUT_DIR" ]; then
+    if [ "$FORCE" -ne 1 ]; then
+        echo "output folder already exists: $OUT_DIR" >&2
+        echo "pass --force to replace it" >&2
+        exit 2
+    fi
+    case "$OUT_DIR" in
+        "$REPO/work/out/"*|/d/program/*|/D/program/*) ;;
+        *)
+            die "refusing to delete unexpected output folder: $OUT_DIR"
+            ;;
+    esac
+    echo "==> replacing $OUT_DIR"
+    rm -rf -- "$OUT_DIR"
+fi
+mkdir -p "$OUT_DIR"
+
+EXPORT_EXE_WIN="$(cygpath -w "$EXPORT_EXE")"
+GODOT_PROJECT_WIN="$(cygpath -w "$GODOT_PROJECT")"
+echo "==> exporting Godot release"
+"$GODOT" --headless --path "$GODOT_PROJECT_WIN" \
+    --export-release "$PRESET_NAME" "$EXPORT_EXE_WIN"
+
+[ -f "$EXPORT_EXE" ] || die "Godot export did not create: $EXPORT_EXE"
+echo "==> setting Windows version-resource language to zh-CN"
+python "$VERSION_LANGUAGE_TOOL" --exe "$EXPORT_EXE"
+if [ -f "$OUT_DIR/wolf_gdext.dll" ]; then
+    mkdir -p "$OUT_DIR/bin"
+    mv -f -- "$OUT_DIR/wolf_gdext.dll" "$OUT_DIR/bin/wolf_gdext.dll"
+fi
+[ -f "$OUT_DIR/bin/wolf_gdext.dll" ] || \
+    die "Godot export did not place wolf_gdext.dll at bin/wolf_gdext.dll"
+grep -aFq 'bin/wolf_gdext.gdextension' "$EXPORT_EXE" || \
+    die "exported executable does not contain bin/wolf_gdext.gdextension"
+python "$RELEASE_DATA_TOOL" verify-pck \
+    --exe "$EXPORT_EXE" \
+    --forbid-prefix "addons/godot_ai/" \
+    --forbid-prefix "tests/" \
+    --forbid "icon_windows.png" \
+    --require "bin/wolf_gdext.gdextension" \
+    --require "icon_titlebar.png.import" \
+    --require "window_icon.ico" \
+    --require "main.tscn.remap" \
+    --require "project.binary" \
+    --require "scripts/GameView.gdc" \
+    --require "scripts/WolfKeys.gdc" \
+    --require "scripts/WolfText.gdc"
+DLL_SHA="$(sha256sum "$DLL_FILE" | awk '{print $1}')"
+EXPORTED_DLL_SHA="$(sha256sum "$OUT_DIR/bin/wolf_gdext.dll" | awk '{print $1}')"
+[ "$DLL_SHA" = "$EXPORTED_DLL_SHA" ] || \
+    die "exported wolf_gdext.dll does not match godot/bin/wolf_gdext.dll"
+
+echo "==> staging the exact release Data manifest"
+python "$RELEASE_DATA_TOOL" stage \
+    --root "$DATA_ROOT" \
+    --manifest "$MANIFEST" \
+    --dest "$OUT_DIR/Data" \
+    --system-save "$SYSTEM_SAVE"
+
+BUILT="$(date -u +%Y-%m-%d)"
+echo "==> writing README.txt"
+sed 's/$/\r/' > "$OUT_DIR/README.txt" <<EOF
+========================================================================
+ 妹！生活 ～单色～ Godot  —  Windows 发布包  v$VERSION
+ 构建日期（UTC）：$BUILT
+========================================================================
+
+【怎么开始】
+  双击本文件夹里的「Imouto Life.exe」即可，不需要命令行。
+
+【文件夹说明】
+  Imouto Life.exe   ← 双击这个（Godot release 导出，PCK 已内嵌）
+  bin\wolf_gdext.dll ← Rust GDExtension（保留 bin\ 目录结构）
+  Data\             ← 精确发行素材清单，不含未使用地图/模板资源
+  README.txt        ← 本说明
+  checksums.txt     ← 发布包文件 SHA-256
+
+【存档】
+  Data\Save\ 只含一个干净的 System.sav 模板，
+  不含任何本地编号存档（SaveData*.sav）。
+  游戏内保存后会正常写入 Data\Save\。
+
+【排查】
+  - 确认 Imouto Life.exe、bin\wolf_gdext.dll 与 Data\ 保持发布包结构。
+  - 需要 64 位 Windows；首次启动可能稍慢。
+  - 如果 Godot 窗口闪退，请从命令行运行 exe 查看错误输出。
+
+【说明】
+  这是《妹！生活》的 Rust + Godot 重写版运行包，仅用于本地游玩与验证。
+  版本：v$VERSION    构建：$BUILT
+EOF
+
+echo "==> writing checksums.txt"
+(
+    cd "$OUT_DIR"
+    find . -type f ! -name 'checksums.txt' ! -name '.checksums.tmp' -print0 \
+        | LC_ALL=C sort -z \
+        | while IFS= read -r -d '' file; do
+            sha256sum -- "$file"
+        done > .checksums.tmp
+    mv .checksums.tmp checksums.txt
+)
+
+if [ "$MAKE_ZIP" -eq 1 ]; then
+    mkdir -p "$ZIP_DIR"
+    PORTABLE_STAGE="$REPO/work/out/portable/$VERSION"
+    PORTABLE_ROOT="$PORTABLE_STAGE/$GAME_FOLDER_NAME"
+    case "$PORTABLE_STAGE" in
+        "$REPO/work/out/portable/"*) ;;
+        *) die "refusing to replace unexpected portable staging folder: $PORTABLE_STAGE" ;;
+    esac
+    echo "==> creating portable zip: $ZIP_PATH"
+    rm -f -- "$ZIP_PATH" "$ZIP_PATH.sha256"
+    rm -rf -- "$PORTABLE_STAGE"
+    mkdir -p "$PORTABLE_ROOT"
+    (
+        cd "$OUT_DIR"
+        tar -cf - .
+    ) | (
+        cd "$PORTABLE_ROOT"
+        tar -xf -
+    )
+    ZIP_WIN="$(cygpath -w "$ZIP_PATH")"
+    (
+        cd "$PORTABLE_STAGE"
+        /c/Windows/System32/tar.exe -a -c -f "$ZIP_WIN" "$GAME_FOLDER_NAME"
+    )
+    [ -f "$ZIP_PATH" ] || die "zip was not created: $ZIP_PATH"
+    /c/Windows/System32/tar.exe -tf "$ZIP_WIN" | grep -Fq "$GAME_FOLDER_NAME/" || \
+        die "zip archive is empty or unreadable: $ZIP_PATH"
+    (
+        cd "$ZIP_DIR"
+        ZIP_BASE="$(basename "$ZIP_PATH")"
+        sha256sum -- "$ZIP_BASE" > "$ZIP_BASE.sha256"
+    )
+fi
+
+if [ "$MAKE_SETUP" -eq 1 ]; then
+    mkdir -p "$ZIP_DIR" "$REPO/work/out/inno"
+    check_iscc || exit 1
+    ISS_FILE="$REPO/work/out/inno/ImoutoLife-$VERSION.iss"
+    echo "==> rendering Inno Setup script: $ISS_FILE"
+    python "$INNO_RENDERER" \
+        --template "$INNO_TEMPLATE" \
+        --output "$ISS_FILE" \
+        --source-dir "$OUT_DIR" \
+        --output-dir "$ZIP_DIR" \
+        --setup-icon "$SETUP_ICON" \
+        --version "$VERSION" \
+        --app-name "$GAME_FOLDER_NAME" \
+        --publisher "$APP_PUBLISHER" \
+        --copyright "$APP_COPYRIGHT"
+    ISS_WIN="$(cygpath -w "$ISS_FILE")"
+    rm -f -- "$SETUP_PATH" "$SETUP_PATH.sha256"
+    echo "==> creating installer: $SETUP_PATH"
+    MSYS2_ARG_CONV_EXCL='*' "$ISCC" /Qp "$ISS_WIN"
+    [ -f "$SETUP_PATH" ] || die "Inno Setup did not create: $SETUP_PATH"
+    (
+        cd "$ZIP_DIR"
+        SETUP_BASE="$(basename "$SETUP_PATH")"
+        sha256sum -- "$SETUP_BASE" > "$SETUP_BASE.sha256"
+    )
+fi
+
+echo "==> package contents"
+find "$OUT_DIR" -maxdepth 2 -type f -printf '%12s  %P\n' | sort -k2 | sed -n '1,80p'
+du -sh "$OUT_DIR"
+if [ -f "$ZIP_PATH" ]; then
+    ls -lh "$ZIP_PATH" "$ZIP_PATH.sha256"
+fi
+if [ -f "$SETUP_PATH" ]; then
+    ls -lh "$SETUP_PATH" "$SETUP_PATH.sha256"
+fi
+echo
+echo "Godot package ready: $OUT_DIR"
+echo "Double-click: $OUT_DIR/Imouto Life.exe"

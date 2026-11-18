@@ -12,16 +12,17 @@ The old interpreter treated every site as a plain assignment, which is why the
 save-slot play time came out as two zeros and the slot number was lost. A later
 fix masked with `0xFF00`, which is where the tree stands today.
 
-> **Known deviation (open since 2026-11-15).** The mask is `0xFF00` today, so the
-> 上1行切り取り branch is `0x0200`. The manual's own 上1行切り取り is bit `0x0010`,
-> which only a `0xFFF0` mask would expose, and the shipped corpus never uses
-> `0x0200`: its only two cut sites are CE268 pc14 and CE270 pc2000, at mode 17/18
-> (`0x0011` / `0x0012`). Under `0xFF00` those two sites therefore resolve to a
-> plain assignment — the head line is neither cut into the destination nor removed
-> from the source. The `0xFFF0` / `0x0010` variant was implemented in `f52db44`
-> and reverted in `b23a1e1` at the user's request, so that the pre-change
-> behaviour could be checked by playing. `crates/wolf-vm/src/exec.rs` is the
-> authority; this document follows it.
+> **Correction (2026-11-17).** Review `9a817e4` claimed the mask should be
+> `0xFFF0` and 上1行切り取り should be bit `0x0010`. That claim is a false
+> positive. The local WOLF 3.39 manual documents the 上1行切り取り operation but
+> does not assign it bit `0x0010`; in the shipped corpus bit `0x10` is the
+> "代入先を変数で指定" (indirect destination) flag. CE268 pc14 and CE270 pc2000
+> use modes 17/18 (`0x0011` / `0x0012`) - assignment plus that indirect flag.
+> Masking with `0xFFF0` turned them into a first-line cut and cleared CE270's
+> nameplate in the real game (`docs/HANDOFF_PROGRESS.md`, 2026-11-14). The
+> variant was implemented in `f52db44` and reverted in `b23a1e1`; `0xFF00` is
+> the correct operation mask and `0x0200` remains the cut op. The interpreter
+> comment at `crates/wolf-vm/src/exec.rs` is the authority.
 
 Operand layout: `[destination, mode, (source_operand)]`, and literal text (if
 any) travels in `cmd.strings`.
@@ -151,10 +152,10 @@ comparison true every frame, which reset the name-exists flag and hid picture
 - CE94 slot 1 now yields `数据 1` / ` 0:00` / ` 1` / `早泄 ` instead of `000000`.
 - CE212's typewriter (mode 1025 = `0x0401`) shows one glyph per iteration; with
   the old "target = rest" reading it repeated the whole remainder instead.
-- CE268/C268 name-list parsing uses mode 17 (`0x0011`); under the current
-  `0xFF00` mask that resolves to a plain assignment rather than 上1行切り取り
-  (see the known deviation above). The indirect write stores the speaker name in
-  CE269's CSelf5 (`tests/m15_balloon_name.rs`).
+- CE268/C268 name-list parsing uses mode 17 (`0x0011`): operation 0 (assignment)
+  plus the `0x0010` indirect-destination flag. That is the correct reading, and
+  the indirect write stores the speaker name in CE269's CSelf5
+  (`tests/m15_balloon_name.rs`).
 - Regression coverage: `crates/wolf-vm/src/exec.rs` unit test
   `op122_advanced_modes_move_the_right_text_and_keep_the_manual_direction`;
   `crates/wolf-game/tests/m3_save_ui_roundtrip.rs`, `m3_hud_buttons.rs`,
