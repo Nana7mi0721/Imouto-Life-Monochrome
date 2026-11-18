@@ -31,6 +31,12 @@ pub const PROBE_EXTENSIONS: [&str; 5] = ["png", "jpg", "bmp", "jpeg", "webp"];
 /// Refuse absurd dimensions early: a corrupt header must not ask for a 4 GiB buffer.
 pub const MAX_DIMENSION: u32 = 16_384;
 
+/// Upper bound for decoded RGBA held by [`Assets`].
+///
+/// One image may exceed this on its own; refusing to cache that image would
+/// decode it again on every frame. All other images are evicted first.
+pub const DEFAULT_CACHE_BYTES: usize = 256 * 1024 * 1024;
+
 /// One decoded image, ready to be uploaded as a texture.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImageData {
@@ -240,7 +246,10 @@ pub struct Assets {
     /// Optional mod roots, highest priority last (a later overlay wins a name clash).
     /// Empty for a plain data root; see Assets::with_overlays.
     overlays: Vec<PathBuf>,
-    cache: HashMap<String, Arc<ImageData>>,
+    cache: HashMap<String, CachedImage>,
+    cache_bytes: usize,
+    cache_byte_limit: usize,
+    cache_clock: u64,
     /// Names that are not files (built-in `<SHAPE>` system graphics) or whose
     /// resolution failed. The picture layer asks for a size on every draw, and a
     /// repeated miss costs a case-insensitive directory walk each time; remembering
@@ -259,6 +268,12 @@ pub struct Assets {
     /// `clear()` drops the decoded images it was derived from. Two levels rather
     /// than one flat key so a hit borrows the name instead of allocating it.
     alpha_bounds_cache: HashMap<String, HashMap<([u32; 4], u8), Option<[u32; 4]>>>,
+}
+
+#[derive(Clone, Debug)]
+struct CachedImage {
+    image: Arc<ImageData>,
+    last_used: u64,
 }
 
 impl Assets {
@@ -289,6 +304,9 @@ impl Assets {
             root: root.into(),
             overlays,
             cache: HashMap::new(),
+            cache_bytes: 0,
+            cache_byte_limit: DEFAULT_CACHE_BYTES,
+            cache_clock: 0,
             missing: HashSet::new(),
             fallbacks: Vec::new(),
             patches,
@@ -320,9 +338,17 @@ impl Assets {
         self.cache.is_empty()
     }
 
+    /// Decoded RGBA bytes currently held.
+    #[must_use]
+    pub fn cache_bytes(&self) -> usize {
+        self.cache_bytes
+    }
+
     /// Drops every decoded image. Called when returning to the title.
     pub fn clear(&mut self) {
         self.cache.clear();
+        self.cache_bytes = 0;
+        self.cache_clock = 0;
         self.alpha_bounds_cache.clear();
     }
 
@@ -365,7 +391,7 @@ impl Assets {
     /// Returns an already decoded image without touching the disk.
     #[must_use]
     pub fn cached(&self, name: &str) -> Option<Arc<ImageData>> {
-        self.cache.get(name).cloned()
+        self.cache.get(name).map(|entry| Arc::clone(&entry.image))
     }
 
     /// Drains the fallback resolutions taken since the last call.
@@ -419,8 +445,9 @@ impl Assets {
     /// `Io`/`Decode` for unreadable or corrupt files, `BadSize` for zero or absurd
     /// dimensions.
     pub fn load(&mut self, name: &str) -> Result<Arc<ImageData>, AssetError> {
-        if let Some(hit) = self.cache.get(name) {
-            return Ok(Arc::clone(hit));
+        if let Some(hit) = self.cached(name) {
+            self.touch_cache(name);
+            return Ok(hit);
         }
         if normalize(name).is_none() {
             return Err(AssetError::BadName {
@@ -473,8 +500,43 @@ impl Assets {
             rgba,
         };
         let shared = Arc::new(data);
-        self.cache.insert(name.to_owned(), Arc::clone(&shared));
+        let stored_bytes = shared.rgba.len();
+        self.cache_clock = self.cache_clock.wrapping_add(1);
+        self.cache_bytes = self.cache_bytes.saturating_add(stored_bytes);
+        self.cache.insert(
+            name.to_owned(),
+            CachedImage {
+                image: Arc::clone(&shared),
+                last_used: self.cache_clock,
+            },
+        );
+        self.evict_cache(Some(name));
         Ok(shared)
+    }
+
+    fn touch_cache(&mut self, name: &str) {
+        self.cache_clock = self.cache_clock.wrapping_add(1);
+        if let Some(entry) = self.cache.get_mut(name) {
+            entry.last_used = self.cache_clock;
+        }
+    }
+
+    fn evict_cache(&mut self, keep: Option<&str>) {
+        while self.cache_bytes > self.cache_byte_limit {
+            let victim = self
+                .cache
+                .iter()
+                .filter(|(name, _)| Some(name.as_str()) != keep)
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(name, _)| name.clone());
+            let Some(name) = victim else {
+                break;
+            };
+            if let Some(entry) = self.cache.remove(&name) {
+                self.cache_bytes = self.cache_bytes.saturating_sub(entry.image.rgba.len());
+                self.alpha_bounds_cache.remove(&name);
+            }
+        }
     }
 
     /// tex_size callback for [`crate::picture::Screen::quads`](crate::picture::Screen).
@@ -768,6 +830,45 @@ mod tests {
             assets.load("Picture/definitely_missing.png"),
             Err(AssetError::NotFound { .. })
         ));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn decoded_image_cache_evicts_least_recently_used() {
+        let root = scratch_dir("lru");
+        std::fs::create_dir_all(root.join("Picture")).expect("dir");
+        image::save_buffer(
+            root.join("Picture").join("a.png"),
+            &[1u8, 2, 3, 255],
+            1,
+            1,
+            image::ColorType::Rgba8,
+        )
+        .expect("a png");
+        image::save_buffer(
+            root.join("Picture").join("b.png"),
+            &[4u8, 5, 6, 255],
+            1,
+            1,
+            image::ColorType::Rgba8,
+        )
+        .expect("b png");
+
+        let mut assets = Assets::new(&root);
+        assets.cache_byte_limit = 4;
+        assets.load("Picture/a.png").expect("first image");
+        assert_eq!((assets.len(), assets.cache_bytes()), (1, 4));
+
+        assets.load("Picture/b.png").expect("second image");
+        assert_eq!((assets.len(), assets.cache_bytes()), (1, 4));
+        assert!(assets.cached("Picture/a.png").is_none());
+        assert!(assets.cached("Picture/b.png").is_some());
+
+        assets.load("Picture/a.png").expect("reload first image");
+        assert_eq!((assets.len(), assets.cache_bytes()), (1, 4));
+        assert!(assets.cached("Picture/a.png").is_some());
+        assert!(assets.cached("Picture/b.png").is_none());
 
         let _ = std::fs::remove_dir_all(&root);
     }

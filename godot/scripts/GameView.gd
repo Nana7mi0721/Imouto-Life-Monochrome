@@ -655,6 +655,18 @@ func _physics_process(_delta: float) -> void:
 	# not see the keyboard, the wheel or the pointer at all, or a click would
 	# fall through onto a map hotspot behind the panel.
 	var modal_open := not _modal_kind.is_empty()
+	if modal_open:
+		# The dialog owns the screen: do not advance WOLF's clock or its
+		# animations behind it. Keep the last rendered packet, but hide the
+		# runtime-painted pointer so only the system arrow is visible.
+		mouse_latch = 0
+		wheel_notches = 0
+		var held_sprites: Array = packet.get("sprites", [])
+		if not held_sprites.is_empty():
+			packet["sprites"] = _without_runtime_cursor(held_sprites)
+		_update_mouse_cursor(packet.get("sprites", []))
+		queue_redraw()
+		return
 	# Consume the focus-in marker: only the first tick after a focus-in skips the
 	# level query; later ticks trust it again for genuinely held buttons.
 	var skip_level := focus_gained
@@ -670,8 +682,8 @@ func _physics_process(_delta: float) -> void:
 		if held == 0:
 			_modal_release_guard = false
 			release_guard = false
-	var raw_keys := PackedInt32Array() if modal_open else _raw_key_codes()
-	var buttons := 0 if modal_open or release_guard else _mouse_buttons(skip_level)
+	var raw_keys := _raw_key_codes()
+	var buttons := 0 if release_guard else _mouse_buttons(skip_level)
 	# A modal that confirmed "save this slot" replays the click that opened it,
 	# so the game performs its own save: it also updates System.sav's last-slot
 	# row, which a front-end write could not.
@@ -685,17 +697,11 @@ func _physics_process(_delta: float) -> void:
 	if buttons & 1 != 0 and _last_runtime_buttons & 1 == 0:
 		runtime_left_clicks += 1
 	_last_runtime_buttons = buttons
-	wolf.set_wheel(0 if modal_open or release_guard else wheel_notches)
+	wolf.set_wheel(0 if release_guard else wheel_notches)
 	wheel_notches = 0
 	wolf.set_input(_key_bits(raw_keys), raw_keys, mouse_pos, buttons)
 	var wolf_started := Time.get_ticks_usec()
 	packet = wolf.frame()
-	if modal_open:
-		# The runtime paints its own pointer into picture 2999 and hides the
-		# system arrow. The modal is a front-end element, so the system arrow
-		# has to come back while the panel is up; hiding the runtime's pointer
-		# keeps a single cursor on screen.
-		packet["sprites"] = _without_runtime_cursor(packet.get("sprites", []))
 	# The daily auto-save finished; the banner rides on the modal layer so it
 	# never fights a picture of the game.
 	var toast := ""

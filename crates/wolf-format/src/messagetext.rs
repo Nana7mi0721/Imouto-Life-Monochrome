@@ -408,6 +408,44 @@ pub fn tokenize(s: &str) -> Vec<TextToken> {
     tokenize_depth(s, 0)
 }
 
+/// True when the message contains a real `\img[...]` or `\imgS[...]` token.
+///
+/// A plain substring search is incorrect because a doubled backslash is a
+/// literal character: `\\img[foo]` must render the text, not an inline image.
+/// This scanner follows the same escape rule without allocating a token list.
+#[must_use]
+pub fn contains_inline_image(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'\\' {
+            index += 1;
+            continue;
+        }
+        index += 1;
+        if index >= bytes.len() {
+            break;
+        }
+        if bytes[index] == b'\\' {
+            index += 1;
+            continue;
+        }
+        let name_start = index;
+        while index < bytes.len() && bytes[index].is_ascii_alphabetic() {
+            index += 1;
+        }
+        if index == name_start {
+            continue;
+        }
+        if matches!(&s[name_start..index], "img" | "imgS")
+            && bytes.get(index).copied() == Some(b'[')
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// The plain text of a message, with every escape removed.
 ///
 /// Keeps literal characters, newlines, doubled backslashes and the base text of

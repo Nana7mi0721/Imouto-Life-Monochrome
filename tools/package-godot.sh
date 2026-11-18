@@ -528,13 +528,56 @@ if [ "$MAKE_ZIP" -eq 1 ]; then
         tar -xf -
     )
     ZIP_WIN="$(cygpath -w "$ZIP_PATH")"
-    (
-        cd "$PORTABLE_STAGE"
-        /c/Windows/System32/tar.exe -a -c -f "$ZIP_WIN" "$GAME_FOLDER_NAME"
-    )
-    [ -f "$ZIP_PATH" ] || die "zip was not created: $ZIP_PATH"
-    /c/Windows/System32/tar.exe -tf "$ZIP_WIN" | grep -Fq "$GAME_FOLDER_NAME/" || \
-        die "zip archive is empty or unreadable: $ZIP_PATH"
+    PYTHONIOENCODING=utf-8 python - "$PORTABLE_STAGE" "$GAME_FOLDER_NAME" "$ZIP_WIN" <<'PY' || \
+        die "zip archive creation failed: $ZIP_PATH"
+import os
+import sys
+import zipfile
+
+stage, root, path = sys.argv[1], sys.argv[2], sys.argv[3]
+source = os.path.join(stage, root)
+prefix = root.rstrip("/") + "/"
+if not os.path.isdir(source):
+    raise SystemExit(f"portable staging folder is missing: {source}")
+
+try:
+    file_count = 0
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, compresslevel=6,
+                         allowZip64=True) as archive:
+        for dirpath, dirnames, filenames in os.walk(source):
+            dirnames.sort()
+            filenames.sort()
+            if os.path.islink(dirpath):
+                raise SystemExit(f"symlink in portable staging folder: {dirpath}")
+            arc_dir = os.path.relpath(dirpath, stage).replace(os.sep, "/")
+            archive.write(dirpath, arcname=arc_dir + "/")
+            for filename in filenames:
+                full_path = os.path.join(dirpath, filename)
+                if os.path.islink(full_path):
+                    raise SystemExit(f"symlink in portable staging folder: {full_path}")
+                arc_name = os.path.relpath(full_path, stage).replace(os.sep, "/")
+                archive.write(full_path, arcname=arc_name)
+                file_count += 1
+
+    with zipfile.ZipFile(path) as archive:
+        infos = archive.infolist()
+        names = [info.filename.replace("\\", "/") for info in infos]
+        broken = archive.testzip()
+        if broken is not None:
+            raise SystemExit(f"bad zip entry: {broken}")
+        if any(
+            not info.filename.isascii() and not (info.flag_bits & 0x800)
+            for info in infos
+        ):
+            raise SystemExit("non-ASCII zip entry is missing the UTF-8 flag")
+        if not all(name == root or name.startswith(prefix) for name in names):
+            raise SystemExit("zip has an unexpected top-level path")
+except zipfile.BadZipFile as error:
+    raise SystemExit(f"bad zip: {error}")
+if file_count == 0:
+    raise SystemExit("zip has no files")
+print(f"zip verified: {file_count} files under {root}/")
+PY
     (
         cd "$ZIP_DIR"
         ZIP_BASE="$(basename "$ZIP_PATH")"

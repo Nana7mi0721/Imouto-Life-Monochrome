@@ -2,8 +2,15 @@ extends SceneTree
 
 func _init() -> void:
 	print("=== Running verify_p0_fixes.gd ===")
+	var root := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--data-root="):
+			root = arg.substr("--data-root=".length())
+	if root.is_empty():
+		push_error("verify_p0_fixes: pass --data-root=<unpacked Data dir>")
+		quit(1)
+		return
 	var wolf := WolfGame.new()
-	var root := "E:/Study/github program/Imouto Life/work/Data"
 	if not wolf.open(root):
 		push_error("open failed")
 		quit(1)
@@ -18,6 +25,7 @@ func _init() -> void:
 
 	var found_ap_under_black := false
 	var scenery_found := false
+	var failed := false
 
 	for f in range(500):
 		if f % 15 == 0:
@@ -43,6 +51,7 @@ func _init() -> void:
 		if has_black_cover and not ap.is_empty():
 			print("FAIL: Frame %d has black cover 9000, but ap is NOT empty: %s" % [f, str(ap)])
 			found_ap_under_black = true
+			failed = true
 
 		# Check Issue 2: Scenery (-20000)
 		for s in sprites:
@@ -66,5 +75,6 @@ func _init() -> void:
 		print("PASS: Scenery background is present in SampleMapA!")
 	else:
 		push_error("FAIL: Scenery background NOT found")
+		failed = true
 
-	quit(0)
+	quit(1 if failed else 0)

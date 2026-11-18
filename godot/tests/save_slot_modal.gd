@@ -121,6 +121,16 @@ func _init() -> void:
 		return
 	print("save_slot_modal: confirmation opened with ", labels)
 
+	# ---- The runtime clock must not advance behind the dialog. ------------
+	var paused_frames: int = view.game_frames
+	for _i in range(6):
+		await physics_frame
+	if view.game_frames != paused_frames:
+		push_error("save_slot_modal: the runtime advanced while the dialog was open")
+		quit(1)
+		return
+	print("save_slot_modal: runtime paused behind the dialog")
+
 	# ---- Hovering a button moves the highlighted choice. ------------------
 	var rects: Array[Rect2] = view._modal_layer.button_rects()
 	view._input(_motion(rects[0].get_center()))

@@ -498,7 +498,11 @@ mod tests {
         let rows = vec!["已经这个时间了".to_owned(); 4];
         let panel =
             layout_at_sized(&rows, 0, 400, 200, 20.0).expect("an on-screen anchor yields a panel");
-        assert_eq!(panel.rect[2], 7.0 * 20.0 + TEXT_INSET * 2.0, "panel width");
+        assert_eq!(
+            panel.rect[2],
+            7.0 * 20.0 + TEXT_INSET * 2.0 + 4.0,
+            "panel width"
+        );
         assert_eq!(panel.rect[3], ROW_TOP + 4.0 * 27.0, "four rows are 114 px");
         assert_eq!(panel.lines[0][0], panel.rect[0] + TEXT_INSET, "text inset");
         assert_eq!(
@@ -534,8 +538,9 @@ mod tests {
         let narrow = layout(&["a".to_owned()], 0);
         let wide = layout(&["a".repeat(40)], 0);
         // No minimum width: the engine sizes the window to the widest option plus the
-        // 8 px inset on each side, and a one-letter option gets a 26 px box.
-        assert_eq!(narrow.rect[2], text_width("a") + TEXT_INSET * 2.0);
+        // 8 px inset on each side plus 4 px of wrap margin, so a one-letter option
+        // gets a 30 px box.
+        assert_eq!(narrow.rect[2], text_width("a") + TEXT_INSET * 2.0 + 4.0);
         assert!(wide.rect[2] > narrow.rect[2]);
     }
 
@@ -573,7 +578,7 @@ mod tests {
         let (_, texts) = overlay(&mut atlas, &mut assets, std::slice::from_ref(&raw), 0);
         assert_eq!(texts.len(), 1);
         assert!(!texts[0].text.contains('\u{FFFD}'));
-        assert_eq!(texts[0].text, "红茶　　　  2000円");
+        assert_eq!(texts[0].text, "红茶　　　 2000円");
         // The option handed back to the VM must stay exactly as the script wrote it.
         assert_eq!(raw, "红茶　　　\u{FFFD} 2000円");
     }

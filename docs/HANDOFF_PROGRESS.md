@@ -1682,3 +1682,36 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   `split_sound_cell_accepts_crlf_and_plain_filenames`、
   `split_first_line_drops_the_cr_of_crlf_cells` 全过；
   `smoke-godot.sh` exit 0 且不再出现上述 audio warning。
+
+* **复审开放项与正式发包（2026-11-18 收尾）**：
+  * `F-07`：`GameView.gd` 在模态弹窗打开期间直接返回，不再推进
+    `wolf.frame()`/动画；保留最后一帧并隐藏运行时指针。
+    `save_slot_modal.gd` 增加运行时时钟暂停断言。
+  * `F-11`：新增 `messagetext::contains_inline_image()`（按 `\\` 转义规则扫描）
+    与 `textpic::has_inline_image()` / `is_inline_image_only()`。纯图片条交给
+    Atlas，图文混排保留文字；Atlas 贴图条补齐 `anchor`/`scale`/`scale_y`/
+    `alpha <= 0` 处理。旧的四条 `choice/textpic` 基线红灯已按现行 `+4 px`
+    防折行和 U+FFFD 剥离行为对齐。
+  * `R-01`：`Assets` 增加 `DEFAULT_CACHE_BYTES = 256 MiB`、LRU 时钟与逐出时
+    清理 alpha bounds；新增缓存淘汰回归。
+  * `R-02`：`verify_p0_fixes.gd` 与 `verify_ui_and_interaction_fixes.gd`
+    改用 `--data-root`，且已由 `tools/smoke-godot.sh` 顺序执行。
+  * `R-03`：`godot/export_presets.cfg` 的
+    `debug/export_console_wrapper=0`；`AGENTS.md` 修正为 9 个 crate。
+  * 打包脚本：Python `zipfile` 生成 UTF-8 ZIP，显式校验顶层目录、非 ASCII
+    条目 UTF-8 标志、`testzip()` 和文件数，避免 Windows `tar` 的 GBK 目录名。
+  * 验证：`cargo fmt --all -- --check`、`cargo check -q --workspace`、
+    `wolf-game --lib` 373/373、`wolf-format` 全绿、
+    `m14_visual_regression` 5/5、`wolf-cli verify` PASS 64 / 1 SKIP、
+    `smoke-godot.sh` exit 0。`cargo test --workspace` 仅余既有玩家存档夹具
+    `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`，
+    未改 `work/Data/Save`。
+  * 产物：`Data` 747 文件 / 128,083,817 B；`Imouto Life setup.zip`
+    764 entries / 751 files，SHA-256
+    `bb7b65284fd31e43af1d1016d54e7ffe9af36ffed62dd72e404330479b165f4d`；
+    `Imouto Life setup.exe` 114 MiB，SHA-256
+    `23318bbd67238d6e39b9db455f7651ef71c04f8d69006b940aea6a8486a8b689`，
+    版本资源语言简体中文；`Data/Save` 仅含干净 `System.sav`。
+    Inno Setup 安装目录位于用户 LocalAppData，因 EFS 继承属性导致首次
+    `Setup.e32` 复制失败；已用普通属性副本 `work/out/tools/InnoSetup6` 编译，
+    并补入 `ChineseSimplified.isl`。

@@ -777,18 +777,24 @@ impl Atlas {
             if excluded.contains(&picture.number) || picture.hidden || !picture.kind.is_text() {
                 continue;
             }
-            if !picture.text.contains(r"\img") {
+            // The sprite pass owns only a pure image strip. A picture that mixes
+            // text and images keeps the text pass, because the two passes cannot
+            // share one pen and dropping the words would be worse.
+            if !crate::textpic::is_inline_image_only(&picture.text) {
+                continue;
+            }
+            let alpha = picture.alpha();
+            if alpha <= 0.0 {
                 continue;
             }
             let (dx, dy) = picture.effect_offset();
-            let mut pen_x = picture.x as f32 + dx;
-            let mut pen_y = picture.y as f32 + dy;
-            let start_x = pen_x;
+            // Measure the strip before placing it: the anchor moves the whole
+            // block, so its size must be known before the first image is drawn.
+            let mut lines: Vec<Vec<([f32; 2], String)>> = vec![Vec::new()];
             for token in wolf_format::messagetext::tokenize(&picture.text) {
                 match token {
                     wolf_format::messagetext::TextToken::Newline => {
-                        pen_x = start_x;
-                        pen_y += 20.0;
+                        lines.push(Vec::new());
                     }
                     wolf_format::messagetext::TextToken::Image(ref path)
                     | wolf_format::messagetext::TextToken::ImageNearest(ref path) => {
@@ -796,27 +802,62 @@ impl Atlas {
                         let Some(size) = assets.texture_size(&norm) else {
                             continue;
                         };
-                        let Some(rect) =
-                            self.add_asset_region(assets, &norm, [0, 0, size.0, size.1])
-                        else {
-                            continue;
-                        };
-                        let uv = rect.uv(self.width, self.height);
-                        let dst = [pen_x, pen_y, size.0 as f32, size.1 as f32];
-                        if crate::picture::on_screen(dst) {
-                            out.push(SpriteQuad {
-                                number: picture.number,
-                                rect: snap(dst),
-                                uv,
-                                alpha: picture.alpha(),
-                                tint: tone_tint(picture),
-                                blend: picture.blend,
-                            });
-                        }
-                        pen_x += size.0 as f32;
+                        lines
+                            .last_mut()
+                            .expect("the strip always has a current line")
+                            .push(([size.0 as f32, size.1 as f32], norm));
                     }
                     _ => {}
                 }
+            }
+            let line_widths: Vec<f32> = lines
+                .iter()
+                .map(|line| line.iter().map(|(size, _)| size[0]).sum())
+                .collect();
+            let line_heights: Vec<f32> = lines
+                .iter()
+                .map(|line| line.iter().map(|(size, _)| size[1]).fold(0.0_f32, f32::max))
+                .collect();
+            let block_w = line_widths.iter().copied().fold(0.0_f32, f32::max);
+            let block_h: f32 = line_heights.iter().sum();
+            let scale_x = picture.scale.unsigned_abs() as f32 / crate::picture::SCALE_ONE as f32;
+            let scale_y = picture.scale_y.unsigned_abs() as f32 / crate::picture::SCALE_ONE as f32;
+            let (origin_x, origin_y) = crate::textpic::anchor_origin(
+                picture.anchor,
+                picture.x as f32 + dx,
+                picture.y as f32 + dy,
+                block_w * scale_x,
+                block_h * scale_y,
+            );
+            let mut line_top = 0.0_f32;
+            for (index, line) in lines.iter().enumerate() {
+                let mut line_x = 0.0_f32;
+                for (size, norm) in line {
+                    let dst = [
+                        origin_x + line_x * scale_x,
+                        origin_y + line_top * scale_y,
+                        size[0] * scale_x,
+                        size[1] * scale_y,
+                    ];
+                    let Some(rect) =
+                        self.add_asset_region(assets, norm, [0, 0, size[0] as u32, size[1] as u32])
+                    else {
+                        continue;
+                    };
+                    let uv = rect.uv(self.width, self.height);
+                    if crate::picture::on_screen(dst) {
+                        out.push(SpriteQuad {
+                            number: picture.number,
+                            rect: snap(dst),
+                            uv,
+                            alpha,
+                            tint: tone_tint(picture),
+                            blend: picture.blend,
+                        });
+                    }
+                    line_x += size[0];
+                }
+                line_top += line_heights[index];
             }
         }
         out.sort_by_key(|quad| quad.number);

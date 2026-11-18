@@ -28,15 +28,15 @@
 3. **发行数据包白名单裁剪（`F-06`）已闭环**：已新增 `tools/package/release-data.manifest` 与 `release_data.py`，仅打包 746 个白名单文件 + 干净 `System.sav`（合计 747 个文件），剔除 `SaveData*.sav` 与当前 dry-run 的 619 个未用模板资源（审计快照为 618；manifest 仍为 746）。
 4. **其余已闭环项**：启动失败错误面板与退出路径（`F-04`）、损坏存档校验和警告（`F-05`）、动作键绕过收窄（`F-08`）、`150 Move` 区间查询（`F-09`）、`reset_to_title()` 清缓存（`F-10`）、模态下 F11 全屏（`F-12`），以及**新游戏标题闪回**、**存档翻页旧文本残留**、**`Esc`/右键穿透无 `421` 分支的 `102 Choice`** 与 **窗口模式默认开启 `live_rng`** 均已落地且附带回归测试。
 
-### 2.2 当前剩余开放项（无 P0/P1，仅 P2/P3）
+### 2.2 复审开放项处理状态（2026-11-18 已全部闭环）
 
 | 排名 | ID | 严重度 | 证据 | 状态 | 标题与位置 |
 |---:|---|---|---|---|---|
-| 1 | `F-07` | **P2** | E1 | 暂缓（用户决定） | 模态弹窗打开期间 `GameView.gd:692` 仍推进 `wolf.frame()` |
-| 2 | `F-11` | **P2** | E1 | 暂缓（用户决定） | `\img` 跳过仍用 `contains(r"\img")`（`atlas.rs:780`、`game.rs`），仅影响未来可能的图文混排 Mod |
-| 3 | `R-01` | **P2** | E1 | OPEN | `Assets.cache` 已在回标题时清理，但单次长会话内仍无 LRU/字节上限 |
-| 4 | `R-02` | **P3** | E1 | OPEN | `godot/tests/verify_p0_fixes.gd:6` 与 `verify_ui_and_interaction_fixes.gd:6` 仍硬编码本地路径且未接入 `smoke-godot.sh` |
-| 5 | `R-03` | **P3** | E1 | OPEN | `godot/export_presets.cfg:28` 设置 `debug/export_console_wrapper=1`；`AGENTS.md:49` 仍写“8 个 crate” |
+| 1 | `F-07` | **P2** | E1 | FIXED | 模态弹窗打开期间暂停 `wolf.frame()`，保留最后一帧并隐藏运行时指针 |
+| 2 | `F-11` | **P2** | E1 | FIXED | `textpic::is_inline_image_only()` 区分纯图片条与图文混排；贴图条按 anchor/scale/alpha 绘制 |
+| 3 | `R-01` | **P2** | E1 | FIXED | `Assets` 增加 256 MiB 字节上限与近似 LRU，超限淘汰并清理对应 alpha 缓存 |
+| 4 | `R-02` | **P3** | E1 | FIXED | 两份 Godot 回归改为 `--data-root`，已接入 `tools/smoke-godot.sh` |
+| 5 | `R-03` | **P3** | E1 | FIXED | `debug/export_console_wrapper=0`；`AGENTS.md` 已改为 9 个 crate |
 
 ### 2.3 下一步最小验证集（本地带数据环境）
 1. `cargo fmt --all -- --check && cargo check -q --workspace`
@@ -55,6 +55,31 @@
   `split_first_line()` 的 CRLF 行尾；新增 3 条回归。
 - 修复后 `bash tools/smoke-godot.sh` exit 0，且 `[SE]Cancel`/`[SE]Cursor`
   的 audio warning 消失。
-- **发布前置**：当前机器仍无 `ISCC.exe`；便携 ZIP 可生成，`Setup.exe` 需
-  Inno Setup 6。`tools/package-godot.sh --dry-run` 当前显示：
-  manifest 746 文件 / 127,928,202 B，排除 619 文件 / 55,910,216 B。
+- **发布前置已解除**：本机已安装 Inno Setup 6.7.4，`ISCC.exe` 与本轮修补后的
+  简体中文语言文件可用；便携 ZIP 与 `Setup.exe` 均已生成。
+
+### 2.5 最终发包与验证（2026-11-18）
+
+- `F-07`：`GameView.gd` 在模态期间不再推进运行时；`save_slot_modal.gd` 新增
+  `runtime paused behind the dialog` 断言。
+- `F-11`：`wolf_format::messagetext::contains_inline_image()` 按转义规则识别，
+  不再把 `\\img` 文本误判为图片；`textpic::is_inline_image_only()` 保证混排保留
+  文字；Atlas 贴图条补齐 `anchor`、`scale`、`scale_y`、`alpha <= 0` 处理。
+- `R-01`：`DEFAULT_CACHE_BYTES = 256 MiB`；新增 LRU 淘汰回归。
+- `R-02`：`verify_p0_fixes.gd` / `verify_ui_and_interaction_fixes.gd` 已改用
+  `--data-root` 并接入 smoke。
+- `R-03`：发布预设关闭 console wrapper，`AGENTS.md` 修正为 9 个 crate。
+- 验证：`cargo fmt --all -- --check`、`cargo check -q --workspace`、
+  `wolf-game --lib` 373/373、`wolf-format` 全绿、`m14_visual_regression` 5/5、
+  `wolf-cli verify` PASS 64 / 1 SKIP、`bash tools/smoke-godot.sh` exit 0。
+  `cargo test -q --workspace` 仅余已记录的玩家存档夹具漂移
+  `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`，
+  与本次改动无关且未修改 `work/Data/Save`。
+- 发行产物：
+  `work/out/dist/godot/0.1.0/Data` 为 747 文件 / 128,083,817 B，`Data/Save`
+  仅含 `System.sav`；便携 ZIP 为 764 entries / 751 files，顶层目录为
+  `妹！生活 ～单色～ Godot/`，所有非 ASCII 条目带 UTF-8 标志；
+  `Imouto Life setup.zip` SHA-256 `bb7b65284fd31e43af1d1016d54e7ffe9af36ffed62dd72e404330479b165f4d`；
+  `Imouto Life setup.exe` 为 114 MiB，SHA-256
+  `23318bbd67238d6e39b9db455f7651ef71c04f8d69006b940aea6a8486a8b689`，
+  版本资源语言为简体中文。

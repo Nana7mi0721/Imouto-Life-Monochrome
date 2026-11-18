@@ -9,6 +9,7 @@
 #   7. walk the real title -> load screen -> slot 3 -> bedroom path;
 #   8. new-game save -> fresh-session load round trip.
 #   9. the front-end save-slot confirmation (click a used slot, cancel, load).
+#  10. the P0 black-cover/scenery and night-UI interaction regressions.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -23,6 +24,12 @@ if [ ! -f godot/.godot/extension_list.cfg ]; then
 fi
 
 "$GODOT" --headless --path godot --script res://tests/smoke.gd -- \
+    --data-root="$DATA_ROOT"
+
+"$GODOT" --headless --path godot --script res://tests/verify_p0_fixes.gd -- \
+    --data-root="$DATA_ROOT"
+
+"$GODOT" --headless --path godot --script res://tests/verify_ui_and_interaction_fixes.gd -- \
     --data-root="$DATA_ROOT"
 
 "$GODOT" --headless --path godot --script res://tests/mouse_title.gd -- \

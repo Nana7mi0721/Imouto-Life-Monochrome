@@ -46,7 +46,7 @@ cd '/e/Study/github program/Imouto Life' && source tools/env.sh >/dev/null 2>&1
 
 ## 5. 代码与提交
 
-- 仓库是 Cargo workspace，8 个 crate：wolf-format / wolf-save / wolf-vm / wolf-render / wolf-audio / wolf-game / wolf-cli / wolf-gdext。Godot 前端代码在 `godot/`（GDScript + 工程文件），不是 Cargo crate。
+- 仓库是 Cargo workspace，9 个 crate：wolf-format / wolf-save / wolf-vm / wolf-render / wolf-audio / wolf-game / wolf-cli / wolf-launcher / wolf-gdext。Godot 前端代码在 `godot/`（GDScript + 工程文件），不是 Cargo crate。
 - 不新增外部依赖，除非有充分理由并先问 lead。`wolf-gdext` 的 `godot`（gdext）依赖是 Godot 迁移的既定选择，版本锁定 0.5.5 + `api-4-7`。
 - 提交身份：`git -c user.name='imoto lead' -c user.email='lead@imoto.local' commit -F <msgfile>`。
 - push：全局 http.proxy 是死代理，必须 `git -c http.proxy= -c https.proxy= push origin master`。

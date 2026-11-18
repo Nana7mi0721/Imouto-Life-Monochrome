@@ -3350,7 +3350,7 @@ impl Game {
             // Inline-image meters (CE277 alertness grid, H scene progression) are rendered
             // as crisp texture SpriteQuads in Atlas::sprites_with_panel_rect_excluding.
             // Skip them here so they do not produce font-based character TextQuads.
-            if picture.text.contains(r"\img") {
+            if crate::textpic::is_inline_image_only(&picture.text) {
                 continue;
             }
             // The same prologue slot can hold unrelated narration. Do not let it

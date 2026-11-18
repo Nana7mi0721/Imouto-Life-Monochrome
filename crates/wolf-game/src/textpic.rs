@@ -294,6 +294,44 @@ pub fn measure_with(text: &str, font_px: f32, advance: Advance<'_>) -> f32 {
         .sum()
 }
 
+/// True when the markup carries at least one inline `\img` image.
+///
+/// The engine draws inline images through the atlas sprite pass, not through the
+/// font, so the text pass has to know whether a text picture owns its pixels
+/// entirely or only borrows them.
+#[must_use]
+pub fn has_inline_image(raw: &str) -> bool {
+    wolf_format::messagetext::contains_inline_image(raw)
+}
+
+/// True when the markup carries inline images and nothing else that draws ink.
+///
+/// A picture that is *only* images belongs to the atlas sprite pass. A picture
+/// that mixes images and text belongs to the text pass instead: the passes cannot
+/// share one pen, and the shipped data contains no mixed picture, so keeping the
+/// words is safer than silently dropping the whole picture.
+#[must_use]
+pub fn is_inline_image_only(raw: &str) -> bool {
+    let mut images = 0_usize;
+    for token in tokenize(raw) {
+        match token {
+            TextToken::Image(_) | TextToken::ImageNearest(_) => images += 1,
+            TextToken::Text(text) => {
+                if !text.trim().is_empty() {
+                    return false;
+                }
+            }
+            TextToken::Backslash
+            | TextToken::Var(_)
+            | TextToken::Ruby { .. }
+            | TextToken::Icon(_)
+            | TextToken::IconNearest(_) => return false,
+            _ => {}
+        }
+    }
+    images > 0
+}
+
 /// A cheap fingerprint of everything about `raw` that its laid-out runs depend on.
 ///
 /// `Game::text_quads` caches one `Vec<TextQuad>` per text picture and needs a key that
@@ -939,7 +977,11 @@ fn strip_leading_positioning(mut raw: &str) -> &str {
 }
 
 /// Top-left corner of a block of `(w, h)` whose anchor sits on `(x, y)`.
-fn anchor_origin(anchor: u8, x: f32, y: f32, w: f32, h: f32) -> (f32, f32) {
+///
+/// The atlas sprite pass uses this for a text picture that is a strip of inline
+/// images: the strip is a block like a text block, so the same anchor moves it.
+#[must_use]
+pub fn anchor_origin(anchor: u8, x: f32, y: f32, w: f32, h: f32) -> (f32, f32) {
     match anchor {
         1 => (x - w * 0.5, y - h * 0.5),
         2 => (x, y - h),
@@ -1515,15 +1557,31 @@ mod tests {
     }
 
     #[test]
-    fn inline_box_images_survive_as_box_glyphs_in_text_picture() {
-        let runs = layout(
-            r"\c[9]\img[Picture\box01.png]\img[Picture\box02.png]",
-            0.0,
-            0.0,
-            0,
-            &bare(),
+    fn an_image_only_text_picture_produces_no_glyphs() {
+        let raw = r"\c[9]\img[Picture\box01.png]\img[Picture\box02.png]";
+        assert!(has_inline_image(raw));
+        assert!(is_inline_image_only(raw));
+        let runs = layout(raw, 0.0, 0.0, 0, &bare());
+        assert!(
+            runs.is_empty(),
+            "the sprite pass owns this picture: {runs:?}"
         );
+    }
+
+    #[test]
+    fn a_picture_that_mixes_text_and_images_keeps_its_words() {
+        let raw = r"\c[9]\img[Picture\box01.png] 42";
+        assert!(has_inline_image(raw));
+        assert!(!is_inline_image_only(raw));
+        let runs = layout(raw, 0.0, 0.0, 0, &bare());
         assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].text, "□■");
+        assert_eq!(runs[0].text, " 42");
+    }
+
+    #[test]
+    fn escaped_backslash_does_not_make_an_image_strip() {
+        let raw = r"\\img[Picture\box01.png]";
+        assert!(!has_inline_image(raw));
+        assert!(!is_inline_image_only(raw));
     }
 }

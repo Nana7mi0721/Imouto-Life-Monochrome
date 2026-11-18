@@ -390,6 +390,23 @@ fn image_path_is_not_tokenised() {
     );
 }
 
+#[test]
+fn inline_image_detection_obeys_escape_rules() {
+    assert!(messagetext::contains_inline_image("\\img[a.png]"));
+    assert!(messagetext::contains_inline_image("\\imgS[a.png]"));
+    assert!(messagetext::contains_inline_image(
+        "before\\c[7]\\img[a.png]after"
+    ));
+    assert!(!messagetext::contains_inline_image(
+        "literal \\\\img[a.png]"
+    ));
+    assert!(!messagetext::contains_inline_image(
+        "\\img without brackets"
+    ));
+    assert!(!messagetext::contains_inline_image("\\imaginary[a.png]"));
+    assert!(!messagetext::contains_inline_image("plain text"));
+}
+
 /// Ruby splits on the first comma only.
 #[test]
 fn ruby_splits_on_first_comma() {

@@ -53,7 +53,7 @@
 | 行为项 | 原版规则/常量 | 来源 | 现状 | 本仓库实现位置(文件:行) | 测量/核对方法 |
 |---|---|---|---|---|---|
 | 面板基本常量 | TEXT_PX 20；行距 = font + trunc(14×16/32) = **27**；文本内缩 **8/侧**；行起点 +6；光标 = CursorBase.png 九宫格（corner 4） | 逆向 A + 截图实测 | 已实现 | crates/wolf-game/src/choice.rs:23-62,70 | 89EF/EE 两张实机图：行距 27.18/26.87、边框→首字墨迹 8.05/7.99、高亮条 20 |
-| 面板宽高公式 | 宽 = 最宽选项 advance + 2×8（无最小宽）；高 = 6 + rows×27；实测 4 行 156×114、5 行 162×141 | 截图实测（RE 的 +0x1a=26 与实测 17.8 冲突，取内缩值） | 已实现 | crates/wolf-game/src/choice.rs:139-167 | 单测 the_panel_geometry_is_the_measured_102_panel |
+| 面板宽高公式 | 宽 = 最宽选项 advance + 2×8 + 4（无最小宽）；高 = 6 + rows×27；实测 4 行 156×114、5 行 162×141 | 截图实测（RE 的 +0x1a=26 与实测 17.8 冲突，取内缩值；额外 4 px 作为防折行余量） | 已实现 | crates/wolf-game/src/choice.rs:139-167 | 单测 the_panel_geometry_is_the_measured_102_panel |
 | 面板锚点 | Sys3=X、Sys4=Y（WOLF 无居中默认；title 设 (512,1000) 故无框） | 实测 | 已实现 | crates/wolf-game/src/game.rs:1290 | opcode102 按 Sys3/4 定位 |
 | H-MENU-1 越界回退 | 原版**无回退、无夹取**（FUN_004c3fa0 直接用字段值/默认锚点） | 反向 A | 保留兜底 | crates/wolf-game/src/choice.rs:211-245 | 屏界面板完全在外时回退居中；仅作隐藏菜单（title 用 −1000 藏引擎面板）的兜底，C 级未闭合，见 LAYOUT §7.1 |
 | 光标定位 / 鼠标命中行 | 光标框 [x+6, row_y, w−12, font_px]，整行 CursorBase.png 九宫格；无 "▶ " 字形；命中行矩形 [x+8, y+6+idx*27, w−16, 27] | 逆向 A + 截图实测 | 已实现 | crates/wolf-game/src/choice.rs:153-187；crates/wolf-game/src/game.rs:1301 | choice_row_at 与绘制同一 layout_at_sized |

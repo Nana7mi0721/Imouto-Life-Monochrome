@@ -263,6 +263,19 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-18）
 
+* **2026-11-18 复审开放项与正式发包（当前状态）**：`F-07` 模态期间已停止
+  `wolf.frame()`；`F-11` 由 `textpic::is_inline_image_only()` 区分纯图片条与
+  图文混排，Atlas 贴图补 anchor/scale/alpha；`Assets` 增加 256 MiB 近似 LRU；
+  两份 Godot 回归接入 smoke 并改用 `--data-root`；发布预设关闭 console wrapper，
+  `AGENTS.md` 改为 9 个 crate。`cargo test -p wolf-game --lib` 373/373、
+  `m14_visual_regression` 5/5、`wolf-cli verify` PASS 64/1、Godot smoke exit 0。
+  正式便携 ZIP 为 764 entries / 751 files（UTF-8 中文顶层目录），
+  `Data/Save` 仅含干净 `System.sav`；`Setup.exe` 已由 Inno Setup 6.7.4 生成，
+  版本资源语言为简体中文。产物在 `work/out/dist/godot/`，哈希见
+  `Imouto Life setup.zip.sha256` 与 `Imouto Life setup.exe.sha256`。
+  `cargo test --workspace` 仅余已记录的玩家 `SaveData01` 夹具漂移
+  `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`。
+
 * **2026-11-18 开场 SE 多行 cell 的 CRLF 文件名修复（当前状态）**：
   `DataBase.dat` 的用户 DB 音效行形如
   `SystemFile/[SE]Cancel.ogg\r\n80\r\n100`；opcode 140 之前把整段 cell 当作

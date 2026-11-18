@@ -2,8 +2,15 @@ extends SceneTree
 
 func _init() -> void:
 	print("=== Running verify_ui_and_interaction_fixes.gd ===")
+	var root := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--data-root="):
+			root = arg.substr("--data-root=".length())
+	if root.is_empty():
+		push_error("verify_ui_and_interaction_fixes: pass --data-root=<unpacked Data dir>")
+		quit(1)
+		return
 	var wolf := WolfGame.new()
-	var root := "E:/Study/github program/Imouto Life/work/Data"
 	if not wolf.open(root):
 		push_error("open failed")
 		quit(1)
@@ -70,6 +77,8 @@ func _init() -> void:
 			wolf.set_input(1, PackedInt32Array([1]), Vector2i(935, 505), 1)
 			var clicked_frame: Dictionary = wolf.frame()
 			print("PASS: Clicked night button without being blocked by map event 14 collision!")
+	else:
+		print("verify_ui_and_interaction_fixes: skip save-dependent checks (no ", save_path, ")")
 
 	print("=== ALL VERIFICATION TESTS PASSED ===")
 	quit(0)
