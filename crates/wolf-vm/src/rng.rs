@@ -85,7 +85,7 @@
 //!
 //! A player who wants a different roll every time is asking for a product
 //! decision, not a fidelity fix, so it lives behind an environment variable:
-//! set [`LIVE_RNG_ENV`] (`WOLF_LIVE_RNG`) to anything non-empty and a live
+//! set [`LIVE_RNG_ENV`] (`WOLF_LIVE_RNG`) to a truthy value and a live
 //! session shifts the starting cursor of a new game and of every load by a
 //! time-based offset. With the variable unset - the default, and what CI and
 //! the test suite use - every path is byte-for-byte what it was before.
@@ -95,6 +95,10 @@
 //! fixtures and the visual baselines) off their expected draws. Unset it
 //! again before running the regression suite.
 //!
+//! `0`, `false`, `off` and `no` are treated as an explicit opt-out. The Godot
+//! windowed entry enables the jitter itself, while headless captures and the
+//! CLI keep the deterministic default.
+//!
 //! Note on variable names: the engine's `Sys110` ("the current random seed")
 //! lives in the `9_000_000 + n` magic bank, and this game's scripts never
 //! write it. The scripts do write normal variable 110 (`2_000_000 + 110`),
@@ -102,6 +106,7 @@
 
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
+use std::ffi::OsStr;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Fallback seed used only to synthesise a table when no `Game.dat` table has
@@ -126,7 +131,8 @@ const INCREMENT: u32 = 0x0026_9EC3;
 
 /// Environment variable that opts a live session into the cursor jitter.
 ///
-/// Any non-empty value turns it on. The variable is read once per
+/// Any truthy value turns it on; `0`/`false`/`off`/`no` turn it off. The
+/// variable is read once per
 /// [`WolfRng::from_game`] call and once per [`WolfRng::set_cursor_live`]
 /// call, never per draw, so the stream stays a pure function of the script
 /// path within one frame.
@@ -144,7 +150,17 @@ static LIVE_JITTER_COUNTER: AtomicU64 = AtomicU64::new(0);
 /// deterministic, so the jitter is off unless a player asks for it.
 #[must_use]
 pub fn live_rng_enabled() -> bool {
-    std::env::var_os(LIVE_RNG_ENV).is_some_and(|value| !value.is_empty())
+    std::env::var_os(LIVE_RNG_ENV).is_some_and(|value| live_value_enabled(&value))
+}
+
+fn live_value_enabled(value: &OsStr) -> bool {
+    let value = value.to_string_lossy();
+    let value = value.trim();
+    !value.is_empty()
+        && !matches!(
+            value.to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        )
 }
 
 /// A fresh offset into the static-random table.
@@ -366,7 +382,9 @@ impl WolfRng {
 
 #[cfg(test)]
 mod tests {
-    use super::WolfRng;
+    use std::ffi::OsStr;
+
+    use super::{live_value_enabled, WolfRng};
 
     /// The first table entries the editor's generator produces for a seed.
     fn editor_bytes(seed: u32, n: usize) -> Vec<u8> {
@@ -398,6 +416,17 @@ mod tests {
         // Wrap at the end of the block.
         assert_eq!(rng.next_raw(), 0);
         assert_eq!(rng.state(), 1);
+    }
+
+    #[test]
+    fn live_switch_accepts_truthy_values_and_rejects_false_like_values() {
+        for value in ["1", "true", "yes", "on", "anything"] {
+            assert!(live_value_enabled(OsStr::new(value)), "{value}");
+        }
+        for value in ["0", "false", "off", "no", " FALSE "] {
+            assert!(!live_value_enabled(OsStr::new(value)), "{value}");
+        }
+        assert!(!live_value_enabled(OsStr::new("")));
     }
 
     #[test]

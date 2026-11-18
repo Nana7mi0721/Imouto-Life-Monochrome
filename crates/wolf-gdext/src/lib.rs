@@ -112,6 +112,18 @@ impl WolfGame {
         }
     }
 
+    /// Enables live RNG cursor jitter for this session.
+    ///
+    /// `GameView.gd` calls this only for a real windowed session, after
+    /// `open` and before `boot`/`prime_engine`. Headless runs and captures
+    /// leave the deterministic retail stream untouched.
+    #[func]
+    fn set_live_rng(&mut self, enabled: bool) {
+        if let Some(game) = self.game.as_mut() {
+            game.set_live_rng(enabled);
+        }
+    }
+
     /// Runs the boot map event (the title splash / title screen sequence).
     #[func]
     fn boot(&mut self) -> bool {

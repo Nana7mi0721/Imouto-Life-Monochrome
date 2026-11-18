@@ -483,6 +483,7 @@ func _ready() -> void:
 	if not wolf.open(root):
 		_fail_startup("无法打开游戏数据（WolfGame.open 返回失败）。", root)
 		return
+	_enable_live_rng_for_play()
 	_apply_window_titlebar_icon()
 	print("startup: wolf_open_ms=", "%.1f" % ((Time.get_ticks_usec() - open_started) / 1000.0))
 	# The daily auto-save writes slot 1 after the evening meal. It overwrites a
@@ -1206,6 +1207,21 @@ func _apply_window_titlebar_icon() -> void:
 		return
 	if not wolf.set_titlebar_icon(_titlebar_icon_image):
 		push_warning("window icon: high-resolution title-bar icon was not applied")
+
+
+## The retail cursor is deterministic; a real windowed session opts into the
+## existing jitter so a new game or save load can roll a different question and
+## job/title draw. Headless smoke, captures and `--auto-new-game` stay
+## deterministic; `WOLF_LIVE_RNG=0` also keeps a live debug run deterministic.
+func _enable_live_rng_for_play() -> void:
+	if DisplayServer.get_name() == "headless" or not capture_path.is_empty() or auto_new_game:
+		return
+	if wolf == null or not wolf.has_method("set_live_rng"):
+		return
+	var value := OS.get_environment("WOLF_LIVE_RNG").strip_edges().to_lower()
+	if value == "0" or value == "false" or value == "off" or value == "no":
+		return
+	wolf.set_live_rng(true)
 
 
 ## Orphaned instances are used by headless input tests, so the viewport may be

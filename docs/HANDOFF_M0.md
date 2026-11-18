@@ -277,6 +277,13 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   图标；F11 后会重发，避免 ICO 固定 16×16 帧的放大模糊。临时 `--export-pack`
   已确认两个图标资源进入 PCK（16 个运行文件）。
 
+* **2026-11-18 开场第二问随机化**：`SampleMapA ev0` 固定两个选择点（职业问 +
+  四场景抽一）；此前文档把 `问题2..问题5` 误写成连续五问。默认静态随机游标从 0
+  开始，因此第二问恒为温泉；Godot 窗口入口现在在 `open()` 后、`boot()` 前调用
+  `WolfGame.set_live_rng(true)`，CLI/headless/capture 仍保持确定性，
+  `WOLF_LIVE_RNG=0` 可关闭。真实数据回归 `m25_live_rng` 16/16、
+  `m27_opening_choice_cancel` 5/5，Godot smoke 全过。
+
 * **2026-11-17 安装版准备（当前状态，未打包）**：`export_presets.cfg` 已补全
   `0.1.0.0`、产品名/文件描述、`Inusuku` 公司与版权；脚本从预设动态读取这些
   字段，避免 Godot 编辑器同步覆盖。新增 Inno Setup 模板与渲染器

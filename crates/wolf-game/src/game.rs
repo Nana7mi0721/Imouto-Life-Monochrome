@@ -1108,6 +1108,12 @@ pub struct Game {
     pub pending_sounds: Vec<SoundCmd>,
     frame_wheel_delta: i32,
     retail_rng_seed: Option<(u32, u32, Vec<u8>)>,
+    /// Whether this session shifts the static-random cursor.
+    ///
+    /// The retail stream is deterministic; the Godot live entry enables this
+    /// after `open` so new games and loads vary. CLI runs and tests keep the
+    /// environment default.
+    live_rng: bool,
     screen_size_cached: (u32, u32),
     /// Mouse position on the previous frame, so a hover only follows the cursor when the
     /// pointer actually moved. Without this the highlight would snap back under a parked
@@ -1298,6 +1304,7 @@ impl Game {
             retail_rng_seed: game_dat
                 .as_ref()
                 .map(|dat| (dat.random_a, dat.random_b, dat.static_randoms.clone())),
+            live_rng: wolf_vm::rng::live_rng_enabled(),
             screen_size_cached: screen,
             previous_mouse: [-1, -1],
             engine_always: None,
@@ -1318,8 +1325,12 @@ impl Game {
         // synthesised editor-style table, which is only a fallback for data that has
         // no Game.dat; every real game must use the shipped stream.
         if let Some(dat) = &game_dat {
-            game.vm.rng =
-                WolfRng::from_game(dat.random_a, dat.random_b, dat.static_randoms.clone());
+            game.vm.rng = WolfRng::from_game_with_live(
+                dat.random_a,
+                dat.random_b,
+                dat.static_randoms.clone(),
+                game.live_rng,
+            );
         }
         // The retail engine loads Save/System.sav at boot and hands the stored global
         // settings to the basic-system scripts through Sys100/101/102 and Sys52..54.
@@ -1647,6 +1658,28 @@ impl Game {
     /// Replaces the play-time clock, used when a save is loaded.
     pub fn set_playtime_frames(&mut self, frames: u32) {
         self.playtime_frames = frames;
+    }
+
+    /// Enables or disables the live RNG cursor jitter for this session.
+    ///
+    /// The Godot windowed entry calls this after `open` and before `boot`, so a
+    /// new game and a reloaded save draw from a different table position. The
+    /// CLI and the headless smoke keep the deterministic default.
+    pub fn set_live_rng(&mut self, enabled: bool) {
+        if self.live_rng == enabled {
+            return;
+        }
+        self.live_rng = enabled;
+        if let Some((random_a, random_b, static_randoms)) = &self.retail_rng_seed {
+            self.vm.rng =
+                WolfRng::from_game_with_live(*random_a, *random_b, static_randoms.clone(), enabled);
+        }
+    }
+
+    /// Whether this session currently uses a jittered RNG cursor.
+    #[must_use]
+    pub(crate) fn live_rng_enabled(&self) -> bool {
+        self.live_rng
     }
 
     /// Pins the wall clock, so a regression run does not depend on the date.
@@ -2421,7 +2454,12 @@ impl Game {
         let programs = self.vm.programs.clone();
         self.vm = Vm::new(programs);
         if let Some((random_a, random_b, static_randoms)) = &self.retail_rng_seed {
-            self.vm.rng = WolfRng::from_game(*random_a, *random_b, static_randoms.clone());
+            self.vm.rng = WolfRng::from_game_with_live(
+                *random_a,
+                *random_b,
+                static_randoms.clone(),
+                self.live_rng,
+            );
         }
         self.seed_live_settings();
         self.vm.vars.set_sys(115, 220);

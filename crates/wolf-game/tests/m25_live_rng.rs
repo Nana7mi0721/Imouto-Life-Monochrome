@@ -67,7 +67,15 @@ fn the_switch_is_named_wolf_live_rng() {
 
 #[test]
 fn the_switch_follows_the_environment() {
-    let expected = std::env::var_os(LIVE_RNG_ENV).is_some_and(|value| !value.is_empty());
+    let expected = std::env::var_os(LIVE_RNG_ENV).is_some_and(|value| {
+        let value = value.to_string_lossy();
+        let value = value.trim();
+        !value.is_empty()
+            && !matches!(
+                value.to_ascii_lowercase().as_str(),
+                "0" | "false" | "off" | "no"
+            )
+    });
     assert_eq!(live_rng_enabled(), expected);
 }
 
@@ -247,7 +255,7 @@ fn two_real_games_start_on_different_slots_in_a_live_session() {
         eprintln!("skipping: no Game.dat under {root:?}");
         return;
     }
-    let (Ok(mut first), Ok(mut second)) = (Game::new(&root), Game::new(&root)) else {
+    let (Ok(first), Ok(second)) = (Game::new(&root), Game::new(&root)) else {
         eprintln!("skipping: cannot open the game");
         return;
     };
@@ -262,6 +270,38 @@ fn two_real_games_start_on_different_slots_in_a_live_session() {
         assert_eq!(first.vm.rng.state(), 0);
         assert_eq!(second.vm.rng.state(), 0);
     }
+}
+
+#[test]
+fn a_game_session_can_enable_live_rng_without_the_environment() {
+    let Some(root) = data_root() else {
+        return;
+    };
+    if !root.join("BasicData").join("Game.dat").is_file() {
+        eprintln!("skipping: no Game.dat under {root:?}");
+        return;
+    }
+    let Ok(mut game) = Game::new(&root) else {
+        eprintln!("skipping: cannot open the game");
+        return;
+    };
+    game.set_live_rng(false);
+    assert_eq!(game.vm.rng.state(), 0);
+    game.set_live_rng(true);
+    let first_live_cursor = game.vm.rng.state();
+    assert_ne!(
+        first_live_cursor, 0,
+        "the session-level live RNG flag did not reseed the initial cursor"
+    );
+    let mut cursors = BTreeSet::new();
+    for _ in 0..8 {
+        game.reset_to_title();
+        cursors.insert(game.vm.rng.state());
+    }
+    assert!(
+        cursors.iter().any(|cursor| *cursor != 0),
+        "the session-level live RNG flag never moved the cursor: {cursors:?}"
+    );
 }
 
 #[test]

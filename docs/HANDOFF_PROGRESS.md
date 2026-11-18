@@ -1664,3 +1664,10 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   重新导入成功，`bash tools/smoke-godot.sh` 全过，`pictures=4 sprites=4`。
   后续验收预览直接看 256×256 源图，32px 只按实际标题栏大小查看，不再用
   最近邻放大图判断画质。
+* **开场第二问随机化**：`SampleMapA ev0` 的实际结构是两个选择点——固定的职业问，
+  加 `pc105 rand(0,4)` / `pc106` 从水面/登山/混浴/炸弹四场景抽一个；
+  `问题2..问题5` 是同一随机槽的候选，不是连续五问。默认静态随机游标从 0 开始，
+  所以第二问恒为温泉。新增 `Game::set_live_rng(bool)` 与 GDExtension 转发，
+  Godot 窗口入口在 `open()` 后启用；CLI/headless/capture/`--auto-new-game` 保持
+  确定性，`WOLF_LIVE_RNG=0` 可显式关闭。回归：`m25_live_rng` 16/16、
+  `m27_opening_choice_cancel` 5/5、Godot smoke 全过。
