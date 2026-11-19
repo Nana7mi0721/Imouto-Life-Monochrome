@@ -1907,3 +1907,92 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     已改为从 `godot/icon_titlebar.png` 直接 LANCZOS 采样。随后又纠正了
     资源归属：inusuku 只用于运行时标题栏覆盖，程序/安装器/任务栏 ICO
     的全部九帧必须来自 `icon_windows.png`。两组资源已分离并重打 Setup/ZIP。
+
+* 2026-11-18（Android 发包工程落地：Rust 跨平台核心 + Godot 触屏适配 + 独立 Android 打包流水线，零破坏 Windows 发包）：
+  * **Rust 核心与 GDExtension 桥接**（`crates/wolf-game/`、`crates/wolf-gdext/`）：
+    * `wolf-game` 将 `wolf-audio` 拆为可选 feature（`default = ["audio"]`），`wolf-gdext` 以 `default-features = false` 依赖 `wolf-game`，彻底切断 GDExtension 对 `cpal`/`symphonia` 的原生依赖以畅通 Android 交叉编译。
+    * 存档路径与只读数据根分离：新增 `Game::with_overlays_and_save_dir` 与 `WolfGame::open_with_save_dir(root, save_dir)`；启动优先读 `save_dir/System.sav`，缺时回退只读 `root/Save/System.sav`，所有 `System.sav`/`SaveDataNN.sav` 写入均落入可写 `save_dir`；原 `open(root)` 保持 100% 兼容。
+    * 资产缓存预算可配：新增 `Assets::set_cache_byte_limit`、`Game::set_asset_cache_bytes` 与 `WolfGame::set_asset_cache_bytes`（立即触发 LRU 收缩）。
+    * 跨平台本地壁钟：`crates/wolf-gdext/src/localclock.rs` 在 `#[cfg(not(windows))]` 通过 Godot `Time::singleton().get_datetime_dict_from_system()` 读取设备本地时间；Windows 仍走 `GetLocalTime`。
+    * 触屏模式（`touch_mode`，默认 `false` 不影响桌面）：新增 `set_touch_mode`/`touch_mode`/`choices_active`/`any_side_panel_open`/`open_side_panel`/`close_side_panels`。开启后隐藏 `2998` PC 手型指针、侧栏把手宽扩至 64px 且 Y 上下扩 20px、图标/存档箭头热区四边扩 10px、关闭侧栏 8 帧自动缩回看门狗改为面板外点击关闭、并在 CE132 `DEVICE_KEYBOARD`/`DEVICE_PAD` 轮询下收到触屏点击/取消时返回 Esc(`127`) 防止无键盘卡死。
+    * 新增 `crates/wolf-game/tests/m8_android_touch.rs`（6 个用例）。
+  * **Godot 前端适配**（`godot/project.godot`、`WolfText.gd`、`GameView.gd`、`godot/tests/android_touch.gd`）：
+    * `project.godot` 补充 `config/quit_on_go_back=false`、`window/stretch/aspect="keep"`、`window/handheld/orientation=0`（横屏）、`pointing/emulate_mouse_from_touch=false`。
+    * `WolfText.gd` 对微软雅黑保持像素级原公式（`text_probe.gd --mode=check` 4..64 逐项 PASS），非雅黑字体动态按实际 ascent/descent 居中对齐。
+    * `GameView.gd` 新增 Android 首次启动流式资产释放（读 `res://android_data/android_data_manifest.json` 到 `user://data`，同版本跳过，升级不覆盖 `user://Save/System.sav`；支持 `--touch-mode`/`--android-data-src`/`--android-dest` 测试）；新增纯触屏手势状态机（单指轻点、双指右键取消且不泄左键、左边缘右滑开侧栏/左滑收起、选项与存档网格上下滑模拟滚轮、7 层 `NOTIFICATION_WM_GO_BACK_REQUEST` 返回键分流 + 标题退出确认框、`NOTIFICATION_APPLICATION_PAUSED` 保存设置）；不做夜间 hover 拖动预览、不增绘悬浮 UI 图标。
+    * 新增 `godot/tests/android_touch.gd` headless 自动化测试。
+  * **Android 构建与发包流水线**（`.gitignore`、`wolf_gdext.gdextension`、`export_presets.cfg`、`tools/package/android_data.py`、`tools/build-android.sh`、`tools/package-android.sh`）：
+    * `export_presets.cfg` 保持 `[preset.0]`（Windows Desktop）一字未动，末尾追加 `[preset.1]`（Android arm64-v8a，非 Gradle 模板直出 APK）；`wolf_gdext.gdextension` 补充 `android.{debug,release}.arm64`。
+    * `tools/build-android.sh` 自动探测 NDK（支持 `cargo-ndk` 或 NDK `aarch64-linux-android24-clang` 直编）并输出 `godot/bin/android/arm64-v8a/libwolf_gdext.so`。
+    * `tools/package-android.sh` 复用 `release-data.manifest` 与 `media.pak` 临时暂存至 `godot/android_data/`（`trap cleanup EXIT` 保证退出即删，零污染 Windows 发包），自动生成 debug keystore、导出 APK 并通过 `android_data.py verify-apk` 校验。
+  * **验证与本机工具链状态**：
+    * 工具链齐备：Rust target `aarch64-linux-android`、Android NDK r30（`D:\ProgramData\android-ndk-r30`，已纳入脚本自动探测）、Android SDK（`D:\ProgramData\android-sdk`，含 `platform-tools` + `build-tools;35.0.0`）、JDK 27（`D:\Program\Java\jdk-27.0.1.1`）、Godot 4.7.2 Android 模板均已就位并配置入 `editor_settings-4.7.tres`。
+    * 回修要点：(1) `touch_rebind_cancel` 改为仅响应当帧新鲜边沿并清零 `pending_mouse`、`handle_action_key_input` 外点关闭侧栏放宽到 `side_panel_is_open`、`m8_android_touch.rs` 改用 `start_pages_loaded`（6/6 全过）；(2) `godot/project.godot` 开启 `textures/vram_compression/import_etc2_astc=true`；(3) `android_data.py` 与 `GameView.gd` 对打包进 APK 的载荷文件统一追加 `.blob` 后缀（由 `android_data_manifest.json` 的 `blob_suffix` 控制），防止 Godot 导出时重导入移走 `◆GenJyuuGothicX-P-Bold.ttf`，首次启动释放时还原真实文件名。
+    * 实测全绿：`cargo check --target aarch64-linux-android -p wolf-gdext`（0 error / 0 warning）、`m8_android_touch`（6/6 passed）、`bash tools/smoke-godot.sh`（12 项 Windows Godot 测试 + 新版 DLL 全过）、`android_touch.gd`（0 failures）、`bash tools/package-godot.sh --dry-run`（Windows 发包零影响）。
+    * **首版 Android APK 产物**：`work/out/dist/android/0.1.0/ImoutoLife-0.1.0-arm64.apk`（**153,991,963 B / 147 MB**，SHA-256 `1d5b6088575c29fb6030f680429f3774a15b21e313837d9b0a6ed427a8567fb4`）；桌面图标已换为 `tools/package/icon_android.png`（192×192 主图标 + 432×432 自适应前景/背景，导出期暂存于 `godot/bin/~icon_android*.png` 并在退出自动清理，Windows PCK 零污染）；内含已 strip 的 `lib/arm64-v8a/libwolf_gdext.so`（4,498,296 B）及全部 17 项发行数据载荷；`verify-apk --require-so` 与 `apksigner verify`（v2 + v3 签名）均通过，`godot/android_data` 导出后自动清理干净。
+
+* 2026-11-18（Android APK GDExtension 原生库重复打包缺陷修复）：
+  * **现象**：真机启动报 sparse pack 无法打开 `bin/android/arm64-v8a/libwolf_gdext.so`，随后 `dlopen` 失败，`GameView.gd` 因找不到 `WolfGame` 解析失败。
+  * **根因**：非 Gradle Android 导出把同一份 `.so` 同时写入 APK 的 `lib/arm64-v8a/` 与 `assets/bin/...`，并登记进 `assets.sparsepck`。Godot Android 加载器优先按 `res://` 路径从 sparse PCK 读取；`FileAccessAndroid` 打开该资产失败后得到未初始化的 `FileAccessPack`，不会回退到已解压的原生库，扩展因此完全未注册。
+  * **修复**：`godot/export_presets.cfg` 的 Android `include_filter` 移除 `bin/android/arm64-v8a/*.so`，并在 `exclude_filter` 禁止该路径进入 PCK；GDExtension 导出插件仍会把原生库放进 APK 的 `lib/arm64-v8a/`。`tools/package-android.sh` preflight 改为强制该排除项并拒绝把 `.so` 放进 include；`tools/package/android_data.py verify-apk` 新增“APK assets/PCK 内不得出现任何 `.so`”校验。
+  * **验证**：旧包被新校验明确以 `assets/bin/android/arm64-v8a/libwolf_gdext.so` 拦截；重打 APK 通过 `verify-apk --require-so` 与 `apksigner` v2/v3。PJZ110 真机覆盖安装后 logcat 显示 `wolf-gdext: open game=29.4ms font=6.2ms total=35.6ms`、`startup: ready_ms=135.2`，无 GDExtension/sparse pack/脚本解析错误，游戏画面正常。
+  * **产物**：`work/out/dist/android/0.1.0/ImoutoLife-0.1.0-arm64.apk` **152,234,688 B**，SHA-256 `50634e6c55c9a4af54a4e09bd64f76918faee4e86ea4582e776ed1995f0bcb72`。
+  * **清理**：删除 `work/out/android/probe`、`work/out/apkcheck*`、`work/out/godot-src` 与设备诊断日志/临时 JSON；保留正式 APK、`work/out/android/media.pak` 打包缓存及验收截图 `work/out/android_fixed.png`。清理后 `du -sh .` = **4.8 GB**。
+
+* 2026-11-18（发行包内联素材漏包：警戒度/执行条黑色格子消失）：
+  * **现象**：Windows 与 Android 发行版中，CE277 警戒度条、CE281/282 执行条等 `\c[9]\img[...]` 内联格子条整条不显示。
+  * **根因**：`CommonEvent.dat` 的 `Picture 500/501` 文本条由 `\img[Picture\box01.png]` / `\img[Picture\box02.png]` 组成；两文件在 `work/Data` 中存在，但 `tools/package/release-data.manifest` 的媒体白名单漏列，`media.pak` 未收录。`Atlas` 文本精灵路径在 `assets.texture_size()` 返回 `None` 时直接跳过，故整条消失，并非 XOR 混淆损坏。
+  * **修复**：清单补入 `Picture/box01.png`（160 B）与 `Picture/box02.png`（148 B）；媒体包由 731 文件 / 113,002,329 B 增至 **733 文件 / 113,002,637 B**，容器 **113,039,230 B**。新增 `crates/wolf-game/tests/release_manifest_refs.rs`，遍历 CommonEvent 与已注册地图的 `\img[...]` 内联路径，断言全部在发行清单中。
+  * **排查**：对 5 张注册地图、CommonEvent 与引擎/Godot 硬编码路径做了全量比对；除这两张外，没有其他“文件存在但未入发行清单”的现役图片/音频/字体依赖。未注册地图与战斗/示例模板的缺失引用不在游玩路径内。
+  * **验证**：`WOLF_DATA_ROOT="$PWD/work/Data" cargo test -q -p wolf-game --test release_manifest_refs` 1 passed；`cargo test -q -p wolf-format --test m3_asset_refs` 2 passed；发行 Data 冒烟 `pictures=4 sprites=4 texts=0`。
+  * **产物**：Windows `Imouto Life setup.exe` **147,916,529 B** / SHA-256 `f246a5e2139bdba1a0e33bce51d497bd5a4199655b057df80eedefbd237f9873`；ZIP **159,648,990 B** / SHA-256 `7582eaeca6d917443e221cbd24b6e92359cb461862246f309f3ff666f21b0cdb`；Android APK **152,234,688 B** / SHA-256 `30b2579e3605ba86d46ab199e403d94387b8680e9820f204814efefd93a58a28`。均已重打并校验，Windows 两包同步到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`。
+  * **清理**：删除 `work/out/media_test.pak`、`work/out/android_media_check.pak`、
+    重复的 `work/out/portable`、`work/out/android/media.pak` 缓存、
+    `target/release` 与 `target/debug/incremental`；`du -sh .` = **4.0 GB**
+    （work 1.1 GB / work/out/dist 675 MB / target 2.9 GB）。
+
+* 2026-11-19（Android 交互优化方案落地：OPT-01..05 + BUG-06）：
+  * **OPT-01 存档空白退出**：`sync_save_grid_cursor()` 左键空白处注入
+    `CANCEL` 并消费点击；右侧前端说明框 `(716,96,276,216)` 视为 UI
+    而非空白，点它不会误退。存档槽命中仍优先，翻页箭头独立处理。
+  * **OPT-02 相册空白退出**：CE303 在网格/取消轮询态（`pc >= 880`）时，
+    左键未命中 `100..119` 的可见 `Picture/album_*` 缩略图即注入 `CANCEL`；
+    点开大图期间父实例不在该 pc，因此不会误退整个相册。全屏相册期间
+    也不再穿透触发卧室地图事件。
+  * **OPT-03 存档页“回到标题”按钮**：`GameView.gd` 在 `SAVE_NOTICE_RECT`
+    下方、相册图标上方绘制 `Picture/endbutton.png`（`(892,330,90,70)`，
+    z=99990），鼠标与触屏都先于存档槽命中拦截；确认框复用
+    `_open_return_modal(true)`，取消不改变存档页。仅在非标题场景显示。
+  * **OPT-04 默认页与箭头**：CE131 首次拿到 `self[627]`（每页槽数）后，
+    扫描 `SaveDataNN.sav` 的 `modified()` 最新项，写 `self[611]/[610]`
+    并刷新布局；同 mtime 取小槽位。CE94 只在重绘时画箭头，宿主改页后
+    箭头会停留旧页，现由 `sync_save_grid_arrows()` 按 `<TRI-LEFT/RIGHT>`
+    生成/隐藏/定位；点击箭头直接推进 `self[611]`（3 页 × 4 槽），
+    避免一帧注入键在复查路径上不翻第二页。空白/箭头点击均消费边沿，
+    不会误确认槽位。
+  * **OPT-05 选项框**：普通 `102` 选项最小宽度 240 px（标题图片菜单除外），
+    所有普通选项统一水平+垂直居中；标题菜单仍用脚本固定图片按钮布局。
+    更新 `choice.rs` 单测与 `m3_mouse_menu` 的锚点断言。
+  * **BUG-06 剧情期快捷 UI 与读档残留**：新增 `story_input_locked()`，
+    仅在 CE245..259（夜命令、交流、TV、游戏、浴室、就寝/早起、日常/归宅/
+    晚饭/休假）非并行运行时锁保存/相册/数据/侧栏；CE230 深夜光标界面及
+    其动画/文字辅助事件明确排除，夜间姿势/结束按钮不受影响。
+    `hover(-7)` 在锁定期返回 0，阻止并行相册图标在对话中打开。
+    `savegame::load_into()` 新增 `Game::clear_transient_prompts()`，
+    读档前清空 `messages`/`choices`/光标/待处理点击，修复对话中读档后
+    旧对话框残留卡死。
+  * **测试**：`m25_save_slot` 19 passed（含新增翻页、空白/说明框、
+    最新页用例）；`m8_android_touch` 6 passed；`m3_ui_screens` 14 passed；
+    `m3_map_click` 9 passed（含 CE258 剧情期保存图标不响应）；
+    `m4_load_resume` 2/3（`loading_a_save_installs_the_map_and_hud` 仍是
+    玩家夹具数值漂移的既有失败）；`m17_ui_regressions` 22/23（唯一失败仍是
+    已记录的 `night_message_click_is_not_eaten_by_parallel_pollers` 夹具漂移）。
+    `bash tools/smoke-godot.sh` 全过，新增
+    `godot/tests/save_return_button.gd` 实测游戏内存档页按钮可打开/取消确认。
+  * **环境备注**：`cargo test -q --workspace` 本次在 rustc/wgpu-core
+    编译阶段以 `STATUS_STACK_BUFFER_OVERRUN` 崩溃（缺 rlib/增量损坏），
+    属本机编译器/缓存状态；逐 crate 定向测试与 `cargo check -p wolf-game`
+    均通过。未提交。
+  * **清理**：删除 `target/debug/incremental`、`target/release`、
+    `target/ver6`、`work/out/saveprobe`、临时 `ce303_probe` 与
+    `headcheck` 工作树；清理后 `du -sh .` = **6.3 GB**。

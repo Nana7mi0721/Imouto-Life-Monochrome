@@ -10,7 +10,7 @@
 
 use std::path::PathBuf;
 
-use wolf_game::Game;
+use wolf_game::{Choices, Game, Message};
 
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/Data".to_owned());
@@ -109,4 +109,38 @@ fn loading_a_save_does_not_replay_the_opening_autorun() {
         game.messages
     );
     assert!(game.choices.is_none(), "no opening choice after load");
+}
+
+#[test]
+fn loading_a_save_clears_prompts_from_the_replaced_scene() {
+    let root = data_root();
+    let save = root.join("Save").join("SaveData01.sav");
+    if !save.is_file() {
+        eprintln!("skipping: missing {}", save.display());
+        return;
+    }
+    let mut game = Game::new(root).expect("game");
+    game.messages.push(Message {
+        text: "old dialogue".to_owned(),
+        face: None,
+        frames: 12,
+    });
+    game.choices = Some(Choices {
+        options: vec!["old choice".to_owned()],
+        sources: vec![0],
+        frames: 3,
+    });
+    game.set_choice_cursor(0);
+
+    wolf_game::savegame::load_into(&mut game, &save).expect("load SaveData01");
+
+    assert!(
+        game.messages.is_empty(),
+        "the replaced scene's dialogue must not survive a load"
+    );
+    assert!(
+        game.choices.is_none(),
+        "the replaced scene's choice prompt must not survive a load"
+    );
+    assert_eq!(game.choice_cursor(), 0, "choice cursor reset");
 }

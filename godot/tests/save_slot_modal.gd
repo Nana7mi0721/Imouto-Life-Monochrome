@@ -259,12 +259,19 @@ func _enter_load_grid() -> bool:
 		return false
 	for _i in range(20):
 		await physics_frame
-	for _i in range(12):
+	for _i in range(16):
 		var hit: Dictionary = view.wolf.selected_save_slot()
 		if int(hit.get("slot", 0)) == 1:
 			return true
 		if int(hit.get("slot", 0)) > 4:
-			await _press(KEY_LEFT)
+			var arrow := _picture_center(12004)
+			if arrow.x < 0.0:
+				break
+			view._input(_click(arrow))
+			await physics_frame
+			await physics_frame
+			view._input(_release(arrow))
+			await physics_frame
 		else:
 			await _press(KEY_UP)
 	push_error("save_slot_modal: could not move the grid cursor back to slot 1")
@@ -302,6 +309,14 @@ func _click(position: Vector2) -> InputEventMouseButton:
 	event.pressed = true
 	event.position = position
 	return event
+
+
+func _picture_center(number: int) -> Vector2:
+	for sprite in view.packet.get("sprites", []):
+		if int(sprite.get("number", -1)) == number:
+			var rect: Rect2 = sprite.get("rect", Rect2())
+			return rect.get_center()
+	return Vector2(-1.0, -1.0)
 
 
 func _release(position: Vector2) -> InputEventMouseButton:

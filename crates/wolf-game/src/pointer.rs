@@ -64,6 +64,9 @@ pub const POINTER_HOTSPOT: [i32; 2] = [4, 1];
 ///
 /// Returns true when the screen changed.
 pub fn sync_pointer(game: &mut Game) -> bool {
+    if game.touch_mode {
+        return erase_pointer(game);
+    }
     let game_pointer = game
         .screen
         .get(GAME_POINTER_SLOT)

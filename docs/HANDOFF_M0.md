@@ -261,12 +261,54 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 > **[HANDOFF_PROGRESS.md](HANDOFF_PROGRESS.md)**。本节只保留**当前状态摘要**；
 > 新会话判断“现在是什么状态”以本节 + 各专题文档为准，查历史细节再翻日志。
 
-### 11.1 当前状态（2026-11-18）
+### 11.1 当前状态（2026-11-19）
+
+* **2026-11-19 Android 交互优化（OPT-01..05 + BUG-06，当前工作区）**：
+  存档网格支持点空白退出（右侧说明框除外）、打开定位最新存档页、点击左右
+  紫色箭头翻页（3 页 × 4 槽，箭头由宿主按 `<TRI-LEFT/RIGHT>` 补齐）；
+  相册网格点缩略图外空白退出，点开大图时不误退且不穿透到卧室地图；
+  存档页说明框下方新增“回到标题”按钮（`Picture/endbutton.png`，
+  `(892,330,90,70)`），鼠标/触屏均可打开确认；普通 `102` 选项框最小
+  240 px 并统一水平+垂直居中（标题图片菜单除外）。剧情期快捷 UI 仅由
+  CE245..259 非并行实例锁定，CE230 深夜光标界面及其辅助事件不受影响；
+  读档前清空旧 `messages`/`choices`/待处理点击，修复对话中读档残留卡死。
+  定向验证：`m25_save_slot` 19、`m8_android_touch` 6、`m3_ui_screens` 14、
+  `m3_map_click` 9 全过；`m4_load_resume` 2/3 与 `m17_ui_regressions`
+  22/23 的失败仍是已记录的玩家夹具漂移；`tools/smoke-godot.sh` 全过，
+  新增 `godot/tests/save_return_button.gd`。本轮未提交；工作区
+  `cargo test --workspace` 遇到 rustc/wgpu 编译期栈溢出，非代码错误。
+
+* **2026-11-18 发行媒体包补齐内联格子素材（当前状态）**：CE277 警戒度条 /
+  CE281-282 执行条的 `\img[Picture\box01.png]`、`\img[Picture\box02.png]`
+  原先被发行清单漏掉，媒体包里没有这两张 19×20 方块，Atlas 取不到纹理后
+  整条格子被跳过。现已补入清单：媒体包 **733 文件 / 113,002,637 B**，
+  容器 **113,039,230 B**，最终 `Data/` 仍为 17 个文件。新增
+  `crates/wolf-game/tests/release_manifest_refs.rs`，静态检查 CommonEvent 与
+  已注册地图的全部 `\img[...]` 路径都在发行清单中；现有数据上 1 passed。
+  Windows 与 Android 均已重打：Setup **147,916,529 B** / SHA-256
+  `f246a5e2139bdba1a0e33bce51d497bd5a4199655b057df80eedefbd237f9873`，
+  ZIP **159,648,990 B** / SHA-256
+  `7582eaeca6d917443e221cbd24b6e92359cb461862246f309f3ff666f21b0cdb`，
+  APK **152,234,688 B** / SHA-256
+  `30b2579e3605ba86d46ab199e403d94387b8680e9820f204814efefd93a58a28`；
+  发行 Data 冒烟为 `pictures=4 sprites=4 texts=0`。
+
+* **2026-11-18 Android GDExtension 加载缺陷修复（当前状态）**：Android APK
+  曾把 `libwolf_gdext.so` 同时放进 `lib/arm64-v8a/` 和 `assets/bin/...`，
+  Godot 优先从 sparse PCK 读 `res://bin/android/arm64-v8a/libwolf_gdext.so`
+  时失败，扩展未注册导致 `GameView.gd` 找不到 `WolfGame`。现 Android 预设
+  已从 `include_filter` 移除、并在 `exclude_filter` 排除
+  `bin/android/arm64-v8a/*.so`，只由 GDExtension 导出插件写入
+  `lib/arm64-v8a/`；`verify-apk` 会拒绝 APK assets/PCK 中的任何 `.so`。
+  正式 APK 已重打并真机验证（PJZ110：`WolfGame` 正常打开、无解析错误），
+  `work/out/dist/android/0.1.0/ImoutoLife-0.1.0-arm64.apk` 为
+  **152,234,688 B** / SHA-256
+  `50634e6c55c9a4af54a4e09bd64f76918faee4e86ea4582e776ed1995f0bcb72`。
 
 * **2026-11-18 媒体只读包与高 DPI 小图标（当前状态）**：正式 `Data/` 已从
-  747 个明文文件收口为 **17 个文件**：15 个明文清单文件 +
-  `Save/System.sav` + `Data/media.pak`。7 个媒体前缀共 **731 个文件 /
-  113,002,329 B** 进入 113,038,832 B 的只读包；文件体按绝对 offset 使用固定
+  748 个清单文件收口为 **17 个文件**：15 个明文清单文件 +
+  `Save/System.sav` + `Data/media.pak`。7 个媒体前缀共 **733 个文件 /
+  113,002,637 B** 进入 113,039,230 B 的只读包；文件体按绝对 offset 使用固定
   seed 的 splitmix64 XOR 流混淆，索引也混淆并带 CRC-32。`BasicData/`、
   `MapData/`、`Save/` 与字体保持明文；资源查找优先级仍为
   **Mod overlay 散文件 > 基础目录散文件 > `media.pak`**，Godot 音频通过
@@ -579,6 +621,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     `godot/tests/save_slot_modal.gd`（已接入 `tools/smoke-godot.sh`）；
     `cargo fmt --all --check` 干净；`wolf-cli verify` PASS 64 / 1 SKIP；
     `bash tools/smoke-godot.sh` exit 0。
+* **Android 发包工程落地并产出首版 APK（2026-11-18，当前状态）**：在不影响 Windows 端构建与 `tools/package-godot.sh` 发包的前提下，完成 Android 跨平台核心、触屏适配与独立发包流水线：`wolf-game` 拆分可选 `audio` feature（`wolf-gdext` 去 `cpal`/`symphonia`）、独立 `save_dir` + `open_with_save_dir`、可配 `set_asset_cache_bytes`、非 Windows 本地时间（Godot `Time` 单例）、`touch_mode`（隐藏 2998 手型指针、放宽侧栏/图标热区、面板外点击关闭侧栏、CE132 改键防卡死）；Godot 侧补齐 `import_etc2_astc=true`/关闭 `emulate_mouse_from_touch`、非雅黑动态基线、Android 首次启动 `android_data`（`.blob` 防重导入）流式释放（不覆写玩家存档）、单指点击/双指右键/侧栏滑动/上下滑滚轮/系统返回键分流（不做夜间 hover 拖动预览、不增悬浮 UI）；新增 `[preset.1]`（Android arm64-v8a，保持 `[preset.0]` Windows Desktop 一字不动）、`tools/build-android.sh`、`tools/package-android.sh`、`tools/package/android_data.py` 与测试 `m8_android_touch.rs`（6/6）/ `android_touch.gd`（0 failures）。已通过 NDK r30 + SDK 35.0.0 + JDK 27 实编 `libwolf_gdext.so`（4.5 MB）并导出首版可安装 APK `work/out/dist/android/0.1.0/ImoutoLife-0.1.0-arm64.apk`（149 MB，`verify-apk` + `apksigner` v2/v3 全过）；Windows `smoke-godot.sh`（12 项）与 `package-godot.sh --dry-run` 全绿。详见 `HANDOFF_PROGRESS.md` 2026-11-18 条目。
 * **T14 实机 UI/性能收口（2026-11-12 深夜，当前状态）**：最新冷构建下新游戏/读档
   第 `1/2/3/6/10` 帧均 `yellowish=0 / greenish=0`；读档 HUD 的 100x8 白色带框精力条
   在第 1 帧已实际绘制。相册图标纳入图片墨迹命中，侧栏关闭态命中扩到屏幕 `x=0`，

@@ -155,6 +155,19 @@ const PICTURE_ACTION_CONTROLS: &[(i32, u32, &str)] = &[
     (1117, 28, "Picture/pose_icon02.png"),
 ];
 
+/// Common events that drive a blocking story/transition scene.
+///
+/// This is deliberately a positive list rather than "any non-menu common event":
+/// the night interface (CE230) and its animation/text helpers (CE231..CE235,
+/// CE240, CE264, CE270) are long-lived but interactive, and locking the quick
+/// icons for them made save/album unclickable during normal night play. The
+/// scenes below are the ones whose dialogue/transition gaps must suppress the
+/// host-level quick UI: the night command and its scenes, sleep/morning, the
+/// daytime and holiday menus, and the evening meal that ends in the auto-save.
+const STORY_COMMON_EVENTS: &[u32] = &[
+    245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259,
+];
+
 /// CE270's completed body-text picture.
 ///
 /// CE269 configures the balloon library with picture base 36000 and its default
@@ -600,6 +613,10 @@ const SAVE_GRID_X: i32 = 48;
 const SAVE_GRID_TOP: i32 = 84;
 const SAVE_GRID_WIDTH: i32 = 636;
 const SAVE_GRID_HEIGHT: i32 = 112;
+/// Last page of CE131's shipped 12-slot grid (3 pages x 4 rows).
+const SAVE_GRID_LAST_PAGE: i32 = 2;
+/// The front-end notice panel drawn over the save grid.
+const SAVE_NOTICE_RECT: [f32; 4] = [716.0, 96.0, 276.0, 216.0];
 const SAVE_GRID_PITCH: i32 = 116;
 
 fn save_grid_row_layout(row: i32) -> [f32; 4] {
@@ -1012,6 +1029,7 @@ pub struct Game {
     pub current_bgm: Option<(String, i32)>,
     /// M4 audio output. `None` keeps the pure-logic and test paths silent and
     /// allocation-free; [`Self::enable_audio`] installs a real engine.
+    #[cfg(feature = "audio")]
     pub audio: Option<wolf_audio::Engine>,
     /// Message windows on screen.
     pub messages: Vec<Message>,
@@ -1049,6 +1067,8 @@ pub struct Game {
     boot_map_active: bool,
     /// True while CE131 owned the screen on the previous frame.
     load_grid_open: bool,
+    /// CE131's page/row have been aligned with the newest save file.
+    save_grid_page_initialized: bool,
     /// A load screen closed on the boot map and the title stack has not drained yet.
     ///
     /// The close and the end of CE42/CE14/event 2 can happen on different frames, so
@@ -1071,6 +1091,13 @@ pub struct Game {
     pub mouse: [i32; 2],
     /// Mouse buttons held this frame: bit 0 left, bit 1 right, bit 2 middle.
     pub mouse_buttons: u32,
+    /// Touchscreen interaction mode (Android / touch front-ends).
+    ///
+    /// Defaults to `false` so desktop/Windows behaviour stays 100% unchanged.
+    /// When enabled: hides the PC hand cursor (`2998`), widens small hit zones,
+    /// switches side-panel dismissal from hover-leave auto-retract to outside-tap,
+    /// and prevents CE132's raw keyboard/pad rebind polls from softlocking.
+    pub touch_mode: bool,
     /// Frames the pointer has been outside a fully-open side drawer.
     side_panel_retract_frames: u8,
     /// One automatic retract has already been requested for this hover session.
@@ -1158,6 +1185,12 @@ pub struct Game {
     /// loading a slot must not change the player's volumes.
     pub system_save: Option<wolf_save::SaveFile>,
     root: PathBuf,
+    /// Writable directory for `System.sav` and `SaveDataNN.sav`.
+    ///
+    /// Defaults to `<root>/Save` in [`Self::new`] / [`Self::with_overlays`];
+    /// mobile/sandboxed hosts point this at a writable user-data folder while
+    /// keeping `root` read-only.
+    save_dir: PathBuf,
     /// Optional mod data overlay roots, highest priority last. Each mirrors the data
     /// tree; a file present here is used instead of the base root. See
     /// [`Self::with_overlays`].
@@ -1191,6 +1224,27 @@ impl Game {
         overlays: Vec<PathBuf>,
     ) -> Result<Self, GameError> {
         let root = root.into();
+        let save_dir = root.join("Save");
+        Self::with_overlays_and_save_dir(root, overlays, save_dir)
+    }
+
+    /// Loads the game with a read-only data root, optional mod overlays, and a
+    /// separate writable `save_dir` for `System.sav` and `SaveDataNN.sav`.
+    ///
+    /// On boot, `System.sav` is read from `save_dir` first, falling back to the
+    /// read-only template at `<root>/Save/System.sav` when `save_dir` does not
+    /// have one yet. All subsequent save/settings writes target `save_dir`.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::new`].
+    pub fn with_overlays_and_save_dir(
+        root: impl Into<PathBuf>,
+        overlays: Vec<PathBuf>,
+        save_dir: impl Into<PathBuf>,
+    ) -> Result<Self, GameError> {
+        let root = root.into();
+        let save_dir = save_dir.into();
         let mods = crate::mods::validate(&overlays).map_err(GameError::Mod)?;
         // A mod may carry a text-level patch catalog at its root (M5-E second slice):
         // it rewords individual messages/choices without replacing CommonEvent.dat.
@@ -1232,7 +1286,15 @@ impl Game {
         // brand-new game can write its first save without inventing part1/part4. Its
         // variable database is empty, though (docs/M3_VARDB_BUG.md), so seed the
         // CDataBase schema from the static table before any save can use it.
-        let system_save = crate::savegame::read_save(&root.join("Save").join("System.sav")).ok();
+        // Prefer the writable `save_dir/System.sav`; fall back to the read-only
+        // template under `<root>/Save/System.sav`.
+        let writable_system_sav = save_dir.join("System.sav");
+        let system_save = if writable_system_sav.is_file() {
+            crate::savegame::read_save(&writable_system_sav).ok()
+        } else {
+            None
+        }
+        .or_else(|| crate::savegame::read_save(&root.join("Save").join("System.sav")).ok());
         let mut base_save = system_save.clone();
         if let Some(save) = base_save.as_mut() {
             databases.seed_vardb(&mut save.vardb);
@@ -1264,6 +1326,7 @@ impl Game {
             key_bits: 0,
             sounds: Vec::new(),
             current_bgm: None,
+            #[cfg(feature = "audio")]
             audio: None,
             messages: Vec::new(),
             history: Vec::new(),
@@ -1283,6 +1346,7 @@ impl Game {
             runtime: MapRuntime::new(),
             boot_map_active: false,
             load_grid_open: false,
+            save_grid_page_initialized: false,
             load_cancel_pending: false,
             last_action_event: None,
             auto_events,
@@ -1290,6 +1354,7 @@ impl Game {
             clock: Clock::System,
             mouse: [-1, -1],
             mouse_buttons: 0,
+            touch_mode: false,
             side_panel_retract_frames: 0,
             side_panel_retract_armed: false,
             wheel: 0,
@@ -1321,6 +1386,7 @@ impl Game {
             base_save,
             system_save,
             root,
+            save_dir,
             overlays,
             mods,
         };
@@ -1373,6 +1439,100 @@ impl Game {
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Writable directory holding `System.sav` and `SaveDataNN.sav`.
+    #[must_use]
+    pub fn save_dir(&self) -> &Path {
+        &self.save_dir
+    }
+
+    /// Updates the decoded RGBA asset cache budget and immediately evicts
+    /// least-recently-used entries beyond `limit`.
+    pub fn set_asset_cache_bytes(&mut self, limit: usize) {
+        self.assets.set_cache_byte_limit(limit);
+    }
+
+    /// Enables or disables touch-mode input and UI adaptations.
+    pub fn set_touch_mode(&mut self, enabled: bool) {
+        self.touch_mode = enabled;
+    }
+
+    /// Whether touch mode is currently enabled.
+    #[must_use]
+    pub fn touch_mode(&self) -> bool {
+        self.touch_mode
+    }
+
+    /// True while a choice prompt is currently active.
+    #[must_use]
+    pub fn choices_active(&self) -> bool {
+        self.choices.is_some()
+    }
+
+    /// True while either the status (320) or item (2300) side drawer is open.
+    #[must_use]
+    pub fn any_side_panel_open(&self) -> bool {
+        self.side_panel_is_open(320) || self.side_panel_is_open(2300)
+    }
+
+    /// Opens the requested side panel (`0` = status 320 / CE238, `1` = item 2300 / CE239),
+    /// closing the opposite panel first if it is engaged.
+    ///
+    /// Returns `false` when `kind` is unknown, the panel picture is absent/hidden,
+    /// or a menu/dialog currently blocks free-map interaction.
+    pub fn open_side_panel(&mut self, kind: i32) -> bool {
+        if self.side_panel_blocked() {
+            return false;
+        }
+        let (slot, file, ce, map_event, other_slot, other_ce) = match kind {
+            0 => (320, "Picture/status01.png", 238, 10, 2300, 239),
+            1 => (2300, "Picture/itemlist.png", 239, 7, 320, 238),
+            _ => return false,
+        };
+        let panel_present = self.screen.get(slot).is_some_and(|picture| {
+            !picture.hidden
+                && picture.opacity > 0
+                && picture.file == file
+                && (-306..=1).contains(&picture.x)
+        });
+        if !panel_present {
+            return false;
+        }
+        self.side_panel_retract_frames = 0;
+        self.side_panel_retract_armed = false;
+        if self.side_panel_is_engaged(other_slot) {
+            self.start_panel_event(other_ce, 0);
+        }
+        if !self.side_panel_is_open(slot) {
+            if let Some(id) = self.runtime.action_key_event(&mut self.vm, map_event) {
+                self.last_action_event = Some(id);
+            } else {
+                self.start_panel_event(ce, 1);
+                self.last_action_event = Some(map_event);
+            }
+        }
+        true
+    }
+
+    /// Closes any currently open status/item side panel.
+    ///
+    /// Returns `true` when at least one panel close event was triggered.
+    pub fn close_side_panels(&mut self) -> bool {
+        let mut closed = false;
+        if self.side_panel_is_open(320) {
+            self.start_panel_event(238, 0);
+            closed = true;
+        }
+        if self.side_panel_is_open(2300) {
+            self.start_panel_event(239, 0);
+            closed = true;
+        }
+        if closed {
+            self.side_panel_retract_frames = 0;
+            self.side_panel_retract_armed = false;
+        }
+        closed
     }
 
     /// The mod data overlay roots, lowest priority first.
@@ -1455,6 +1615,7 @@ impl Game {
     /// Turns on real audio output (M4). Safe on a machine with no device -- the engine
     /// degrades to a silent null backend -- and idempotent. Tests leave audio off because
     /// [`Self::new`] defaults to `None`.
+    #[cfg(feature = "audio")]
     pub fn enable_audio(&mut self) {
         self.audio = Some(wolf_audio::Engine::with_overlays(
             self.root.clone(),
@@ -1563,10 +1724,13 @@ impl Game {
     /// A no-op with no audio engine (the headless/test default). WOLF's 0..=120 scale
     /// maps 100 to unity; values above 100 saturate because the mixer clamps to 0..=1.
     pub fn apply_settings(&mut self) {
-        let settings = self.live_settings();
-        if let Some(audio) = self.audio.as_mut() {
-            audio.set_bgm_volume(settings.bgm_gain());
-            audio.set_se_volume(settings.se_gain());
+        #[cfg(feature = "audio")]
+        {
+            let settings = self.live_settings();
+            if let Some(audio) = self.audio.as_mut() {
+                audio.set_bgm_volume(settings.bgm_gain());
+                audio.set_se_volume(settings.se_gain());
+            }
         }
     }
 
@@ -1625,7 +1789,7 @@ impl Game {
     /// path. It never touches numbered save slots.
     pub fn save_system_settings(&mut self) -> Result<(), GameError> {
         self.sync_live_settings()?;
-        let path = self.root.join("Save").join("System.sav");
+        let path = self.save_dir.join("System.sav");
         self.write_system_settings(&path)
     }
 
@@ -1929,10 +2093,7 @@ impl Game {
 
     /// Fills in the file and the occupancy of one slot.
     fn save_slot(&self, grid: SaveGridState, slot: i32, center: [i32; 2]) -> SaveSlotHit {
-        let path = self
-            .root
-            .join("Save")
-            .join(format!("SaveData{slot:02}.sav"));
+        let path = self.save_dir.join(format!("SaveData{slot:02}.sav"));
         SaveSlotHit {
             slot,
             occupied: path.is_file(),
@@ -2009,6 +2170,57 @@ impl Game {
                 picture.anchor = 0;
                 picture.shift = (0, 0);
                 picture.transition = None;
+            }
+        }
+        self.sync_save_grid_arrows(grid);
+    }
+
+    /// Keeps CE94's page arrows correct when the host moves the grid page.
+    ///
+    /// CE94 only paints an arrow while it draws the screen. The host aligns a
+    /// freshly opened grid with the newest save *after* the script has already
+    /// drawn page 1, so `self11` changes without a redraw: page 2+ showed the
+    /// right arrow from page 1 and never created the missing left arrow. The
+    /// arrow pictures are ordinary `<TRI-*>` system graphics, so create/clone and
+    /// hide/unhide them here from the authoritative page state instead of
+    /// replaying CE94 a second time.
+    fn sync_save_grid_arrows(&mut self, grid: SaveGridState) {
+        let Some(template) = self
+            .screen
+            .get(12005)
+            .or_else(|| self.screen.get(12004))
+            .cloned()
+        else {
+            return;
+        };
+        for (number, file, x, visible) in [
+            (12004, "<TRI-LEFT>", 8, grid.page > 0),
+            (12005, "<TRI-RIGHT>", 691, grid.page < SAVE_GRID_LAST_PAGE),
+        ] {
+            if self.screen.get(number).is_none() {
+                if !visible {
+                    continue;
+                }
+                let mut picture = template.clone();
+                picture.number = number;
+                picture.file = file.to_owned();
+                picture.text.clear();
+                picture.hidden = false;
+                picture.opacity = 255;
+                self.screen.insert(picture);
+            }
+            if let Some(picture) = self.screen.get_mut(number) {
+                picture.x = x;
+                picture.y = 280;
+                picture.anchor = 0;
+                picture.scale = 100;
+                picture.scale_y = 100;
+                picture.shift = (0, 0);
+                picture.transition = None;
+                picture.hidden = !visible;
+                if visible {
+                    picture.opacity = 255;
+                }
             }
         }
     }
@@ -2102,10 +2314,7 @@ impl Game {
 
     /// Reads and caches the display fields of one save slot.
     fn save_summary(&self, slot: i32) -> Option<SaveSummary> {
-        let path = self
-            .root
-            .join("Save")
-            .join(format!("SaveData{slot:02}.sav"));
+        let path = self.save_dir.join(format!("SaveData{slot:02}.sav"));
         let metadata = match std::fs::metadata(&path) {
             Ok(metadata) => metadata,
             Err(_) => {
@@ -2264,10 +2473,7 @@ impl Game {
         if self.boot_map_active || self.pending_return_to_title {
             return;
         }
-        let path = self
-            .root
-            .join("Save")
-            .join(format!("SaveData{slot:02}.sav"));
+        let path = self.save_dir.join(format!("SaveData{slot:02}.sav"));
         match self.save_to(&path) {
             Ok(bytes) => {
                 self.diagnostics.insert(
@@ -2448,6 +2654,7 @@ impl Game {
         self.last_action_event = None;
 
         self.current_bgm = None;
+        #[cfg(feature = "audio")]
         if let Some(a) = self.audio.as_mut() {
             a.stop_bgm(0);
             a.stop_bgs(0);
@@ -3150,6 +3357,23 @@ impl Game {
         self.history.clear();
     }
 
+    /// Drops prompts that belong to the coroutine a load is about to replace.
+    ///
+    /// A `220` load replaces every script coroutine. A message or choice opened by
+    /// the old scene can therefore outlive its waiter: it stays painted on screen,
+    /// swallows input, and no script is left to close it (the reported "load during
+    /// dialogue leaves a stuck box" bug). Clear the visible prompt state together
+    /// with the message history at the start of a load.
+    pub(crate) fn clear_transient_prompts(&mut self) {
+        self.messages.clear();
+        self.choices = None;
+        self.choice_cursor = 0;
+        self.frame_mouse_blocked = false;
+        self.pending_mouse = 0;
+        self.pending_mouse_age = 0;
+        self.mouse_consumed = false;
+    }
+
     /// The newest 101 message, laid out with its inline styling.
     ///
     /// Colour escapes resolve through the SysDatabase palette the same way text
@@ -3843,9 +4067,9 @@ impl Game {
     /// conditions), but the daytime sister hotspots (ev1-4) remain selected while
     /// v100 == 1. That does not affect the mapped controls (save, status, menu,
     /// end button); see `tests/m3_map_click.rs` for the measured points.
-    fn handle_action_key_input(&mut self) {
+    fn handle_action_key_input(&mut self) -> bool {
         if !self.messages.is_empty() || self.choices.is_some() {
-            return;
+            return false;
         }
         // A save/load grid (CE131), the menu dispatcher (CE14) or the settings screen
         // (CE132/CE95) owns the pointer. Without this gate a click on a grid row also
@@ -3855,12 +4079,12 @@ impl Game {
             instance.program.self_base == wolf_vm::program::COMMON_SELF_BASE
                 && matches!(instance.event, 14 | 95 | 131 | 132)
         }) {
-            return;
+            return false;
         }
         let fresh_click = self.mouse_buttons & 1 != 0 && self.previous_mouse_buttons & 1 == 0;
         let fresh_ok = self.key_bits & !self.previous_keys & crate::key::OK != 0;
         if !fresh_click && !fresh_ok {
-            return;
+            return false;
         }
         let [x, y] = self.mouse;
         if x < 0
@@ -3868,7 +4092,55 @@ impl Game {
             || x >= crate::picture::SCREEN_W as i32
             || y >= crate::picture::SCREEN_H as i32
         {
-            return;
+            return false;
+        }
+        // CE303's grid owns the screen while it waits on its final cancel poll.
+        // A blank click leaves the album; a click on a thumbnail is left for the
+        // script's own `124`/`123` pair, and nothing may fall through to the room
+        // behind the full-screen overlay.
+        if self.album_grid_active() {
+            if fresh_click && !self.album_thumbnail_at(x, y) {
+                self.inject_key_and_consume_click(crate::key::CANCEL);
+            }
+            return false;
+        }
+        // Dialogue/transition scenes: the quick icons and side drawers stay inert
+        // even in the one-frame gap where `messages` is empty.
+        if self.story_input_locked() {
+            return false;
+        }
+        // In touch mode, hover-leave auto-retract is disabled; tapping outside an
+        // open side panel's visible ink (and not on a side-panel handle) closes
+        // the panel and consumes the tap so it never clicks through to the scene.
+        if self.touch_mode && fresh_click {
+            let status_open = self.side_panel_is_open(320);
+            let item_open = self.side_panel_is_open(2300);
+            if status_open || item_open {
+                if self.try_side_panel_handle(x, y) {
+                    return false;
+                }
+                let panel = if status_open { 320 } else { 2300 };
+                let inside = self.picture_ink_rect(panel).is_some_and(|rect| {
+                    let px = x as f32;
+                    let py = y as f32;
+                    px >= rect[0]
+                        && px < rect[0] + rect[2]
+                        && py >= rect[1]
+                        && py < rect[1] + rect[3]
+                });
+                if !inside {
+                    if status_open {
+                        self.start_panel_event(238, 0);
+                    }
+                    if item_open {
+                        self.start_panel_event(239, 0);
+                    }
+                    self.side_panel_retract_frames = 0;
+                    self.side_panel_retract_armed = false;
+                    self.mouse_consumed = true;
+                    return true;
+                }
+            }
         }
         let governed = self.picture_governed_action_events();
         if let Some(event) = self.picture_action_event_at(x, y) {
@@ -3878,7 +4150,7 @@ impl Game {
             // which made the icon appear unresponsive for a frame or two.
             // Leave the edge for the running script to read.
             if event == 35 {
-                return;
+                return false;
             }
             // The visible icon owns the press even when its page condition is not
             // active: falling through would revive the old tile rectangle or hit
@@ -3896,16 +4168,16 @@ impl Game {
             if let Some(id) = started {
                 self.last_action_event = Some(id);
             }
-            return;
+            return false;
         }
         if self.try_side_panel_handle(x, y) {
-            return;
+            return false;
         }
         if let Some(event) = self.sister_body_action_event_at(x, y) {
             if let Some(id) = self.runtime.action_key_event(&mut self.vm, event) {
                 self.last_action_event = Some(id);
                 self.mouse_consumed = true;
-                return;
+                return false;
             }
         }
         if let Some(id) = self
@@ -3915,6 +4187,7 @@ impl Game {
             self.last_action_event = Some(id);
             self.mouse_consumed = true;
         }
+        false
     }
 
     /// Opens/closes either parked side panel from its visible right-edge handle.
@@ -3998,9 +4271,29 @@ impl Game {
         };
         let px = x as f32;
         let py = y as f32;
-        let left = rect[0] + rect[2] - SIDE_PANEL_HANDLE_RIGHT;
-        let right = rect[0] + rect[2] + 2.0;
-        px >= left && px < right && py >= rect[1] + band.0 && py < rect[1] + band.1
+        let (left, right, y_pad) = if self.touch_mode {
+            let left = (rect[0] + rect[2] - 64.0).max(0.0);
+            let right = (rect[0] + rect[2] + 2.0).max(64.0);
+            (left, right, 20.0)
+        } else {
+            (
+                rect[0] + rect[2] - SIDE_PANEL_HANDLE_RIGHT,
+                rect[0] + rect[2] + 2.0,
+                0.0,
+            )
+        };
+        px >= left && px < right && py >= rect[1] + band.0 - y_pad && py < rect[1] + band.1 + y_pad
+    }
+
+    fn side_panel_blocked(&self) -> bool {
+        !self.messages.is_empty()
+            || self.choices.is_some()
+            || self.save_grid_active()
+            || self.story_input_locked()
+            || self.vm.instances().iter().any(|instance| {
+                instance.program.self_base == wolf_vm::program::COMMON_SELF_BASE
+                    && matches!(instance.event, 14 | 95 | 131 | 132)
+            })
     }
 
     fn side_panel_is_open(&self, slot: i32) -> bool {
@@ -4026,6 +4319,9 @@ impl Game {
     /// for a pointer that simply leaves the panel. A short delay keeps a quick
     /// trip to the top bar or a dialogue from collapsing the drawer mid-click.
     fn tick_side_panel_auto_retract(&mut self) {
+        if self.touch_mode {
+            return;
+        }
         let status_open = self.side_panel_is_docked(320);
         let item_open = self.side_panel_is_docked(2300);
         if !status_open && !item_open {
@@ -4033,14 +4329,7 @@ impl Game {
             self.side_panel_retract_armed = false;
             return;
         }
-        let blocked = !self.messages.is_empty()
-            || self.choices.is_some()
-            || self.save_grid_active()
-            || self.vm.instances().iter().any(|instance| {
-                instance.program.self_base == wolf_vm::program::COMMON_SELF_BASE
-                    && matches!(instance.event, 14 | 95 | 131 | 132)
-            });
-        if blocked {
+        if self.side_panel_blocked() {
             self.side_panel_retract_frames = 0;
             return;
         }
@@ -4212,7 +4501,13 @@ impl Game {
     /// rule that asks "is the pointer still on this picture?" cannot disagree
     /// with what the script sees.
     pub(crate) fn hover_picture(&mut self, number: i32) -> i32 {
-        hover_picture(&mut self.screen, &mut self.assets, self.mouse, number)
+        hover_picture(
+            &mut self.screen,
+            &mut self.assets,
+            self.mouse,
+            number,
+            self.touch_mode,
+        )
     }
 
     /// Applies this frame's key state to the open choice prompt, if there is one.
@@ -4405,6 +4700,186 @@ impl Game {
             .any(|instance| instance.event == 131)
     }
 
+    /// True while CE303's album grid is the visible, browsing surface.
+    ///
+    /// CE303 spends most of its first 880 slots drawing the frame and the
+    /// thumbnails. The final block (roughly pc 880 onward) polls `123` for a
+    /// cancel/confirm and is the only state where a blank click means "leave the
+    /// album". Once a thumbnail is opened, CE303 hands control to a child
+    /// coroutine and is no longer parked on that poll, so this guard also keeps
+    /// a click on a full-screen CG from closing the whole album.
+    fn album_grid_active(&self) -> bool {
+        self.vm.instances().iter().any(|instance| {
+            instance.event == 303
+                && instance.program.self_base == wolf_vm::program::COMMON_SELF_BASE
+                && instance.pc >= 880
+        })
+    }
+
+    /// Whether `(x, y)` is over one of CE303's visible album thumbnails.
+    fn album_thumbnail_at(&mut self, x: i32, y: i32) -> bool {
+        for number in 100..=119 {
+            let Some(picture) = self.screen.get(number) else {
+                continue;
+            };
+            let normalised = picture.file.replace('\\', "/");
+            if picture.hidden || picture.opacity <= 0 || !normalised.starts_with("Picture/album_") {
+                continue;
+            }
+            let Some(rect) = self.picture_ink_rect(number) else {
+                continue;
+            };
+            let px = x as f32;
+            let py = y as f32;
+            if px >= rect[0] && px < rect[0] + rect[2] && py >= rect[1] && py < rect[1] + rect[3] {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// True while a blocking story scene owns the screen.
+    ///
+    /// The quick save/album/data icons and the side drawers are host-level
+    /// affordances, not part of the dialogue scripts. During a conversation the
+    /// message list is momentarily empty between two `101` lines, and during a
+    /// transition it is empty for longer. The retail engine therefore needs a
+    /// scene-level gate, not just a message-level one: one of the known story
+    /// scenes in [`STORY_COMMON_EVENTS`] running non-parallel blocks the quick
+    /// UI until that scene (including the morning/evening chain) ends.
+    fn story_input_locked(&self) -> bool {
+        self.vm.instances().iter().any(|instance| {
+            !instance.is_parallel
+                && instance.program.self_base == wolf_vm::program::COMMON_SELF_BASE
+                && STORY_COMMON_EVENTS.contains(&instance.event)
+        })
+    }
+
+    /// Newest save slot under `save_dir`, if any.
+    ///
+    /// The grid lives on disk, not in the save file, so the host has to inspect
+    /// `SaveDataNN.sav` directly. Ties fall back to the lower slot; the shipped
+    /// fixtures all share one mtime and must still open on page 1.
+    fn latest_save_slot(&self) -> Option<i32> {
+        let mut newest: Option<(std::time::SystemTime, i32)> = None;
+        for slot in 1..=99 {
+            let path = self.save_dir.join(format!("SaveData{slot:02}.sav"));
+            let Ok(metadata) = std::fs::metadata(&path) else {
+                continue;
+            };
+            let Ok(modified) = metadata.modified() else {
+                continue;
+            };
+            let replace = match newest {
+                None => true,
+                Some((best_time, best_slot)) => {
+                    modified > best_time || (modified == best_time && slot < best_slot)
+                }
+            };
+            if replace {
+                newest = Some((modified, slot));
+            }
+        }
+        newest.map(|(_, slot)| slot)
+    }
+
+    /// Aligns a freshly opened CE131 with the newest save file.
+    ///
+    /// CE131 keeps the page in self11 and the row in self10. The script starts
+    /// at whatever page its own scratch value holds, which made the grid open on
+    /// page 2 in live play. Wait until the script has published the slots-per-page
+    /// value, then write both fields before the first layout pass.
+    fn initialize_save_grid_page(&mut self) -> bool {
+        let Some(instance) = self
+            .vm
+            .instances()
+            .iter()
+            .find(|instance| instance.event == 131)
+        else {
+            return false;
+        };
+        let id = instance.id;
+        let per_page = instance.self_vars.get(627);
+        if per_page <= 0 {
+            return false;
+        }
+        let per_page = per_page.clamp(1, 10);
+        let (page, row) = self.latest_save_slot().map_or((0, 0), |slot| {
+            ((slot - 1) / per_page, (slot - 1) % per_page)
+        });
+        self.vm.set_instance_self_var(id, 610, row);
+        self.vm.set_instance_self_var(id, 611, page);
+        self.apply_save_grid_layout();
+        true
+    }
+
+    /// Injects one logical key and spends the current click.
+    ///
+    /// `previous_mouse_buttons` is advanced so `Host::mouse_key_bits` cannot turn
+    /// the same press into a confirm after the host has interpreted it as a page
+    /// turn or a cancel.
+    fn inject_key_and_consume_click(&mut self, bit: u32) {
+        self.consume_current_click();
+        self.key_bits |= bit;
+        self.repeat_bits |= bit;
+    }
+
+    /// Spends the current click so the script cannot read it as a second key.
+    fn consume_current_click(&mut self) {
+        self.mouse_consumed = true;
+        self.pending_mouse = 0;
+        self.pending_mouse_age = 0;
+        self.previous_mouse_buttons = self.mouse_buttons;
+    }
+
+    /// Turns one page of CE131's grid without replaying its keyboard poll.
+    ///
+    /// The arrow click is a host gesture, not a held direction key. The script's
+    /// `LEFT`/`RIGHT` handler needs the key to stay down for more than one frame
+    /// (its page clamp runs on the repeat path), so injecting a one-frame key
+    /// moved from page 3 to page 2 but then stopped. Writing the page directly is
+    /// the same state transition the script makes, and `apply_save_grid_layout`
+    /// already keeps the rows, texts and arrows in sync with it.
+    fn step_save_grid_page(&mut self, delta: i32) -> bool {
+        let Some(instance) = self
+            .vm
+            .instances()
+            .iter()
+            .find(|instance| instance.event == 131)
+        else {
+            return false;
+        };
+        let id = instance.id;
+        let page = instance.self_vars.get(611).max(0);
+        let next = (page + delta).clamp(0, SAVE_GRID_LAST_PAGE);
+        if next == page {
+            return false;
+        }
+        self.vm.set_instance_self_var(id, 611, next);
+        self.apply_save_grid_layout();
+        true
+    }
+
+    /// Hit test for CE94's two purple page arrows, with a finger-sized margin.
+    fn save_grid_arrow_at(&mut self, x: i32, y: i32) -> Option<u32> {
+        for (number, bit) in [(12004, crate::key::LEFT), (12005, crate::key::RIGHT)] {
+            // The arrows are generated `<TRI-*>` system graphics, not PNG files;
+            // `alpha_bounds_in` cannot sample them. Use the destination rectangle
+            // (the same box the renderer draws) plus the touch margin.
+            let screen = &self.screen;
+            let assets = &mut self.assets;
+            let Some(rect) = screen.picture_rect(number, |name| assets.texture_size(name)) else {
+                continue;
+            };
+            let cx = rect[0] + rect[2] * 0.5;
+            let cy = rect[1] + rect[3] * 0.5;
+            if (x as f32 - cx).abs() <= 22.0 && (y as f32 - cy).abs() <= 32.0 {
+                return Some(bit);
+            }
+        }
+        None
+    }
+
     /// Put the save/load grid's highlight under the pointer.
     ///
     /// CE131's slot list is keyboard-driven: it polls opcode 123 with the four
@@ -4438,6 +4913,14 @@ impl Game {
             return;
         };
         let slots = slots.clamp(1, 10);
+        if clicked {
+            if let Some(bit) = self.save_grid_arrow_at(x, y) {
+                let delta = if bit == crate::key::LEFT { -1 } else { 1 };
+                self.step_save_grid_page(delta);
+                self.consume_current_click();
+                return;
+            }
+        }
         let mut slot = None;
         for index in 0..slots {
             // CE94's per-slot window block: 50 = base + 10 (frame), +20 per slot.
@@ -4455,6 +4938,18 @@ impl Game {
         }
         if let Some(slot) = slot {
             self.vm.set_instance_self_var(id, 610, slot);
+            return;
+        }
+        if clicked {
+            let in_notice = (x as f32) >= SAVE_NOTICE_RECT[0]
+                && (x as f32) < SAVE_NOTICE_RECT[0] + SAVE_NOTICE_RECT[2]
+                && (y as f32) >= SAVE_NOTICE_RECT[1]
+                && (y as f32) < SAVE_NOTICE_RECT[1] + SAVE_NOTICE_RECT[3];
+            if !in_notice {
+                self.inject_key_and_consume_click(crate::key::CANCEL);
+            } else {
+                self.consume_current_click();
+            }
         }
     }
 
@@ -4598,19 +5093,28 @@ impl Game {
         } else {
             self.previous_title_cursor = None;
         }
+        // CE131 opens on whatever page its scratch self11 happens to hold. Once
+        // the script has published the page size, align it with the newest save
+        // file before the grid maps the pointer or redraws its rows.
+        let save_grid_now = self.save_grid_active();
+        if save_grid_now && !self.save_grid_page_initialized {
+            self.save_grid_page_initialized = self.initialize_save_grid_page();
+        } else if !save_grid_now {
+            self.save_grid_page_initialized = false;
+        }
         // A fresh press can also be an action-key activation of the map event under
         // the pointer. Run it before the VM step so the started page executes this
         // same frame, exactly like an automatic page restarted at the frame's end.
         // The save grid maps the pointer onto its slot windows first, so a click
         // confirms the slot under the cursor instead of the keyboard-highlighted one.
         self.sync_save_grid_cursor();
-        self.handle_action_key_input();
+        let dismissed_side_panel = self.handle_action_key_input();
         self.tick_side_panel_auto_retract();
         // A message that was already visible at the start of this frame owns the
         // mouse. Script key polls may run before the message coroutine's wait is
         // answered; without this snapshot the parallel night pollers consume the
         // click and `message_dismissed` never sees it.
-        self.frame_mouse_blocked = !self.messages.is_empty();
+        self.frame_mouse_blocked = !self.messages.is_empty() || dismissed_side_panel;
         // Sys28 is WOLF's global elapsed-frame clock (10,000,000-frame wrap).
         // CE270 snapshots it when a balloon opens and advances its close timer
         // only when the value moves; leaving it at zero kept the last balloon on
@@ -4627,6 +5131,7 @@ impl Game {
         self.vm.vars.set_sys(82, dt.second);
         let default_font_px = self.font_px();
         let base_font_px = self.text_base_font_px;
+        let story_locked = self.story_input_locked();
         let mut report = self.vm.step_frame(&mut GameHost {
             screen: &mut self.screen,
             screen_tint: &mut self.screen_tint,
@@ -4634,6 +5139,7 @@ impl Game {
             assets: &mut self.assets,
             databases: &mut self.databases,
             sounds: &mut self.sounds,
+            #[cfg(feature = "audio")]
             audio: self.audio.as_mut(),
             messages: &mut self.messages,
             history: &mut self.history,
@@ -4664,7 +5170,10 @@ impl Game {
             pending_mouse: &mut self.pending_mouse,
             mouse_consumed: &mut self.mouse_consumed,
             frame_mouse_blocked: self.frame_mouse_blocked,
+            touch_mode: self.touch_mode,
+            story_locked,
             root: &self.root,
+            save_dir: &self.save_dir,
             current_map: &self.current_map,
             save_requests: &mut self.save_requests,
             map_requests: &mut self.map_requests,
@@ -5293,6 +5802,7 @@ struct GameHost<'a> {
     sounds: &'a mut Vec<SoundCmd>,
     /// M4: the real audio engine, when [`Game::enable_audio`] turned it on. `None` keeps
     /// `Host::sound` a pure recorder (tests, headless captures).
+    #[cfg(feature = "audio")]
     audio: Option<&'a mut wolf_audio::Engine>,
     messages: &'a mut Vec<Message>,
     history: &'a mut Vec<Message>,
@@ -5333,7 +5843,14 @@ struct GameHost<'a> {
     mouse_consumed: &'a mut bool,
     /// A message window owns this frame's mouse press.
     frame_mouse_blocked: bool,
+    /// Touch-mode interaction flag (see [`Game::touch_mode`]).
+    touch_mode: bool,
+    /// A blocking story scene owns the screen this frame (see
+    /// [`Game::story_input_locked`]). Host picture polls use it to keep the
+    /// parallel album icon from opening over a conversation.
+    story_locked: bool,
     root: &'a Path,
+    save_dir: &'a Path,
     /// The installed map, for the `124 0x1000` coordinate queries.
     current_map: &'a Option<Map>,
     save_requests: &'a mut Vec<crate::savegame::SaveRequest>,
@@ -5351,19 +5868,25 @@ impl GameHost<'_> {
     }
 
     /// Resolve a `220`/`221`/`222` file operand. A slot is one-based and maps to
-    /// `Save/SaveDataNN.sav`; an explicit path is relative to the game root.
+    /// `<save_dir>/SaveDataNN.sav`; an explicit `Save/...` path maps into `save_dir`,
+    /// and any other relative path is relative to the game root.
     fn save_path(&self, file: &SaveTarget) -> std::path::PathBuf {
         match file {
-            SaveTarget::Slot(slot) => self
-                .root
-                .join("Save")
-                .join(format!("SaveData{slot:02}.sav")),
+            SaveTarget::Slot(slot) => self.save_dir.join(format!("SaveData{slot:02}.sav")),
             SaveTarget::Path(path) => {
-                let path = std::path::PathBuf::from(path);
-                if path.is_absolute() {
-                    path
+                let normalized = path.replace('\\', "/");
+                if let Some(rest) = normalized
+                    .strip_prefix("Save/")
+                    .or_else(|| normalized.strip_prefix("save/"))
+                {
+                    self.save_dir.join(rest)
                 } else {
-                    self.root.join(path)
+                    let path = std::path::PathBuf::from(path);
+                    if path.is_absolute() {
+                        path
+                    } else {
+                        self.root.join(path)
+                    }
                 }
             }
         }
@@ -5375,7 +5898,37 @@ impl GameHost<'_> {
     /// The test is a plain axis-aligned box that includes transparent pixels, as the
     /// engine documentation says: a picture hit area is its rectangle, not its alpha.
     fn hover(&mut self, number: i32) -> i32 {
-        hover_picture(self.screen, self.assets, self.mouse, number)
+        // Event 35 owns the album icon through a parallel hover/decide poll. A
+        // story scene must not be able to open the album through that poll just
+        // because the icon is still painted behind the dialogue.
+        if number == -7 && self.story_locked {
+            return 0;
+        }
+        hover_picture(
+            self.screen,
+            self.assets,
+            self.mouse,
+            number,
+            self.touch_mode,
+        )
+    }
+
+    /// Touch-mode escape hatch for CE132's raw keyboard/pad rebind polls.
+    ///
+    /// Returns true when the player triggers a tap, right-click cancel, or
+    /// logical CANCEL bit so `key_code` can return WOLF Esc (127 = 100 + 27)
+    /// and abort rebinding instead of softlocking without a physical keyboard.
+    fn touch_rebind_cancel(&mut self) -> bool {
+        if !self.touch_mode {
+            return false;
+        }
+        let mouse_edge = crate::key::mouse_bits(self.mouse_buttons, self.previous_mouse_buttons);
+        if mouse_edge & (crate::key::OK | crate::key::CANCEL) != 0 {
+            *self.pending_mouse = 0;
+            *self.mouse_consumed = true;
+            return true;
+        }
+        self.key_bits & crate::key::CANCEL != 0
     }
 
     /// Mouse buttons as fresh key bits for this frame.
@@ -5414,7 +5967,13 @@ fn mouse_state(held: bool, held_before: bool) -> i32 {
 /// It is the same test the script's `124` field 8 query uses, so a host rule
 /// that asks "is the pointer still on this picture?" (see
 /// [`crate::cursor_fallback`]) cannot disagree with what the script sees.
-fn hover_picture(screen: &mut Screen, assets: &mut Assets, mouse: [i32; 2], number: i32) -> i32 {
+fn hover_picture(
+    screen: &mut Screen,
+    assets: &mut Assets,
+    mouse: [i32; 2],
+    number: i32,
+    touch_mode: bool,
+) -> i32 {
     let Some(picture) = screen.get(number) else {
         return -1;
     };
@@ -5452,12 +6011,23 @@ fn hover_picture(screen: &mut Screen, assets: &mut Assets, mouse: [i32; 2], numb
         };
         rect
     };
-    let (left, top) = (dst[0], dst[1]);
-    let (size_x, size_y) = (dst[2], dst[3]);
+    let pad = if touch_mode
+        && matches!(
+            number,
+            -7 | -5 | -4 | 1108 | 1109 | 1110 | 1117 | 12004 | 12005
+        ) {
+        10.0
+    } else {
+        0.0
+    };
+    let left = (dst[0] - pad).max(0.0);
+    let top = (dst[1] - pad).max(0.0);
+    let right = (dst[0] + dst[2] + pad).min(SCREEN_W as f32);
+    let bottom = (dst[1] + dst[3] + pad).min(SCREEN_H as f32);
     let (px, py) = (mouse[0] as f32, mouse[1] as f32);
     let inside_screen =
         mouse[0] >= 0 && mouse[1] >= 0 && px < SCREEN_W as f32 && py < SCREEN_H as f32;
-    let over = inside_screen && px >= left && px < left + size_x && py >= top && py < top + size_y;
+    let over = inside_screen && px >= left && px < right && py >= top && py < bottom;
     i32::from(over)
 }
 
@@ -5629,6 +6199,7 @@ impl Host for GameHost<'_> {
         // M4: the VM already decoded opcode 140 into this SoundCmd; the engine does the
         // play/stop with the right volume and loop rules. Silently skipped when audio is
         // off, so headless captures and tests stay deterministic.
+        #[cfg(feature = "audio")]
         if let Some(audio) = self.audio.as_mut() {
             audio.apply_sound_cmd(cmd);
         }
@@ -6067,14 +6638,30 @@ impl Host for GameHost<'_> {
                 }
                 None
             }
-            221 => match crate::savegame::read_save(&path) {
-                Ok(save) => save_address(&save, op).or(Some(DbValue::Num(0))),
-                // A missing slot is the normal "no save here" answer: 221 is used for
-                // existence probes (docs/OPCODE_220_SAVE.md section 3.3).
-                Err(_) => Some(DbValue::Num(0)),
-            },
+            221 => {
+                let loaded = crate::savegame::read_save(&path).or_else(|err| {
+                    if path == self.save_dir.join("System.sav") {
+                        crate::savegame::read_save(&self.root.join("Save").join("System.sav"))
+                    } else {
+                        Err(err)
+                    }
+                });
+                match loaded {
+                    Ok(save) => save_address(&save, op).or(Some(DbValue::Num(0))),
+                    // A missing slot is the normal "no save here" answer: 221 is used for
+                    // existence probes (docs/OPCODE_220_SAVE.md section 3.3).
+                    Err(_) => Some(DbValue::Num(0)),
+                }
+            }
             222 => {
-                match crate::savegame::read_save(&path) {
+                let loaded = crate::savegame::read_save(&path).or_else(|err| {
+                    if path == self.save_dir.join("System.sav") {
+                        crate::savegame::read_save(&self.root.join("Save").join("System.sav"))
+                    } else {
+                        Err(err)
+                    }
+                });
+                match loaded {
                     Ok(mut save) => {
                         if write_save_address(&mut save, op) {
                             if let Err(err) = crate::savegame::write_save(&path, &save) {
@@ -6153,8 +6740,24 @@ impl Host for GameHost<'_> {
         match query.device {
             // The key-config screen polls a device directly: it wants the raw key
             // code the player just pressed, not the logical decide/cancel code.
-            crate::key::DEVICE_KEYBOARD => self.raw_keys.first().copied().unwrap_or(0),
-            crate::key::DEVICE_PAD => self.raw_pad_keys.first().copied().unwrap_or(0),
+            crate::key::DEVICE_KEYBOARD => {
+                if let Some(code) = self.raw_keys.first().copied() {
+                    code
+                } else if self.touch_rebind_cancel() {
+                    127
+                } else {
+                    0
+                }
+            }
+            crate::key::DEVICE_PAD => {
+                if let Some(code) = self.raw_pad_keys.first().copied() {
+                    code
+                } else if self.touch_rebind_cancel() {
+                    127
+                } else {
+                    0
+                }
+            }
             crate::key::DEVICE_MOUSE => 0,
             _ => {
                 // The request decides which keys count: a poll that only accepts
@@ -7018,6 +7621,7 @@ mod tests {
     fn host<'a>(game: &'a mut Game) -> GameHost<'a> {
         let default_font_px = game.font_px();
         let base_font_px = game.text_base_font_px;
+        let story_locked = game.story_input_locked();
         GameHost {
             screen: &mut game.screen,
             screen_tint: &mut game.screen_tint,
@@ -7025,6 +7629,7 @@ mod tests {
             assets: &mut game.assets,
             databases: &mut game.databases,
             sounds: &mut game.sounds,
+            #[cfg(feature = "audio")]
             audio: game.audio.as_mut(),
             messages: &mut game.messages,
             history: &mut game.history,
@@ -7050,7 +7655,10 @@ mod tests {
             pending_mouse: &mut game.pending_mouse,
             mouse_consumed: &mut game.mouse_consumed,
             frame_mouse_blocked: game.frame_mouse_blocked,
+            touch_mode: game.touch_mode,
+            story_locked,
             root: &game.root,
+            save_dir: &game.save_dir,
             current_map: &game.current_map,
             save_requests: &mut game.save_requests,
             map_requests: &mut game.map_requests,

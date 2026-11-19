@@ -104,8 +104,13 @@ const DEFAULT_FONT_PX := 20.0
 ## keyed by face, size, width and text; 256 entries covers a full scene plus the
 ## message history without pinning every typewriter prefix ever drawn.
 const PARAGRAPH_CACHE_LIMIT := 256
+## Probe size used to check whether a loaded face matches Microsoft YaHei's
+## vertical metrics (1 px quantization at 64 px is ~0.0156, well within tolerance).
+const YAHEI_METRIC_PROBE_PX := 64
+const YAHEI_METRIC_TOLERANCE := 0.025
 static var _paragraph_cache: Dictionary = {}
 static var _paragraph_order: Array[String] = []
+static var _yahei_metric_cache: Dictionary = {}
 
 ## Measured shift `round(size * RUST_BASELINE_RATIO) - Font.get_ascent(size)`
 ## for every size this game uses.  Kept as data so the formula can be audited
@@ -122,13 +127,41 @@ const BASELINE_SHIFT := {
 }
 
 
+## True when `font` matches Microsoft YaHei's vertical metrics (`msyhbd.ttc` /
+## `msyh.ttc` face 0). Keeps the Windows reference baseline 100% pixel-exact
+## while letting non-YaHei fonts (bundled TTFs, Android system fonts) centre
+## using their own ascent/descent.
+static func _uses_yahei_metrics(font: Font) -> bool:
+	if font == null:
+		return false
+	var id := font.get_instance_id()
+	if _yahei_metric_cache.has(id):
+		return bool(_yahei_metric_cache[id])
+	var a_ratio := font.get_ascent(YAHEI_METRIC_PROBE_PX) / float(YAHEI_METRIC_PROBE_PX)
+	var d_ratio := font.get_descent(YAHEI_METRIC_PROBE_PX) / float(YAHEI_METRIC_PROBE_PX)
+	var matches := (
+		absf(a_ratio - FACE_ASCENT) <= YAHEI_METRIC_TOLERANCE
+		and absf(d_ratio - FACE_DESCENT) <= YAHEI_METRIC_TOLERANCE
+	)
+	_yahei_metric_cache[id] = matches
+	return matches
+
+
 ## Integer y offset to add to `round(rect.y)` so the first baseline matches the
 ## Rust reference.  `size` is the item's float `font_px`; the ascent is looked up
 ## at the same integer size the paragraph is shaped with.
 static func baseline_shift(font: Font, size: float) -> int:
+	if font == null:
+		return 0
 	var px := maxi(1, int(round(size)))
-	var ascent := int(round(font.get_ascent(px)))
-	return int(round(float(px) * RUST_BASELINE_RATIO)) - ascent
+	if _uses_yahei_metrics(font):
+		var ascent := int(round(font.get_ascent(px)))
+		return int(round(float(px) * RUST_BASELINE_RATIO)) - ascent
+	var a := font.get_ascent(px)
+	var d := font.get_descent(px)
+	if a + d <= 0.0:
+		return 0
+	return int(round((line_pitch(size) - (a + d)) * 0.5))
 
 
 ## Paragraph pitch the Rust text pass uses inside one item, in pixels.

@@ -209,7 +209,8 @@ fn hover_hit_test_matches_anchor_row_pitch_and_padding() {
     };
     open_night_menu(&mut game);
 
-    // The night menu is painted at the engine anchor the data set in Sys3/Sys4.
+    // The script still reports the engine anchor in Sys3/Sys4, but the Android
+    // layout centres every ordinary prompt on the logical screen.
     assert_eq!(
         game.choice_anchor(),
         (512, 230),
@@ -253,14 +254,24 @@ fn hover_hit_test_matches_anchor_row_pitch_and_padding() {
     }
 
     // Inner padding above the first row and points off the panel are not rows.
+    let choices = game.choices.as_ref().expect("a choice prompt is open");
     let (ax, ay) = game.choice_anchor();
+    let panel = wolf_game::choice::layout_at_sized(
+        &choices.options,
+        game.choice_cursor(),
+        ax,
+        ay,
+        game.font_px(),
+    )
+    .expect("the centred panel is on screen");
+    let (px, py) = (panel.rect[0] as i32, panel.rect[1] as i32);
     assert_eq!(
-        game.choice_row_at(ax + 4, ay + 4),
+        game.choice_row_at(px + 4, py + 4),
         None,
         "the panel padding is not a row"
     );
     assert_eq!(
-        game.choice_row_at(ax - 20, ay - 20),
+        game.choice_row_at(px - 20, py - 20),
         None,
         "a point off the panel maps to nothing"
     );

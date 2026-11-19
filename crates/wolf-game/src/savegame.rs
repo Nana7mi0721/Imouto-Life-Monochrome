@@ -87,6 +87,7 @@ pub fn load_into(game: &mut Game, path: &Path) -> Result<LoadedSave, String> {
     // A load starts a different conversation; the M5-F transcript belongs to the scene
     // the player was in, not to the variables the save replaces.
     game.clear_message_history();
+    game.clear_transient_prompts();
     let loaded = apply(game, &save);
     if !loaded.checksum_valid {
         let message = format!(
@@ -198,6 +199,7 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
         }
     });
     if let Some((file, volume)) = game.current_bgm.clone() {
+        #[cfg(feature = "audio")]
         if let Some(audio) = game.audio.as_mut() {
             let gain = (volume.clamp(0, 100) as f32) / 100.0;
             let _ = audio.play_bgm_with_fade(&file, true, gain, 0);
@@ -211,6 +213,7 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
             pitch: 100,
         });
     } else {
+        #[cfg(feature = "audio")]
         if let Some(audio) = game.audio.as_mut() {
             audio.stop_bgm(0);
         }

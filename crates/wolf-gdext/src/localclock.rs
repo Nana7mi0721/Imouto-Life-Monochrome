@@ -14,8 +14,31 @@
 /// The game layer accepts the reader once per process; a second call is a
 /// no-op rather than an error, because several entry points build a game.
 pub fn install() {
-    #[cfg(windows)]
     let _ = wolf_game::install_local_clock(read_local_time);
+}
+
+/// The current local date and time on non-Windows hosts (Android / Linux / macOS),
+/// read through Godot's `Time` singleton so the day counter turns over at local midnight.
+#[cfg(not(windows))]
+fn read_local_time() -> wolf_game::LocalDateTime {
+    use godot::classes::Time;
+    use godot::obj::Singleton;
+
+    let dict = Time::singleton().get_datetime_dict_from_system();
+    let field = |key: &str| -> i32 {
+        dict.get(key)
+            .and_then(|value| value.try_to::<i64>().ok())
+            .and_then(|value| i32::try_from(value).ok())
+            .unwrap_or(0)
+    };
+    wolf_game::LocalDateTime::fixed(
+        field("year"),
+        field("month"),
+        field("day"),
+        field("hour"),
+        field("minute"),
+        field("second"),
+    )
 }
 
 /// The current local date and time.

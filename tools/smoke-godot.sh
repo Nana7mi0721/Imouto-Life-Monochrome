@@ -53,6 +53,9 @@ if [ -f "$SAVE" ]; then
     "$GODOT" --headless --path godot --script res://tests/load_save.gd -- \
         --data-root="$DATA_ROOT" --save="$SAVE"
 
+    "$GODOT" --headless --path godot --script res://tests/save_return_button.gd -- \
+        --data-root="$DATA_ROOT" --load-save="$SAVE"
+
     "$GODOT" --headless --path godot --script res://tests/load_menu.gd -- \
         --data-root="$DATA_ROOT"
 

@@ -13,4 +13,4 @@ crate-type = ["cdylib"]
 [dependencies]
 godot = { version = "0.5.5", features = ["api-4-7"] }
 wolf-vm = { workspace = true }
-wolf-game = { workspace = true }
+wolf-game = { path = "../wolf-game", default-features = false }

@@ -8,3 +8,5 @@ reloadable = true
 
 windows.debug.x86_64 = "res://bin/wolf_gdext.dll"
 windows.release.x86_64 = "res://bin/wolf_gdext.dll"
+android.debug.arm64 = "res://bin/android/arm64-v8a/libwolf_gdext.so"
+android.release.arm64 = "res://bin/android/arm64-v8a/libwolf_gdext.so"

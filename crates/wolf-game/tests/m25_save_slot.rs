@@ -108,6 +108,90 @@ fn panel_centre(game: &mut Game, row: i32) -> Option<(i32, i32)> {
     ))
 }
 
+fn arrow_centre(game: &mut Game, number: i32) -> Option<(i32, i32)> {
+    let rect = {
+        let screen = &game.screen;
+        let assets = &mut game.assets;
+        screen.picture_rect(number, |file| assets.texture_size(file))
+    }?;
+    Some((
+        (rect[0] + rect[2] * 0.5) as i32,
+        (rect[1] + rect[3] * 0.5) as i32,
+    ))
+}
+
+fn click_at(game: &mut Game, x: i32, y: i32) {
+    game.mouse = [x, y];
+    game.frame();
+    game.mouse_buttons = 1;
+    game.frame();
+    game.mouse_buttons = 0;
+    for _ in 0..4 {
+        game.frame();
+    }
+}
+
+#[test]
+fn the_page_arrows_turn_the_grid_without_confirming_a_slot() {
+    let Some(mut game) = grid() else { return };
+    assert_eq!(
+        game.selected_save_slot().expect("cursor").slot,
+        1,
+        "the grid opens on page 1"
+    );
+
+    let (x, y) = arrow_centre(&mut game, 12005).expect("right arrow");
+    click_at(&mut game, x, y);
+    assert_eq!(
+        game.selected_save_slot().expect("cursor").slot,
+        5,
+        "the right arrow turns to page 2"
+    );
+    assert!(
+        game.vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 131),
+        "turning a page must not confirm and close the grid"
+    );
+
+    let (x, y) = arrow_centre(&mut game, 12004).expect("left arrow");
+    click_at(&mut game, x, y);
+    assert_eq!(
+        game.selected_save_slot().expect("cursor").slot,
+        1,
+        "the left arrow returns to page 1"
+    );
+}
+
+#[test]
+fn blank_background_closes_the_grid_but_the_notice_panel_does_not() {
+    let Some(mut game) = grid() else { return };
+
+    // The front-end notice is interactive chrome, not a blank backdrop.
+    click_at(&mut game, 800, 200);
+    assert!(
+        game.vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 131),
+        "clicking the notice must not cancel the grid"
+    );
+
+    click_at(&mut game, 20, 40);
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert!(
+        !game
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 131),
+        "a blank background click must leave the save grid"
+    );
+}
+
 /// The third row of the grid names the third slot of the first page.
 #[test]
 fn the_grid_names_the_slot_under_the_pointer() {

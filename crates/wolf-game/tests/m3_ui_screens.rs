@@ -644,3 +644,40 @@ fn ce303_album_screen() {
     assert_eq!(game.vm.vars.get(238), 0, "CE303 lowers album-display flag");
     assert_eq!(game.stats.warnings, 0, "CE303 warnings");
 }
+
+#[test]
+fn ce303_blank_grid_click_closes_the_album() {
+    let Some(mut game) = open_loaded_bedroom() else {
+        return;
+    };
+    game.screen.clear();
+    game.messages.clear();
+    assert!(game.start_event(303), "event 303 did not start");
+    for _ in 0..30 {
+        tick(&mut game);
+    }
+    assert!(running(&game, 303), "CE303 grid must be open");
+    let pc = game
+        .vm
+        .instances()
+        .iter()
+        .find(|instance| instance.event == 303)
+        .map(|instance| instance.pc)
+        .expect("CE303 instance");
+    assert!(
+        pc >= 880,
+        "CE303 must be at its grid/cancel poll, pc = {pc}"
+    );
+
+    // (512,570) is inside the full-screen album background but outside every
+    // thumbnail rectangle, so it is the canonical "blank" album click.
+    click_at(&mut game, 512, 570);
+    for _ in 0..10 {
+        tick(&mut game);
+    }
+    assert!(
+        !running(&game, 303),
+        "a blank grid click must leave the album"
+    );
+    assert_eq!(game.vm.vars.get(238), 0, "album-display flag cleared");
+}

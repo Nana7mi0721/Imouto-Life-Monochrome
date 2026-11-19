@@ -43,6 +43,8 @@ struct WolfGame {
     game: Option<Game>,
     atlas: Atlas,
     root: Option<PathBuf>,
+    touch_mode: bool,
+    asset_cache_bytes: Option<usize>,
 }
 
 #[godot_api]
@@ -53,6 +55,41 @@ impl IRefCounted for WolfGame {
             game: None,
             atlas: Atlas::new(),
             root: None,
+            touch_mode: false,
+            asset_cache_bytes: None,
+        }
+    }
+}
+
+impl WolfGame {
+    fn open_impl(&mut self, root: PathBuf, save_dir: PathBuf) -> bool {
+        // The retail engine reads the *local* wall clock; the game layer is
+        // pure Rust, so the host hands it a reader before the game is built.
+        localclock::install();
+        let started = std::time::Instant::now();
+        match Game::with_overlays_and_save_dir(&root, Vec::new(), &save_dir) {
+            Ok(mut game) => {
+                let load_ms = started.elapsed().as_secs_f64() * 1000.0;
+                game.set_touch_mode(self.touch_mode);
+                if let Some(limit) = self.asset_cache_bytes {
+                    game.set_asset_cache_bytes(limit);
+                }
+                game.apply_settings();
+                let font_started = std::time::Instant::now();
+                install_font_metrics(&mut game, &root);
+                let font_ms = font_started.elapsed().as_secs_f64() * 1000.0;
+                godot_print!(
+                    "wolf-gdext: open game={load_ms:.1}ms font={font_ms:.1}ms total={:.1}ms [build v0.1.0-fix-p0]",
+                    started.elapsed().as_secs_f64() * 1000.0
+                );
+                self.root = Some(root);
+                self.game = Some(game);
+                true
+            }
+            Err(err) => {
+                godot_error!("wolf-gdext: cannot load {}: {err}", root.display());
+                false
+            }
         }
     }
 }
@@ -83,9 +120,10 @@ impl WolfGame {
     /// and Alt-Tab keep Godot's large `ICON_BIG`. It is a no-op off Windows and
     /// in headless mode.
     #[func]
-    fn set_titlebar_icon(&self, mut image: Gd<Image>) -> bool {
+    fn set_titlebar_icon(&self, image: Gd<Image>) -> bool {
         #[cfg(windows)]
         {
+            let mut image = image;
             windows_titlebar_icon::set(&mut image)
         }
         #[cfg(not(windows))]
@@ -101,31 +139,78 @@ impl WolfGame {
     /// Returns false and logs a Godot error when a mandatory file is missing.
     #[func]
     fn open(&mut self, root: GString) -> bool {
-        // The retail engine reads the *local* wall clock; the game layer is
-        // pure Rust, so the host hands it a reader before the game is built.
-        localclock::install();
-        let root = PathBuf::from(root.to_string());
-        let started = std::time::Instant::now();
-        match Game::with_overlays(&root, Vec::new()) {
-            Ok(mut game) => {
-                let load_ms = started.elapsed().as_secs_f64() * 1000.0;
-                game.apply_settings();
-                let font_started = std::time::Instant::now();
-                install_font_metrics(&mut game, &root);
-                let font_ms = font_started.elapsed().as_secs_f64() * 1000.0;
-                godot_print!(
-                    "wolf-gdext: open game={load_ms:.1}ms font={font_ms:.1}ms total={:.1}ms [build v0.1.0-fix-p0]",
-                    started.elapsed().as_secs_f64() * 1000.0
-                );
-                self.root = Some(root);
-                self.game = Some(game);
-                true
-            }
-            Err(err) => {
-                godot_error!("wolf-gdext: cannot load {}: {err}", root.display());
-                false
-            }
+        let root_path = PathBuf::from(root.to_string());
+        let save_dir = root_path.join("Save");
+        self.open_impl(root_path, save_dir)
+    }
+
+    /// Loads a read-only WOLF data root together with a separate writable `save_dir`.
+    ///
+    /// When `save_dir` is empty, falls back to `<root>/Save`.
+    #[func]
+    fn open_with_save_dir(&mut self, root: GString, save_dir: GString) -> bool {
+        let root_path = PathBuf::from(root.to_string());
+        let save_str = save_dir.to_string();
+        let save_path = if save_str.is_empty() {
+            root_path.join("Save")
+        } else {
+            PathBuf::from(save_str)
+        };
+        self.open_impl(root_path, save_path)
+    }
+
+    /// Configures the decoded RGBA asset cache limit in bytes (ignores `<= 0`).
+    #[func]
+    fn set_asset_cache_bytes(&mut self, bytes: i64) {
+        if bytes <= 0 {
+            return;
         }
+        let limit = usize::try_from(bytes).unwrap_or(usize::MAX);
+        self.asset_cache_bytes = Some(limit);
+        if let Some(game) = self.game.as_mut() {
+            game.set_asset_cache_bytes(limit);
+        }
+    }
+
+    /// Enables or disables touch-mode input and UI adaptations.
+    #[func]
+    fn set_touch_mode(&mut self, enabled: bool) {
+        self.touch_mode = enabled;
+        if let Some(game) = self.game.as_mut() {
+            game.set_touch_mode(enabled);
+        }
+    }
+
+    /// Whether touch mode is currently enabled.
+    #[func]
+    fn touch_mode(&self) -> bool {
+        self.game.as_ref().map_or(self.touch_mode, Game::touch_mode)
+    }
+
+    /// True while a choice prompt is currently active.
+    #[func]
+    fn choices_active(&self) -> bool {
+        self.game.as_ref().is_some_and(Game::choices_active)
+    }
+
+    /// True while either the status or item side panel is open.
+    #[func]
+    fn any_side_panel_open(&self) -> bool {
+        self.game.as_ref().is_some_and(Game::any_side_panel_open)
+    }
+
+    /// Opens a side panel (`0` = status 320 / CE238, `1` = item 2300 / CE239).
+    #[func]
+    fn open_side_panel(&mut self, kind: i32) -> bool {
+        self.game
+            .as_mut()
+            .is_some_and(|game| game.open_side_panel(kind))
+    }
+
+    /// Closes any currently open side panel.
+    #[func]
+    fn close_side_panels(&mut self) -> bool {
+        self.game.as_mut().is_some_and(Game::close_side_panels)
     }
 
     /// Enables live RNG cursor jitter for this session.

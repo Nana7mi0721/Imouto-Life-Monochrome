@@ -375,6 +375,19 @@ impl Assets {
         self.cache_bytes
     }
 
+    /// Current decoded RGBA cache budget in bytes.
+    #[must_use]
+    pub fn cache_byte_limit(&self) -> usize {
+        self.cache_byte_limit
+    }
+
+    /// Updates the decoded RGBA cache budget and immediately evicts least-recently-used
+    /// entries until usage fits within `limit`.
+    pub fn set_cache_byte_limit(&mut self, limit: usize) {
+        self.cache_byte_limit = limit;
+        self.evict_cache(None);
+    }
+
     /// Drops every decoded image. Called when returning to the title.
     pub fn clear(&mut self) {
         self.cache.clear();

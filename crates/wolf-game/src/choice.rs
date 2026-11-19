@@ -38,6 +38,8 @@ pub const BASE_FONT_PX: f32 = 16.0;
 /// to the first glyph's ink. The same inset is used on the right, so the panel is the
 /// widest option plus twice this value.
 pub const TEXT_INSET: f32 = 8.0;
+/// Minimum touch width of an ordinary choice panel, in logical pixels.
+pub const MIN_PANEL_WIDTH: f32 = 240.0;
 /// Distance from the panel's top edge to the first option row.
 ///
 /// The retail panels put the first row's ink 9 px below the border and the glyph's own
@@ -150,7 +152,13 @@ fn size(options: &[String], font_px: f32) -> (f32, f32) {
         .iter()
         .map(|option| text_width_at(option_label(option).as_ref(), font_px))
         .fold(0.0_f32, f32::max);
-    let width = widest + TEXT_INSET * 2.0 + 4.0;
+    let mut width = widest + TEXT_INSET * 2.0 + 4.0;
+    // Short confirmations ("是"/"否") were only 30-40 px wide in the retail
+    // geometry, which is a hard target on a phone. Keep the script's own long
+    // labels untouched but give every ordinary prompt a comfortable touch width.
+    if !is_title_image_menu(options) {
+        width = width.max(MIN_PANEL_WIDTH);
+    }
     let rows = options.len().max(1) as f32;
     (
         width.round(),
@@ -212,14 +220,14 @@ pub fn layout(options: &[String], cursor: usize) -> ChoiceLayout {
     build(options, cursor, x.round(), y.round(), TEXT_PX)
 }
 
-/// Lays out the panel at the engine's own choice-window anchor.
+/// Lays out an ordinary choice panel at the logical screen centre.
 ///
-/// WOLF places `102`'s window at system variables 3 (X) and 4 (Y). When the anchor
-/// would put the whole panel off screen (the shipped title event parks it at
-/// (-1000,-1000), and the manual's `-1` sentinel means "default position"), the panel
-/// falls back to the centred default position so the prompt is still visible and
-/// clickable. Known anchors are taken as the top-left corner, exactly like the manual
-/// describes. (The old comment quoted (512,1000); the data actually writes -1000.)
+/// WOLF scripts pass an anchor in system variables 3 (X) and 4 (Y), but the
+/// port uses the centre for every non-title prompt: it is the predictable,
+/// thumb-reachable position on a phone and keeps the panel's horizontal axis on
+/// the window's axis even when a save restores the anchor as zero. The title menu
+/// keeps its own fixed image-button layout. `x`/`y` remain part of the signature
+/// so callers and the engine trace keep the script's anchor for diagnostics.
 #[must_use]
 pub fn layout_at(options: &[String], cursor: usize, x: i32, y: i32) -> Option<ChoiceLayout> {
     layout_at_sized(options, cursor, x, y, TEXT_PX)
@@ -242,33 +250,17 @@ pub fn layout_at_sized(
     if is_title_image_menu(options) {
         return Some(title_image_layout(cursor));
     }
-    let panel = build(options, cursor, x as f32, y as f32, font_px);
-    // `(0, 0)` is not a usable anchor for this game: a save written while the tea-stall
-    // prompt was open restores Sys3/Sys4 as zero, and treating that as a real position
-    // painted the whole menu over the top-left HUD (report section 1.1). The shipped
-    // scripts never place a prompt at the exact origin; every real menu uses either an
-    // in-screen pair or an off-screen sentinel, so both fall back to the centred
-    // default below.
-    let default_anchor = x == 0 && y == 0;
-    let on_screen = !default_anchor
-        && panel.rect[0] < SCREEN_W as f32
-        && panel.rect[1] < SCREEN_H as f32
-        && panel.rect[0] + panel.rect[2] > 0.0
-        && panel.rect[1] + panel.rect[3] > 0.0;
-    if on_screen {
-        Some(panel)
-    } else {
-        // Out-of-bounds anchor: fall back to the centred default position instead of
-        // painting nothing. The shipped title event parks its window at (-1000,-1000);
-        // treating that as "invisible" left the title with no menu the player could see
-        // or click. WOLF's manual reserves the sentinel -1 for "default position", and an
-        // off-screen pair is the same intent, so honour it here. This only affects anchors
-        // that would draw entirely outside the screen; every in-screen prompt is unchanged.
-        let (width, height) = size(options, font_px);
-        let cx = ((SCREEN_W as f32) - width) / 2.0;
-        let cy = ((SCREEN_H as f32) - height) / 2.0;
-        Some(build(options, cursor, cx.round(), cy.round(), font_px))
-    }
+    // The script anchor (`Sys3`/`Sys4`) was tuned for the original fixed window,
+    // but it leaves short confirmations floating well above or below the visual
+    // centre and produces very different touch targets on a phone. Every ordinary
+    // prompt is now anchored to the logical screen centre on both axes. A save
+    // that restores Sys3/Sys4 as zero, the retail off-screen sentinel and a normal
+    // in-screen pair all resolve to the same predictable, thumb-reachable panel.
+    let (width, height) = size(options, font_px);
+    let _ = (x, y);
+    let cx = ((SCREEN_W as f32) - width) / 2.0;
+    let cy = ((SCREEN_H as f32) - height) / 2.0;
+    Some(build(options, cursor, cx.round(), cy.round(), font_px))
 }
 
 /// Whether `options` are the three internal keys the shipped title event hands to
@@ -477,7 +469,7 @@ mod tests {
     fn a_zero_anchor_falls_back_to_the_centred_default() {
         // A save written while a prompt was open can restore Sys3/Sys4 as zero. That
         // used to be accepted as a real position and painted the menu over the top-left
-        // HUD (report 1.1); only a genuine in-screen, non-zero anchor may place it.
+        // HUD (report 1.1); every ordinary prompt now uses this same centred anchor.
         let panel = layout_at_sized(&options(3), 0, 0, 0, 20.0).expect("centred panel");
         assert!((panel.rect[0] + panel.rect[2] / 2.0 - 512.0).abs() <= 1.0);
         assert!((panel.rect[1] + panel.rect[3] / 2.0 - 288.0).abs() <= 1.0);
@@ -493,16 +485,13 @@ mod tests {
 
     #[test]
     fn the_panel_geometry_is_the_measured_102_panel() {
-        // A four-option prompt of seven full-width characters: the retail 102 panel is
-        // 156 px wide, 114 px tall, rows 27 px apart and text 8 px inside the frame.
+        // A four-option prompt of seven full-width characters: the retail 102 panel
+        // is 160 px wide, but the Android layout raises every ordinary panel to the
+        // 240 px touch minimum. Rows stay 27 px apart and text 8 px inside the frame.
         let rows = vec!["已经这个时间了".to_owned(); 4];
         let panel =
             layout_at_sized(&rows, 0, 400, 200, 20.0).expect("an on-screen anchor yields a panel");
-        assert_eq!(
-            panel.rect[2],
-            7.0 * 20.0 + TEXT_INSET * 2.0 + 4.0,
-            "panel width"
-        );
+        assert_eq!(panel.rect[2], MIN_PANEL_WIDTH, "panel width");
         assert_eq!(panel.rect[3], ROW_TOP + 4.0 * 27.0, "four rows are 114 px");
         assert_eq!(panel.lines[0][0], panel.rect[0] + TEXT_INSET, "text inset");
         assert_eq!(
@@ -537,11 +526,30 @@ mod tests {
     fn a_long_option_widens_the_panel() {
         let narrow = layout(&["a".to_owned()], 0);
         let wide = layout(&["a".repeat(40)], 0);
-        // No minimum width: the engine sizes the window to the widest option plus the
-        // 8 px inset on each side plus 4 px of wrap margin, so a one-letter option
-        // gets a 30 px box.
-        assert_eq!(narrow.rect[2], text_width("a") + TEXT_INSET * 2.0 + 4.0);
+        // Short labels stop at the touch minimum; only a label wider than the panel
+        // (widest + 8 px inset on each side + 4 px of wrap margin) grows it further.
+        assert_eq!(narrow.rect[2], MIN_PANEL_WIDTH);
         assert!(wide.rect[2] > narrow.rect[2]);
+        assert_eq!(
+            wide.rect[2],
+            text_width(&"a".repeat(40)) + TEXT_INSET * 2.0 + 4.0
+        );
+    }
+
+    #[test]
+    fn every_ordinary_anchor_is_centred_on_both_axes() {
+        let options = options(3);
+        for (x, y) in [(0, 0), (-1000, -1000), (400, 200), (512, 300)] {
+            let panel = layout_at_sized(&options, 0, x, y, 20.0).expect("centred panel");
+            assert!(
+                (panel.rect[0] + panel.rect[2] / 2.0 - 512.0).abs() <= 1.0,
+                "anchor ({x},{y}) horizontal centre"
+            );
+            assert!(
+                (panel.rect[1] + panel.rect[3] / 2.0 - 288.0).abs() <= 1.0,
+                "anchor ({x},{y}) vertical centre"
+            );
+        }
     }
 
     #[test]

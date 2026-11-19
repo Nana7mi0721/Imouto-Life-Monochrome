@@ -165,14 +165,14 @@ work/out/dist/godot/Imouto Life setup.exe.sha256
 ### 8.1 发行 Data 结构与 media.pak
 
 `tools/package/release-data.manifest` 仍是发行包的唯一 Data 来源。当前清单为
-**746 个文件 / 127,928,202 B**。打包时固定把以下 7 个媒体前缀从明文 staging
+**748 个文件 / 127,928,510 B**。打包时固定把以下 7 个媒体前缀从明文 staging
 中排除，交给 `media-pack` 写入 `Data/media.pak`：
 
 ```text
 Picture/  cg/  BGM/  SE/  CharaChip/  SystemFile/  BalloonBase_CafeLatte/
 ```
 
-这 7 个前缀当前共 **731 个文件 / 113,002,329 B**，是媒体包的 payload。
+这 7 个前缀当前共 **733 个文件 / 113,002,637 B**，是媒体包的 payload。
 其余 **15 个文件 / 14,925,873 B** 保持明文：9 个 `BasicData/` 文件、
 5 个已注册 `MapData/` 地图和 `◆GenJyuuGothicX-P-Bold.ttf`。最终 Data 结构为：
 
@@ -187,7 +187,7 @@ Data\
 ```
 
 即 **17 个文件** = 15 个明文清单文件 + `Save/System.sav` + `media.pak`。
-`media.pak` 的 payload 是 113,002,329 B；容器本身还有头部/索引等开销，
+`media.pak` 的 payload 是 113,002,637 B；容器本身还有头部/索引等开销，
 实际大小以构建输出和 `checksums.txt` 为准，不在文档里写死。
 
 相对完整 `work/Data` 当前排除 **619 个文件 / 55,910,216 B**（含未列入
@@ -338,7 +338,7 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
 当前输出预期（体积会随构建变化，不在文档中写死最终 Setup 大小或哈希）：
 
 - `Data/` 17 个文件：15 个明文清单文件 + `Save/System.sav` + `media.pak`；
-- `media.pak` 的 payload 为 731 个文件 / 113,002,329 B，容器大小另含头部/索引；
+- `media.pak` 的 payload 为 733 个文件 / 113,002,637 B，容器大小另含头部/索引；
 - `Imouto Life.exe`、`bin\wolf_gdext.dll`、便携 ZIP 与 NSIS Setup 的体积
   以实际构建输出为准；
 - 包内 `checksums.txt` 和各外部 `.sha256` 是最终校验依据。

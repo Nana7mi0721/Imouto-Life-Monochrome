@@ -23,6 +23,8 @@ const TITLEBAR_ICON_PATH := "res://icon_titlebar.png"
 ## The save-page notice sits above every game picture/text but below the pointer.
 const SAVE_NOTICE_Z := 99990
 const SAVE_NOTICE_RECT := Rect2(716.0, 96.0, 276.0, 216.0)
+## The save-page "return to title" button, drawn just above the album icon.
+const SAVE_RETURN_RECT := Rect2(892.0, 330.0, 90.0, 70.0)
 ## Preferred UI faces on Windows.  Missing files are skipped, never assumed.
 const WINDOWS_FONT_BOLD := "C:/Windows/Fonts/msyhbd.ttc"
 const WINDOWS_FONT_REGULAR := "C:/Windows/Fonts/msyh.ttc"
@@ -52,10 +54,21 @@ const SYMBOL_FONT_NAMES: Array[String] = [
 ]
 const WolfTextScript := preload("res://scripts/WolfText.gd")
 const WolfKeysLib := preload("res://scripts/WolfKeys.gd")
+## Mobile touch gesture thresholds (all in 1024x576 logical pixels).
+const TOUCH_EDGE_X := 60.0
+const TOUCH_EDGE_SPLIT_Y := 210.0
+const TOUCH_SWIPE_MIN_PX := 56.0
+const TOUCH_WHEEL_STEP_PX := 48.0
+const TOUCH_TAP_MAX_MOVE := 24.0
+const TOUCH_TWO_FINGER_MAX_MOVE := 36.0
+## Android first-run staging chunk size (1 MiB) and decoded texture cache budget.
+const ANDROID_STAGING_CHUNK_BYTES := 1024 * 1024
+const ANDROID_ASSET_CACHE_BYTES := 128 * 1024 * 1024
 
 class _BlendBatch extends Node2D:
 	const LOGICAL_SIZE := Vector2(1024.0, 576.0)
 	const SAVE_NOTICE_RECT := Rect2(716.0, 96.0, 276.0, 216.0)
+	const SAVE_RETURN_RECT := Rect2(892.0, 330.0, 90.0, 70.0)
 
 	var items: Array = []
 	var overlays: Array = []
@@ -63,6 +76,7 @@ class _BlendBatch extends Node2D:
 	var bold_font: Font
 	var regular_font: Font
 	var frozen_texture: Texture2D
+	var save_return_texture: Texture2D
 	var ap: Dictionary = {}
 
 	func _draw() -> void:
@@ -135,6 +149,8 @@ class _BlendBatch extends Node2D:
 		]
 		for index in range(lines.size()):
 			_draw_notice_line(lines[index], index)
+		if save_return_texture != null:
+			draw_texture_rect(save_return_texture, SAVE_RETURN_RECT, false)
 
 	func _draw_notice_line(text: String, index: int) -> void:
 		WolfTextScript.draw_text(
@@ -340,6 +356,7 @@ var bgm_file := ""
 var bgs_file := ""
 var se_cursor := 0
 var frozen_texture: ImageTexture
+var save_return_texture: ImageTexture
 var diagnostics_printed := false
 
 var entry := "boot"
@@ -357,6 +374,20 @@ var captured := false
 var pause_on_msg := ""
 var pause_triggered := false
 var pause_delay_frames := 0
+var force_touch_mode := false
+var android_data_src := ""
+var android_dest_root := ""
+var save_dir_override := ""
+
+## Touch gesture state (pure touch layer; never modifies desktop mouse/key state).
+var _touch_points: Dictionary = {}
+var _touch_starts: Dictionary = {}
+var _touch_max_fingers := 0
+var _touch_max_move := 0.0
+var _touch_wheel_accum := 0.0
+var _touch_swipe_consumed := false
+var _touch_scroll_active := false
+var _touch_last_pos := Vector2i(-1, -1)
 
 ## Physical keys currently held, tracked through `_input`. The dictionary is the
 ## membership set; `held_order` keeps press order because the key-config screen
@@ -476,13 +507,27 @@ func _ready() -> void:
 	# Parse first: the entry point and log switches are needed before the first frame.
 	_parse_args()
 	_apply_fps_mode()
-	_apply_window_title()
+	if not _is_mobile_touch():
+		_apply_window_title()
 	# Create the front-end layer before fonts, the data root or the runtime can
 	# fail. It has its own high z-index and never depends on `wolf`.
 	_ensure_modal_layer()
-	# The bundled font candidates live under the data root, so resolve it before
-	# loading text faces.
-	var root := _resolve_data_root()
+	# The bundled font candidates live under the data root, so resolve (and on
+	# Android, stage) it before loading text faces.
+	var root := _explicit_data_root_arg()
+	save_dir_override = ""
+	if root.is_empty() and _is_android_runtime():
+		var staged := _prepare_android_storage()
+		if not bool(staged.get("ok", false)):
+			_fail_startup(
+				str(staged.get("reason", "Android 资源初始化失败。")),
+				str(staged.get("path", ""))
+			)
+			return
+		root = str(staged.get("data_dir", ""))
+		save_dir_override = str(staged.get("save_dir", ""))
+	elif root.is_empty():
+		root = _resolve_data_root()
 	data_root = root
 	var fonts_started := Time.get_ticks_usec()
 	bold_font = _load_font(true)
@@ -505,11 +550,22 @@ func _ready() -> void:
 	_setup_audio()
 	wolf = WolfGame.new()
 	var open_started := Time.get_ticks_usec()
-	if not wolf.open(root):
+	var opened := false
+	if not save_dir_override.is_empty() and wolf.has_method("open_with_save_dir"):
+		opened = bool(wolf.open_with_save_dir(root, save_dir_override))
+	else:
+		opened = bool(wolf.open(root))
+	if not opened:
 		_fail_startup("无法打开游戏数据（WolfGame.open 返回失败）。", root)
 		return
+	if _is_mobile_touch():
+		if wolf.has_method("set_touch_mode"):
+			wolf.set_touch_mode(true)
+		if wolf.has_method("set_asset_cache_bytes"):
+			wolf.set_asset_cache_bytes(ANDROID_ASSET_CACHE_BYTES)
 	_enable_live_rng_for_play()
-	_apply_window_titlebar_icon()
+	if not _is_mobile_touch():
+		_apply_window_titlebar_icon()
 	print("startup: wolf_open_ms=", "%.1f" % ((Time.get_ticks_usec() - open_started) / 1000.0))
 	# The daily auto-save writes slot 1 after the evening meal. It overwrites a
 	# slot the player may have written by hand, so only a live session asks for
@@ -642,7 +698,8 @@ func _show_startup_error(reason: String, path: String) -> void:
 	_modal_layer.queue_redraw()
 	_reset_modal_input()
 	set_physics_process(false)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if not _is_mobile_touch():
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	queue_redraw()
 	print("ui: startup error dialog opened")
 
@@ -662,8 +719,11 @@ func _wrap_startup_path(path: String) -> String:
 
 
 func _quit_from_startup_error() -> void:
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	get_tree().quit()
+	if not _is_mobile_touch():
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var tree := get_tree()
+	if tree != null:
+		tree.quit()
 
 
 func _physics_process(_delta: float) -> void:
@@ -673,6 +733,8 @@ func _physics_process(_delta: float) -> void:
 	var frame_started := Time.get_ticks_usec()
 	var mouse := get_local_mouse_position()
 	var mouse_pos := Vector2i(int(mouse.x), int(mouse.y))
+	if _is_mobile_touch() and _touch_last_pos.x >= 0 and _touch_last_pos.y >= 0:
+		mouse_pos = _touch_last_pos
 	# A fresh left press must hit the hotspot where it went down, even if the
 	# pointer moved before this physics tick.
 	if mouse_latch & 1 != 0 and mouse_latch_pos.x >= 0 and mouse_latch_pos.y >= 0:
@@ -822,11 +884,25 @@ func _input(event: InputEvent) -> void:
 		_handle_modal_event(event)
 		_mark_input_handled()
 		return
+	if event is InputEventScreenTouch:
+		_handle_screen_touch(event as InputEventScreenTouch)
+		return
+	if event is InputEventScreenDrag:
+		_handle_screen_drag(event as InputEventScreenDrag)
+		return
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
 		# The save grid writes the slot on a plain click, so the click is
 		# intercepted here, at the very top, before the runtime can see it.
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			var save_local := get_global_transform_with_canvas().affine_inverse() * mouse_event.position
+			if _wolf_save_ui_active() and not _wolf_at_title() and SAVE_RETURN_RECT.has_point(save_local):
+				# Hold the release guard until the button is up so the click
+				# cannot reach CE131 and be read as a grid confirm.
+				_modal_release_guard = true
+				_open_return_modal(true)
+				_mark_input_handled()
+				return
 			if _open_save_slot_modal(mouse_event):
 				return
 		_handle_mouse_button(mouse_event)
@@ -919,6 +995,142 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 			print("input: mouse up bit=", bit, " frame=", game_frames)
 
 
+func _screen_to_logical(pos: Vector2) -> Vector2:
+	return get_global_transform_with_canvas().affine_inverse() * pos
+
+
+func _in_logical_bounds(local: Vector2) -> bool:
+	return (
+		local.x >= 0.0
+		and local.x < LOGICAL_SIZE.x
+		and local.y >= 0.0
+		and local.y < LOGICAL_SIZE.y
+	)
+
+
+func _reset_touch_gesture() -> void:
+	_touch_points.clear()
+	_touch_starts.clear()
+	_touch_max_fingers = 0
+	_touch_max_move = 0.0
+	_touch_wheel_accum = 0.0
+	_touch_swipe_consumed = false
+	_touch_scroll_active = false
+
+
+## Pure touch gesture layer (never alters desktop mouse/key handling).
+## Single tap = left click; two-finger tap = right-click cancel; left-edge
+## swipe right = open status/item side panel; swipe left = close side panel;
+## vertical drag on choices/save UI = mouse wheel notches.
+func _handle_screen_touch(event: InputEventScreenTouch) -> void:
+	var local := _screen_to_logical(event.position)
+	var idx := event.index
+	if event.pressed:
+		if not _in_logical_bounds(local):
+			return
+		if _touch_points.is_empty():
+			_reset_touch_gesture()
+		_touch_points[idx] = local
+		_touch_starts[idx] = local
+		_touch_max_fingers = maxi(_touch_max_fingers, _touch_points.size())
+		if _touch_max_fingers >= 2:
+			_touch_wheel_accum = 0.0
+		return
+	if not _touch_points.has(idx):
+		return
+	var start: Vector2 = _touch_starts.get(idx, local)
+	_touch_max_move = maxf(_touch_max_move, local.distance_to(start))
+	_touch_points.erase(idx)
+	if not _touch_points.is_empty():
+		return
+	var max_fingers := _touch_max_fingers
+	var max_move := _touch_max_move
+	var swipe_consumed := _touch_swipe_consumed
+	_reset_touch_gesture()
+	if swipe_consumed:
+		return
+	if max_fingers == 1 and max_move < TOUCH_TAP_MAX_MOVE:
+		var tap_point := local if _in_logical_bounds(local) else start
+		var local_pos := Vector2i(
+			clampi(int(tap_point.x), 0, int(LOGICAL_SIZE.x) - 1),
+			clampi(int(tap_point.y), 0, int(LOGICAL_SIZE.y) - 1)
+		)
+		_touch_last_pos = local_pos
+		if _wolf_save_ui_active() and not _wolf_at_title() and SAVE_RETURN_RECT.has_point(Vector2(local_pos)):
+			_open_return_modal(true)
+			return
+		if _open_save_slot_modal_at(local_pos):
+			return
+		mouse_latch |= 1
+		mouse_latch_pos = local_pos
+		if log_input:
+			print("input: touch tap at ", local_pos, " frame=", game_frames)
+	elif max_fingers == 2 and max_move < TOUCH_TWO_FINGER_MAX_MOVE:
+		mouse_latch |= 2
+		if log_input:
+			print("input: touch two-finger cancel frame=", game_frames)
+
+
+func _handle_screen_drag(event: InputEventScreenDrag) -> void:
+	var idx := event.index
+	if not _touch_points.has(idx):
+		return
+	var prev: Vector2 = _touch_points[idx]
+	var local := _screen_to_logical(event.position)
+	_touch_points[idx] = local
+	var start: Vector2 = _touch_starts.get(idx, local)
+	_touch_max_move = maxf(_touch_max_move, local.distance_to(start))
+	if _touch_max_fingers != 1:
+		return
+	var delta := local - start
+	var step_dy := local.y - prev.y
+	if _touch_scroll_active:
+		if _wolf_choices_active() or _wolf_save_ui_active():
+			_accumulate_touch_wheel(step_dy)
+		return
+	if _touch_swipe_consumed:
+		return
+	if (
+		start.x <= TOUCH_EDGE_X
+		and delta.x >= TOUCH_SWIPE_MIN_PX
+		and absf(delta.y) < absf(delta.x)
+	):
+		_touch_swipe_consumed = true
+		var kind := 0 if start.y < TOUCH_EDGE_SPLIT_Y else 1
+		_wolf_open_side_panel(kind)
+		return
+	if (
+		delta.x <= -TOUCH_SWIPE_MIN_PX
+		and absf(delta.y) < absf(delta.x)
+		and _wolf_any_side_panel_open()
+	):
+		_touch_swipe_consumed = true
+		_wolf_close_side_panels()
+		return
+	if _wolf_choices_active() or _wolf_save_ui_active():
+		_touch_wheel_accum += step_dy
+		if absf(_touch_wheel_accum) >= TOUCH_WHEEL_STEP_PX and absf(delta.y) >= absf(delta.x):
+			_flush_touch_wheel_notches()
+
+
+func _accumulate_touch_wheel(step_dy: float) -> void:
+	_touch_wheel_accum += step_dy
+	_flush_touch_wheel_notches()
+
+
+func _flush_touch_wheel_notches() -> void:
+	while _touch_wheel_accum >= TOUCH_WHEEL_STEP_PX:
+		wheel_notches -= 1
+		_touch_wheel_accum -= TOUCH_WHEEL_STEP_PX
+		_touch_swipe_consumed = true
+		_touch_scroll_active = true
+	while _touch_wheel_accum <= -TOUCH_WHEEL_STEP_PX:
+		wheel_notches += 1
+		_touch_wheel_accum += TOUCH_WHEEL_STEP_PX
+		_touch_swipe_consumed = true
+		_touch_scroll_active = true
+
+
 ## Handles one input event while a modal is up.
 ##
 ## The modal is front-end only: the runtime sees nothing until the player
@@ -978,18 +1190,72 @@ func _handle_modal_event(event: InputEvent) -> void:
 		# dialog has no cancel path, so it ignores clicks outside its button.
 		if _modal_kind != "startup_error":
 			_close_modal()
+		return
+	if event is InputEventScreenTouch:
+		var touch_event := event as InputEventScreenTouch
+		var local := _screen_to_logical(touch_event.position)
+		var idx := touch_event.index
+		if touch_event.pressed:
+			if not _in_logical_bounds(local):
+				return
+			if _touch_points.is_empty():
+				_reset_touch_gesture()
+			_touch_points[idx] = local
+			_touch_starts[idx] = local
+			_touch_max_fingers = maxi(_touch_max_fingers, _touch_points.size())
+			if _touch_points.size() == 1:
+				var down_rects := _modal_layer.button_rects()
+				for index in range(down_rects.size()):
+					if down_rects[index].has_point(local):
+						_set_modal_focus(index)
+						break
+			return
+		if not _touch_points.has(idx):
+			return
+		var start: Vector2 = _touch_starts.get(idx, local)
+		_touch_max_move = maxf(_touch_max_move, local.distance_to(start))
+		_touch_points.erase(idx)
+		if not _touch_points.is_empty():
+			return
+		var max_fingers := _touch_max_fingers
+		var max_move := _touch_max_move
+		_reset_touch_gesture()
+		if max_fingers != 1 or max_move >= TOUCH_TAP_MAX_MOVE:
+			return
+		var touch_rects := _modal_layer.button_rects()
+		for index in range(touch_rects.size()):
+			if touch_rects[index].has_point(local):
+				_set_modal_focus(index)
+				_activate_modal_focus()
+				return
+		if _modal_kind != "startup_error" and not _modal_layer.panel_rect().has_point(local):
+			_close_modal()
+		return
+	if event is InputEventScreenDrag:
+		var drag_event := event as InputEventScreenDrag
+		if _touch_points.has(drag_event.index):
+			var drag_local := _screen_to_logical(drag_event.position)
+			_touch_points[drag_event.index] = drag_local
+			var drag_start: Vector2 = _touch_starts.get(drag_event.index, drag_local)
+			_touch_max_move = maxf(_touch_max_move, drag_local.distance_to(drag_start))
 
 
 ## Opens the "back to the title" confirmation.
-func _open_return_modal() -> void:
-	if wolf == null or not _modal_kind.is_empty():
+##
+## `allow_submenu` lets the save/load grid request the same dialog. The grid is
+## a secondary screen, so the free-map Escape path still refuses to stack this
+## confirmation on top of an album or settings menu.
+func _open_return_modal(allow_submenu := false) -> void:
+	if not _wolf_has_runtime() or not _modal_kind.is_empty():
 		return
-	if wolf.at_title() or wolf.in_submenu():
+	if _wolf_at_title() or (_wolf_in_submenu() and not allow_submenu):
 		# The session already sits on the title screen, so a reset would only
 		# replay the opening. A secondary screen must cancel first.
 		return
+	_ensure_modal_layer()
 	_modal_kind = "return_title"
 	_modal_actions = ["title", "cancel"]
+	_modal_layer.error_mode = false
 	_modal_layer.title = "返回标题画面？"
 	_modal_layer.body = "未保存的进度将会丢失。"
 	_modal_layer.labels = ["是", "否"]
@@ -1000,6 +1266,24 @@ func _open_return_modal() -> void:
 	_modal_layer.queue_redraw()
 	_reset_modal_input()
 	print("ui: return-to-title confirmation opened")
+
+
+## Opens the Android back-button "quit app" confirmation at the title screen.
+func _open_quit_app_modal() -> void:
+	if not _modal_kind.is_empty():
+		return
+	_ensure_modal_layer()
+	_modal_kind = "quit_app"
+	_modal_actions = ["quit", "cancel"]
+	_modal_layer.error_mode = false
+	_modal_layer.title = "退出游戏？"
+	_modal_layer.body = "确定要退出游戏吗？"
+	_modal_layer.labels = ["是", "否"]
+	_modal_layer.focus_index = 1
+	_modal_layer.open = true
+	_modal_layer.queue_redraw()
+	_reset_modal_input()
+	print("ui: quit-app confirmation opened")
 
 
 ## Opens the save-slot confirmation when the click landed on a used slot.
@@ -1013,8 +1297,13 @@ func _open_save_slot_modal(event: InputEventMouseButton) -> bool:
 	if wolf == null:
 		return false
 	var local := get_global_transform_with_canvas().affine_inverse() * event.position
-	var hit: Dictionary = wolf.save_slot_at(int(local.x), int(local.y))
-	return _open_save_slot_modal_for_hit(hit, Vector2i(int(local.x), int(local.y)))
+	return _open_save_slot_modal_at(Vector2i(int(local.x), int(local.y)))
+
+
+## Shared coordinate entry for both mouse clicks and touch taps on the save grid.
+func _open_save_slot_modal_at(local_pos: Vector2i) -> bool:
+	var hit := _wolf_save_slot_at(local_pos.x, local_pos.y)
+	return _open_save_slot_modal_for_hit(hit, local_pos)
 
 
 ## Opens the same confirmation for CE131's keyboard cursor.
@@ -1033,9 +1322,11 @@ func _open_save_slot_modal_for_hit(hit: Dictionary, click: Vector2i) -> bool:
 	if not bool(hit.get("occupied", false)):
 		# An empty slot has nothing to lose: the game writes it as usual.
 		return false
+	_ensure_modal_layer()
 	_modal_kind = "save_slot"
 	_modal_slot = hit
 	_modal_click = click
+	_modal_layer.error_mode = false
 	_modal_layer.title = "存档槽 %d" % int(hit.get("slot", 0))
 	_modal_layer.body = "该槽位已有存档。"
 	if bool(hit.get("loading", false)):
@@ -1108,6 +1399,10 @@ func _activate_modal_focus() -> void:
 			if action == "title" and wolf != null:
 				wolf.return_to_title()
 				print("ui: return to title requested")
+		"quit_app":
+			_close_modal()
+			if action == "quit":
+				_quit_app()
 		"save_slot":
 			_activate_save_slot(action)
 		_:
@@ -1144,6 +1439,101 @@ func _reset_modal_input() -> void:
 	wheel_notches = 0
 	held_keys.clear()
 	held_order.clear()
+	_reset_touch_gesture()
+
+
+func _clear_held_input() -> void:
+	held_keys.clear()
+	held_order.clear()
+	mouse_down = 0
+	mouse_latch = 0
+	mouse_latch_pos = Vector2i(-1, -1)
+	wheel_notches = 0
+	focus_gained = false
+	_modal_release_guard = false
+	_reset_touch_gesture()
+
+
+func _quit_app() -> void:
+	_save_settings_on_exit()
+	if not _is_mobile_touch():
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var tree := get_tree()
+	if tree != null:
+		tree.quit()
+
+
+## Layered Android back-button router.
+func _handle_back_request() -> void:
+	if _modal_kind == "startup_error":
+		_quit_from_startup_error()
+		return
+	if not _modal_kind.is_empty():
+		_close_modal()
+		return
+	if _wolf_any_side_panel_open():
+		_wolf_close_side_panels()
+		return
+	if not _wolf_has_runtime():
+		_quit_app()
+		return
+	if _wolf_at_title() and not _wolf_save_ui_active():
+		_open_quit_app_modal()
+		return
+	if _wolf_in_submenu():
+		mouse_latch |= 2
+		return
+	_open_return_modal()
+
+
+func _wolf_has_runtime() -> bool:
+	return wolf != null
+
+
+func _wolf_any_side_panel_open() -> bool:
+	return (
+		wolf != null
+		and wolf.has_method("any_side_panel_open")
+		and bool(wolf.any_side_panel_open())
+	)
+
+
+func _wolf_open_side_panel(kind: int) -> bool:
+	if wolf != null and wolf.has_method("open_side_panel"):
+		return bool(wolf.open_side_panel(kind))
+	return false
+
+
+func _wolf_close_side_panels() -> bool:
+	if wolf != null and wolf.has_method("close_side_panels"):
+		return bool(wolf.close_side_panels())
+	return false
+
+
+func _wolf_choices_active() -> bool:
+	return (
+		wolf != null
+		and wolf.has_method("choices_active")
+		and bool(wolf.choices_active())
+	)
+
+
+func _wolf_save_ui_active() -> bool:
+	return wolf != null and bool(wolf.save_ui_active())
+
+
+func _wolf_at_title() -> bool:
+	return wolf != null and bool(wolf.at_title())
+
+
+func _wolf_in_submenu() -> bool:
+	return wolf != null and bool(wolf.in_submenu())
+
+
+func _wolf_save_slot_at(x: int, y: int) -> Dictionary:
+	if wolf == null:
+		return {}
+	return wolf.save_slot_at(x, y)
 
 
 ## The packet's sprite list without the runtime's pointers.
@@ -1170,26 +1560,29 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		# Without focus the key-up events never arrive; a stale held key would
 		# otherwise look pressed forever.
-		held_keys.clear()
-		held_order.clear()
-		mouse_down = 0
-		mouse_latch = 0
-		mouse_latch_pos = Vector2i(-1, -1)
-		wheel_notches = 0
-		focus_gained = false
-		_modal_release_guard = false
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_clear_held_input()
+		if not _is_mobile_touch():
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_handle_back_request()
+	elif what == NOTIFICATION_APPLICATION_PAUSED:
+		_save_settings_on_exit()
+		_clear_held_input()
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if not _is_mobile_touch():
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_save_settings_on_exit()
 
 
 func _exit_tree() -> void:
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if not _is_mobile_touch():
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_save_settings_on_exit()
 
 
 func _update_mouse_cursor(sprites: Array) -> void:
+	if _is_mobile_touch():
+		return
 	var has_custom_cursor := false
 	for sprite in sprites:
 		var number := int(sprite.get("number", -1))
@@ -1221,6 +1614,8 @@ func _is_fullscreen_toggle_event(event: InputEvent) -> bool:
 
 
 func _toggle_fullscreen() -> void:
+	if _is_mobile_touch():
+		return
 	if _is_fullscreen():
 		_leave_fullscreen()
 		_window_scale = _window_scale_for_size(_windowed_size_before_fullscreen)
@@ -1237,6 +1632,8 @@ func _toggle_fullscreen() -> void:
 ## second press therefore goes straight to borderless fullscreen, matching the
 ## WOLF manual. F11 remains an independent fullscreen toggle.
 func _cycle_display_size() -> void:
+	if _is_mobile_touch():
+		return
 	if _is_fullscreen():
 		_leave_fullscreen()
 		_window_scale = 1
@@ -1271,7 +1668,7 @@ func _apply_fps_mode() -> void:
 
 
 func _apply_window_title() -> void:
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" or _is_mobile_touch():
 		return
 	DisplayServer.window_set_title(_window_title_text())
 
@@ -1599,6 +1996,7 @@ func _draw() -> void:
 		items.append({"ap": ap, "z": 230, "seq": seq})
 		seq += 1
 	if wolf != null and wolf.save_ui_active():
+		_ensure_save_return_texture()
 		items.append({"save_notice": true, "z": SAVE_NOTICE_Z, "seq": seq})
 		seq += 1
 	items.sort_custom(_draw_item_before)
@@ -1685,6 +2083,7 @@ func _draw() -> void:
 		batch.bold_font = bold_font
 		batch.regular_font = regular_font
 		batch.frozen_texture = frozen_texture
+		batch.save_return_texture = save_return_texture if not _wolf_at_title() else null
 		batch.ap = b_info["ap"]
 		batch.visible = true
 		batch.queue_redraw()
@@ -1695,6 +2094,7 @@ func _draw() -> void:
 		unused.overlays.clear()
 		unused.ap = {}
 		unused.frozen_texture = null
+		unused.save_return_texture = null
 		unused.visible = false
 	_record_draw_time(draw_started)
 
@@ -1776,6 +2176,25 @@ func _draw_save_notice() -> void:
 	]
 	for index in range(lines.size()):
 		_draw_save_notice_line(lines[index], index)
+	if save_return_texture != null and not _wolf_at_title():
+		draw_texture_rect(save_return_texture, SAVE_RETURN_RECT, false)
+
+
+func _ensure_save_return_texture() -> void:
+	if save_return_texture != null:
+		return
+	var image := Image.new()
+	var loaded := false
+	if wolf != null and wolf.has_method("read_media"):
+		var packed: PackedByteArray = wolf.read_media("Picture/endbutton.png")
+		if not packed.is_empty():
+			loaded = image.load_png_from_buffer(packed) == OK
+	if not loaded and not data_root.is_empty():
+		loaded = image.load(data_root.path_join("Picture/endbutton.png")) == OK
+	if loaded:
+		save_return_texture = ImageTexture.create_from_image(image)
+	else:
+		push_warning("ui: cannot load Picture/endbutton.png for the save-page button")
 
 
 func _draw_save_notice_line(text: String, index: int) -> void:
@@ -2122,6 +2541,218 @@ func _print_perf_window() -> void:
 	)
 
 
+func _is_mobile_touch() -> bool:
+	return (
+		force_touch_mode
+		or OS.has_feature("android")
+		or OS.has_feature("ios")
+		or OS.has_feature("mobile")
+	)
+
+
+func _is_android_runtime() -> bool:
+	return OS.has_feature("android") or not android_data_src.is_empty()
+
+
+func _explicit_data_root_arg() -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--data-root="):
+			return arg.substr("--data-root=".length())
+	return ""
+
+
+## First-run Android asset staging: copies `android_data_manifest.json` files
+## from the APK/PCK (`res://android_data`, or `--android-data-src=` in tests)
+## into writable `user://data`, while placing initial `Save/System.sav` into
+## separate `user://Save` without ever overwriting existing player data.
+func _prepare_android_storage(
+	src_override: String = "",
+	dest_override: String = ""
+) -> Dictionary:
+	var src_dir := src_override
+	if src_dir.is_empty():
+		src_dir = android_data_src if not android_data_src.is_empty() else "res://android_data"
+	var dest_base := dest_override
+	if dest_base.is_empty():
+		dest_base = android_dest_root if not android_dest_root.is_empty() else OS.get_user_data_dir()
+	var data_dir := dest_base.path_join("data")
+	var save_dir := dest_base.path_join("Save")
+	var manifest_path := src_dir.path_join("android_data_manifest.json")
+	var manifest_file := FileAccess.open(manifest_path, FileAccess.READ)
+	if manifest_file == null:
+		return {
+			"ok": false,
+			"reason": "无法读取 Android 资源清单（android_data_manifest.json 缺失或不可读）。",
+			"path": manifest_path,
+		}
+	var raw_text := manifest_file.get_as_text()
+	manifest_file.close()
+	var parsed: Variant = JSON.parse_string(raw_text)
+	if not (parsed is Dictionary):
+		return {
+			"ok": false,
+			"reason": "Android 资源清单 JSON 格式无效。",
+			"path": manifest_path,
+		}
+	var manifest: Dictionary = parsed
+	var expected_version := str(manifest.get("version", "")).strip_edges()
+	var files_val: Variant = manifest.get("files", null)
+	if expected_version.is_empty() or not (files_val is Array):
+		return {
+			"ok": false,
+			"reason": "Android 资源清单缺少 version 或 files 字段。",
+			"path": manifest_path,
+		}
+	var data_dir_err := DirAccess.make_dir_recursive_absolute(data_dir)
+	if data_dir_err != OK:
+		return {
+			"ok": false,
+			"reason": "无法创建数据目录（错误码 %d）。" % data_dir_err,
+			"path": data_dir,
+		}
+	var save_dir_err := DirAccess.make_dir_recursive_absolute(save_dir)
+	if save_dir_err != OK:
+		return {
+			"ok": false,
+			"reason": "无法创建存档目录（错误码 %d）。" % save_dir_err,
+			"path": save_dir,
+		}
+	var version_path := data_dir.path_join(".staged_version")
+	var staged_version := ""
+	if FileAccess.file_exists(version_path):
+		var vf := FileAccess.open(version_path, FileAccess.READ)
+		if vf != null:
+			staged_version = vf.get_as_text().strip_edges()
+			vf.close()
+	var up_to_date := (
+		staged_version == expected_version
+		and FileAccess.file_exists(data_dir.path_join("BasicData/Game.dat"))
+		and FileAccess.file_exists(data_dir.path_join("media.pak"))
+	)
+	if up_to_date:
+		return {
+			"ok": true,
+			"data_dir": data_dir,
+			"save_dir": save_dir,
+			"copied": 0,
+			"skipped": true,
+		}
+	var copied := 0
+	var blob_suffix := str(manifest.get("blob_suffix", ""))
+	for item in files_val:
+		var rel := str(item).replace("\\", "/").lstrip("/")
+		if rel.is_empty() or rel.find("..") != -1:
+			return {
+				"ok": false,
+				"reason": "Android 资源清单包含非法路径。",
+				"path": str(item),
+			}
+		var src_path := src_dir.path_join(rel + blob_suffix)
+		var dst_path := data_dir.path_join(rel)
+		if rel.to_lower() == "save/system.sav":
+			dst_path = save_dir.path_join("System.sav")
+			if FileAccess.file_exists(dst_path):
+				continue
+		var copy_err := _copy_file_chunked(src_path, dst_path)
+		if copy_err != OK:
+			return {
+				"ok": false,
+				"reason": "释放游戏资源文件失败（错误码 %d）。" % copy_err,
+				"path": src_path,
+			}
+		copied += 1
+	var version_tmp := version_path + ".tmp"
+	var wf := FileAccess.open(version_tmp, FileAccess.WRITE)
+	if wf == null:
+		return {
+			"ok": false,
+			"reason": "无法写入资源版本标记文件。",
+			"path": version_tmp,
+		}
+	wf.store_string(expected_version)
+	wf.flush()
+	var write_err := wf.get_error()
+	wf.close()
+	if write_err != OK:
+		DirAccess.remove_absolute(version_tmp)
+		return {
+			"ok": false,
+			"reason": "写入资源版本标记文件失败（错误码 %d）。" % write_err,
+			"path": version_tmp,
+		}
+	var rename_err := _replace_file_atomic(version_tmp, version_path)
+	if rename_err != OK:
+		DirAccess.remove_absolute(version_tmp)
+		return {
+			"ok": false,
+			"reason": "提交资源版本标记文件失败（错误码 %d）。" % rename_err,
+			"path": version_path,
+		}
+	return {
+		"ok": true,
+		"data_dir": data_dir,
+		"save_dir": save_dir,
+		"copied": copied,
+		"skipped": false,
+	}
+
+
+func _copy_file_chunked(src_path: String, dst_path: String) -> Error:
+	var src := FileAccess.open(src_path, FileAccess.READ)
+	if src == null:
+		return ERR_FILE_NOT_FOUND
+	var parent_dir := dst_path.get_base_dir()
+	var dir_err := DirAccess.make_dir_recursive_absolute(parent_dir)
+	if dir_err != OK:
+		src.close()
+		return dir_err
+	var tmp_path := dst_path + ".tmp"
+	var dst := FileAccess.open(tmp_path, FileAccess.WRITE)
+	if dst == null:
+		src.close()
+		return ERR_FILE_CANT_WRITE
+	var total := src.get_length()
+	while src.get_position() < total:
+		var remaining := total - src.get_position()
+		var chunk_len := mini(ANDROID_STAGING_CHUNK_BYTES, remaining)
+		var buf := src.get_buffer(chunk_len)
+		if buf.size() != chunk_len:
+			src.close()
+			dst.close()
+			DirAccess.remove_absolute(tmp_path)
+			return ERR_FILE_CANT_READ
+		dst.store_buffer(buf)
+		var err := dst.get_error()
+		if err != OK:
+			src.close()
+			dst.close()
+			DirAccess.remove_absolute(tmp_path)
+			return err
+	dst.flush()
+	var final_err := dst.get_error()
+	dst.close()
+	src.close()
+	if final_err != OK:
+		DirAccess.remove_absolute(tmp_path)
+		return final_err
+	var rename_err := _replace_file_atomic(tmp_path, dst_path)
+	if rename_err != OK:
+		DirAccess.remove_absolute(tmp_path)
+	return rename_err
+
+
+func _replace_file_atomic(tmp_path: String, dst_path: String) -> Error:
+	var err := DirAccess.rename_absolute(tmp_path, dst_path)
+	if err == OK:
+		return OK
+	if FileAccess.file_exists(dst_path):
+		var rm_err := DirAccess.remove_absolute(dst_path)
+		if rm_err != OK:
+			return rm_err
+		err = DirAccess.rename_absolute(tmp_path, dst_path)
+	return err
+
+
 func _resolve_data_root() -> String:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--data-root="):
@@ -2163,6 +2794,12 @@ func _parse_args() -> void:
 			log_events = true
 		elif arg == "--log-perf":
 			log_perf = true
+		elif arg == "--touch-mode":
+			force_touch_mode = true
+		elif arg.begins_with("--android-data-src="):
+			android_data_src = arg.substr("--android-data-src=".length())
+		elif arg.begins_with("--android-dest="):
+			android_dest_root = arg.substr("--android-dest=".length())
 
 
 ## Load the bold or regular UI face.

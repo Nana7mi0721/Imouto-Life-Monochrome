@@ -19,6 +19,8 @@
 /godot/.godot/
 /godot/bin/*.dll
 /godot/bin/*.pdb
+/godot/bin/android/
+/godot/android_data/
 /godot/.import/
 __pycache__/
 *.pyc

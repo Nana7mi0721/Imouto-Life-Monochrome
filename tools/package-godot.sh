@@ -382,7 +382,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     done
     echo "==> media pack: Data/media.pak"
     echo "    include prefixes: $PACK_PREFIX_SUMMARY"
-    echo "    expected payload: 731 files / 113,002,329 bytes (current manifest; plan recomputes)"
+    echo "    expected payload: 733 files / 113,002,637 bytes (current manifest; plan recomputes)"
     python "$RELEASE_DATA_TOOL" "${RELEASE_PLAN_ARGS[@]}"
     echo "    would create: $MEDIA_PAK"
     if [ -x "$MEDIA_PACK_BIN" ]; then

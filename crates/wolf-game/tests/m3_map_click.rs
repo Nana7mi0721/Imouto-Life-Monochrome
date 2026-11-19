@@ -311,6 +311,35 @@ fn clicking_the_save_icon_starts_event_5_and_opens_the_save_screen() {
     assert_eq!(save_fingerprint(), before, "the test never confirms a save");
 }
 
+#[test]
+fn a_running_story_scene_blocks_the_quick_save_icon() {
+    let Some(mut game) = loaded_with(&[5]) else {
+        return;
+    };
+    // The visible save button is (10,510) 80x60; its centre is also inside the
+    // map event's tile rectangle. In free exploration it starts event 5.
+    assert_eq!(file_of(&game, -5), "Picture/icon01.png");
+    assert!(game.start_event(258), "CE258 did not start");
+    for _ in 0..3 {
+        game.frame();
+    }
+
+    click_at(&mut game, 50, 540);
+    for _ in 0..5 {
+        game.frame();
+    }
+
+    assert_ne!(
+        game.last_action_event,
+        Some(5),
+        "the quick save icon must stay inert while the evening scene runs"
+    );
+    assert!(
+        !running(&game, 14) && !running(&game, 131),
+        "the save menu must not open over a story scene"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // 2. Hit-area unit: the shipped event data and the (1+collision) tile rectangle.
 // ---------------------------------------------------------------------------
