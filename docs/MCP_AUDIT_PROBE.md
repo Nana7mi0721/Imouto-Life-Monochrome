@@ -47,9 +47,11 @@ return probe.snapshot()
 
 探针还提供：
 
-- `targets()`：当前可见的 `sprite/control/choice/save_slot` 目标及
+- `targets()`：当前可见的 `sprite/control/choice/save_slot/map_event` 目标及
   `rect/center`，供覆盖式点击。标题菜单的 `menu1..menu3` 没有独立文本
   run，探针会按原脚本实际绘制它们的图片槽位 3..5 暴露为 `choice`；
+  `map_event` 来自只读 `wolf.debug_action_targets()`，列出当前条件下会选中的
+  ActionKey 事件矩形、事件名、页码以及 `running/starts` 状态；
 - `audit_text_items(items)`：对任意 `packet.texts` 风格数组做文本检查；
 - `take_violations()` / `reset()` / `write_report(path)`：抽取、清空和落盘。
 
@@ -95,6 +97,44 @@ bash tools/audit-godot.sh
 - 输入后无状态推进会触发 `stall_after_input`；
 - JSON 报告可写。
 
+## 覆盖探索驱动
+
+`godot/tests/mcp_audit_driver.gd` 在探针之上提供确定性的目标规划与覆盖记录。
+它不会自动启动后台循环；外部 Harness 可以只读调用 `plan_next()`，也可以让
+驱动执行安全点击：
+
+```gdscript
+var scene = get_tree().current_scene
+var driver = scene.get_node_or_null("McpAuditDriver")
+if driver == null:
+    driver = load("res://tests/mcp_audit_driver.gd").new()
+    driver.name = "McpAuditDriver"
+    scene.add_child(driver)
+    driver.attach(scene)
+    driver.start()
+return driver.plan_next()
+```
+
+- `plan_next(false)`（默认）只返回默认安全计划：标题界面只允许进入
+  「继续/读取」，标题存档页允许读档；一旦进入地图事件流程，默认拒绝执行，
+  避免自动探索触发存档写入。
+- `plan_next(true)` 仍可只读地取出全部未访问目标（包括新游戏/退出等），但
+  `execute_plan()` 会拒绝不安全计划。
+- 只有在对 `work/out/audit_fixtures/` 之类的**一次性存档目录**运行时，才设置
+  `driver.allow_mutating_actions = true`。绝不能直接对玩家 `work/Data/Save`
+  打开此开关。
+- `step()` / `tick(wait_frames)` 执行下一步并记录覆盖；`record_action()` 用于
+  Harness 自己点击后补登记；`capture(path)` 从当前 viewport 存 PNG；
+  `write_report(path)` 输出覆盖、最近动作、探针快照和告警，`save_writes` 恒为 0
+  表示驱动自身未调用任何存档写接口。
+
+```bash
+bash tools/audit-explore.sh
+```
+
+该 smoke 会规划标题菜单、只点击安全的「继续/读取」入口，并在点击前后逐字节
+比较 `Save/`，证明该路径没有写入。
+
 ## 场景夹具
 
 测试存档应放在 `work/out/audit_fixtures/`，并按需要复制一份独立
@@ -118,6 +158,6 @@ bash tools/audit-godot.sh
   场景白名单；不要因为告警直接修改游戏排版，先看截图和双方槽位。
 - 探针构造 `TextParagraph` 使用当前平台实际加载的字体，因此 Windows 和
   Android 的结论可能不同；安卓实机应单独跑一次。
-- 当前还没有“枚举所有地图事件热区”的 Rust API。第一版从
-  `packet.sprites`、选项文本、标题菜单图片槽位、`save_slot_at()` 和已知
-  HUD/存档布局生成目标；后续再补完整事件页、碰撞矩形和条件快照。
+- `debug_action_targets()` 只枚举“当前变量条件下已选中”的 ActionKey 页；
+  尚未枚举失败条件页或所有历史页。普通 `sprite` 目标仍可能包含仅用于绘制、
+  点击无逻辑效果的图片，探索时应结合 `map_event/control/choice` 优先级判断。

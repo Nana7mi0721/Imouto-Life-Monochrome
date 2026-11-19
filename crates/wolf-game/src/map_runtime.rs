@@ -153,6 +153,23 @@ impl PageSlot {
     }
 }
 
+/// One action-key hotspot that is currently reachable on the map.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActionKeyTarget {
+    /// Event id from the map file.
+    pub event: u32,
+    /// Event name from the map file.
+    pub name: String,
+    /// Selected page index.
+    pub page: usize,
+    /// Pixel rectangle as `(left, top, width, height)`.
+    pub rect: (i32, i32, i32, i32),
+    /// True while the event owns a live VM instance.
+    pub running: bool,
+    /// Starts over the event's whole lifetime.
+    pub starts: u64,
+}
+
 /// Every event of one map, plus the rules that keep their pages alive.
 #[derive(Default)]
 pub struct MapRuntime {
@@ -310,6 +327,34 @@ impl MapRuntime {
         self.events
             .iter()
             .map(|state| (state.id, select_page(state, vm)))
+            .collect()
+    }
+
+    /// Enumerate the action-key pages selected by the current variables.
+    ///
+    /// This is the read-only companion to [`Self::action_key_at`]: it uses the
+    /// same page selection and hit-rectangle rules, but never starts a page or
+    /// mutates the runtime. Running events are included with `running` set so a
+    /// diagnostic can tell which hotspots are currently occupied.
+    #[must_use]
+    pub fn action_key_targets(&self, vm: &Vm) -> Vec<ActionKeyTarget> {
+        self.events
+            .iter()
+            .filter_map(|state| {
+                let page_index = select_page(state, vm)?;
+                let page = state.pages.get(page_index)?;
+                if page.trigger != Trigger::ActionKey || page.program.is_none() {
+                    return None;
+                }
+                Some(ActionKeyTarget {
+                    event: state.id,
+                    name: state.name.clone(),
+                    page: page_index,
+                    rect: hit_rect(state, page),
+                    running: state.instance.is_some_and(|id| vm.instance(id).is_some()),
+                    starts: state.starts,
+                })
+            })
             .collect()
     }
 
@@ -1080,6 +1125,116 @@ mod tests {
         runtime.stop_all(&mut vm);
         runtime.start_pending(&mut vm);
         assert_eq!(runtime.action_key_at(&mut vm, 5, 5), None);
+    }
+
+    #[test]
+    fn action_key_targets_report_selected_pages_and_running_state() {
+        let map = map_with(vec![
+            MapEvent {
+                id: 5,
+                name: "save".to_owned(),
+                x: 2,
+                y: 3,
+                pages: vec![
+                    page_collision(0, (2, 1), vec![Slot::Blank]),
+                    page_with(
+                        0,
+                        [0x21, 0, 0, 0],
+                        [2_000_020, 0, 0, 0],
+                        [1, 0, 0, 0],
+                        vec![Slot::Blank],
+                    ),
+                ],
+            },
+            MapEvent {
+                id: 6,
+                name: "menu".to_owned(),
+                x: 0,
+                y: 1,
+                pages: vec![page_with(
+                    0,
+                    [0x21, 0, 0, 0],
+                    [2_000_030, 0, 0, 0],
+                    [1, 0, 0, 0],
+                    vec![Slot::Blank],
+                )],
+            },
+        ]);
+        let mut runtime = MapRuntime::collect(&map);
+        let mut vm = Vm::new(ProgramSet::default());
+
+        let targets = runtime.action_key_targets(&vm);
+        assert_eq!(targets.len(), 1, "conditional page must stay hidden");
+        assert_eq!(targets[0].event, 5);
+        assert_eq!(targets[0].name, "save");
+        assert_eq!(targets[0].page, 0);
+        assert_eq!(targets[0].rect, (32, 48, 48, 32));
+        assert!(!targets[0].running);
+        assert_eq!(targets[0].starts, 0);
+
+        vm.vars.set(20, 1);
+        vm.vars.set(30, 1);
+        let targets = runtime.action_key_targets(&vm);
+        assert_eq!(targets.len(), 2);
+        let save = targets.iter().find(|target| target.event == 5).unwrap();
+        assert_eq!(save.page, 1, "highest matching ActionKey page wins");
+        assert_eq!(save.rect, (32, 48, 16, 16));
+        let menu = targets.iter().find(|target| target.event == 6).unwrap();
+        assert_eq!(menu.page, 0);
+        assert_eq!(menu.rect, (0, 16, 16, 16));
+
+        assert_eq!(runtime.action_key_at(&mut vm, 32, 48), Some(5));
+        let targets = runtime.action_key_targets(&vm);
+        let save = targets.iter().find(|target| target.event == 5).unwrap();
+        assert!(save.running, "started event must be marked running");
+        assert_eq!(save.starts, 1);
+        let menu = targets.iter().find(|target| target.event == 6).unwrap();
+        assert!(!menu.running);
+        assert_eq!(menu.starts, 0);
+
+        let before = runtime.action_key_targets(&vm);
+        let after = runtime.action_key_targets(&vm);
+        assert_eq!(after, before, "enumeration must not start a page");
+
+        vm.vars.set(30, 0);
+        let targets = runtime.action_key_targets(&vm);
+        assert!(
+            targets.iter().all(|target| target.event != 6),
+            "a failing condition must remove its target"
+        );
+    }
+
+    #[test]
+    fn action_key_targets_skip_pages_without_a_program() {
+        let map = map_with(vec![MapEvent {
+            id: 8,
+            name: "blank-first".to_owned(),
+            x: 1,
+            y: 1,
+            pages: vec![
+                page_collision(0, (0, 0), Vec::new()),
+                page_with(
+                    0,
+                    [0x21, 0, 0, 0],
+                    [2_000_040, 0, 0, 0],
+                    [1, 0, 0, 0],
+                    vec![Slot::Blank],
+                ),
+            ],
+        }]);
+        let runtime = MapRuntime::collect(&map);
+        let mut vm = Vm::new(ProgramSet::default());
+
+        assert!(
+            runtime.action_key_targets(&vm).is_empty(),
+            "a selected blank page is not clickable"
+        );
+
+        vm.vars.set(40, 1);
+        let targets = runtime.action_key_targets(&vm);
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].event, 8);
+        assert_eq!(targets[0].page, 1);
     }
 
     #[test]

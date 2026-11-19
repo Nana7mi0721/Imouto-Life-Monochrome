@@ -2141,3 +2141,25 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     既有 `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`
     存档夹具失败，未改 wolf-game 游玩逻辑。
   * **状态**：随本轮提交推送。
+
+* 2026-11-19（MCP/Godot 运行时审计探针 v2：热区枚举 + 覆盖探索）：
+  * **Rust 热区**：`MapRuntime::action_key_targets(&self, &Vm)` 返回当前
+    `select_page` 选中的 ActionKey 页，复用现有 `hit_rect`，字段为
+    event/name/page/rect/running/starts，只读且不启动页面；
+    `WolfGame.debug_action_targets()` 暴露给探针，`targets()` 新增
+    `map_event` kind。
+  * **覆盖驱动**：新增 `godot/tests/mcp_audit_driver.gd`，按
+    `(scene_key,target_key)` 记录覆盖，优先 choice/control/save_slot/
+    map_event，再普通图片；同一坐标最多重复 2 次，空白网格每点一次。
+    支持 `plan_next()` 只读规划、`step/tick` 执行安全点击、MCP 外点
+    `record_action()`、viewport `capture()` 和 JSON `write_report()`。
+  * **安全门**：默认只执行标题「继续/读取」和标题存档读档；进入地图流程后
+    `execute_plan()` 拒绝执行，只有一次性 Save 夹具才可显式
+    `allow_mutating_actions=true`。驱动自身 `save_writes` 恒为 0。
+  * **验证**：`action_key_targets` 2/2、`wolf-game --lib` 377/377、
+    `wolf-gdext` 2/2；`tools/audit-explore.sh` 通过且读档前后 Save/
+    逐字节一致；`tools/audit-godot.sh` 报 events=5 targets=4 文本/停滞/
+    闪烁/报告全过；完整 `tools/smoke-godot.sh` 13 组全过。全量 workspace
+    测试仍只剩既有玩家存档夹具失败
+    `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`。
+  * **状态**：随本轮提交推送。

@@ -131,6 +131,7 @@ func take_violations() -> Array:
 func targets() -> Array:
 	var result: Array = []
 	var packet := _packet()
+	var wolf = _get_wolf()
 	var choices: Array = packet.get("choices", [])
 	var cursor := int(packet.get("choice_cursor", -1))
 	var title_menu_slots: Dictionary = {}
@@ -197,7 +198,27 @@ func targets() -> Array:
 			emitted_choices[index] = true
 			break
 
-	var wolf = _get_wolf()
+	var map_targets = _optional_call(wolf, "debug_action_targets")
+	if map_targets is Array:
+		for value in map_targets:
+			if not (value is Dictionary):
+				continue
+			var map_target: Dictionary = value
+			var map_rect: Rect2 = map_target.get("rect", Rect2())
+			if map_rect.size.x <= 0.0 or map_rect.size.y <= 0.0:
+				continue
+			result.append({
+				"kind": "map_event",
+				"event": int(map_target.get("event", -1)),
+				"name": str(map_target.get("name", "")),
+				"page": int(map_target.get("page", -1)),
+				"running": bool(map_target.get("running", false)),
+				"starts": int(map_target.get("starts", 0)),
+				"rect": map_rect,
+				"center": map_rect.get_center(),
+				"z": 0,
+			})
+
 	if _call_bool(wolf, "save_ui_active") and wolf != null and wolf.has_method("save_slot_at"):
 		for row in range(SAVE_GRID_ROWS):
 			var rect := Rect2(

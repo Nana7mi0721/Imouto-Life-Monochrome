@@ -57,7 +57,7 @@ pub use game::{
     install_local_clock, layered_data_path, Choices, Clock, FrameOutcome, Game, GameError,
     GameStats, LocalDateTime, Message, SaveSlotHit, TITLE_EVENT,
 };
-pub use map_runtime::{MapRuntime, PageSlot, Trigger};
+pub use map_runtime::{ActionKeyTarget, MapRuntime, PageSlot, Trigger};
 pub use overlay::{OverlayLayer, ScreenOverlay};
 pub use picture::{Picture, PictureKind, Screen, ScreenQuad, UNCHANGED};
 pub use tilemap::{autotile_src, base_src, cull_range, TileMap, QUADRANT_PX, TILE_NUMBER, TILE_PX};

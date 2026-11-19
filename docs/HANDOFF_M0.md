@@ -263,7 +263,19 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
-* **2026-11-19 MCP/Godot 运行时审计探针 v1（当前工作区最新）**：
+* **2026-11-19 MCP/Godot 运行时审计探针 v2（当前工作区最新）**：
+  在 v1 上新增 `MapRuntime::action_key_targets` /
+  `WolfGame.debug_action_targets()`，只读枚举当前条件下选中的 ActionKey
+  事件矩形、事件名、页码、`running/starts`，并接入 `targets().map_event`。
+  新增 `godot/tests/mcp_audit_driver.gd` 覆盖探索驱动：确定性规划、覆盖记录、
+  MCP 外点登记、viewport 截图、JSON 报告；默认只执行标题「继续/读取」等
+  安全路径，进入地图流程后拒绝自动执行，必须使用一次性 Save 夹具并显式
+  设置 `allow_mutating_actions=true`。`tools/audit-explore.sh` 单独跑
+  headless smoke，`tools/smoke-godot.sh` 也已接入。验证：Rust 热区测试
+  2/2、`wolf-game --lib` 377/377、`wolf-gdext` 2/2；探索 smoke 的读档路径
+  前后 `Save/` 逐字节一致，审计 smoke 与完整 Godot smoke 全过。
+
+* **2026-11-19 MCP/Godot 运行时审计探针 v1**：
   `wolf-gdext` 新增只读 `debug_event_snapshot()`（event/instance/parallel/
   pc/wait/self_base/page）、`message_active()`、`message_text()`；
   新增测试专用 `godot/tests/mcp_audit_probe.gd`，通过 `game_eval` 挂到

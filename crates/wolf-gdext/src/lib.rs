@@ -397,6 +397,34 @@ impl WolfGame {
         out
     }
 
+    /// Snapshot of the current map's clickable ActionKey hotspots, for probes.
+    ///
+    /// Each entry contains `event`, `name`, `page`, `rect`, `running` and
+    /// `starts`. The list is read-only: it does not start any page.
+    #[func]
+    fn debug_action_targets(&self) -> Array<VarDictionary> {
+        let mut out: Array<VarDictionary> = Array::new();
+        let Some(game) = self.game.as_ref() else {
+            return out;
+        };
+        for target in game.runtime.action_key_targets(&game.vm) {
+            let mut dict = VarDictionary::new();
+            dict.set("event", i64::from(target.event));
+            let name = GString::from(target.name.as_str());
+            dict.set("name", &name);
+            dict.set("page", target.page as i64);
+            let (left, top, width, height) = target.rect;
+            dict.set(
+                "rect",
+                rect2([left as f32, top as f32, width as f32, height as f32]),
+            );
+            dict.set("running", target.running);
+            dict.set("starts", target.starts as i64);
+            out.push(&dict);
+        }
+        out
+    }
+
     /// True while the native message layer has a visible message.
     #[func]
     fn message_active(&self) -> bool {

@@ -12,6 +12,7 @@
 #  10. the P0 black-cover/scenery and night-UI interaction regressions.
 #  11. the F4/F8/F5/W/F11 presentation hotkey dispatch and sizing cycle.
 #  12. the MCP audit probe (VM snapshot, text checks, stall/flicker detectors).
+#  13. the MCP coverage driver (safe title planning, report and no save writes).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -71,3 +72,7 @@ fi
 
 "$GODOT" --headless --path godot --script res://tests/audit_probe_smoke.gd -- \
     --data-root="$DATA_ROOT"
+
+"$GODOT" --headless --path godot --script res://tests/audit_driver_smoke.gd -- \
+    --data-root="$DATA_ROOT" \
+    --report-path="$PWD/work/out/audit_driver_smoke.json"
