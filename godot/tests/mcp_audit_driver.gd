@@ -20,7 +20,7 @@ const MAX_COORD_REPEATS := 2
 const BLANK_COLUMNS := 12
 const BLANK_ROWS := 7
 const BLANK_MARGIN := Vector2(48.0, 48.0)
-const TARGET_KINDS := ["choice", "control", "save_slot", "map_event", "sprite"]
+const TARGET_KINDS := ["modal", "choice", "control", "save_slot", "map_event", "sprite"]
 
 var view: Node = null
 var probe: Node = null
@@ -495,12 +495,17 @@ func _target_plan(scene_key: String, scene_label: String, target: Dictionary, pr
 func _execution_is_safe(plan: Dictionary) -> bool:
 	if allow_mutating_actions:
 		return true
+	var kind := str(plan.get("kind", ""))
+	if kind == "modal":
+		var action := str(plan.get("target", {}).get("action", ""))
+		if action == "cancel":
+			return true
+		return action == "load" and _call_bool(_wolf(), "at_title")
 	var wolf = _wolf()
 	if not _call_bool(wolf, "at_title"):
 		return false
 	if _call_bool(wolf, "save_ui_active"):
 		return true
-	var kind := str(plan.get("kind", ""))
 	if kind == "blank":
 		return true
 	return kind == "choice" and str(plan.get("target", {}).get("text", "")) == "menu2"
@@ -604,6 +609,9 @@ func _scene_info() -> Dictionary:
 	var save_ui := _call_bool(wolf, "save_ui_active")
 	var submenu := _call_bool(wolf, "in_submenu")
 	var choices := _string_array(packet.get("choices", []))
+	var modal_kind := ""
+	if _view_properties.has("_modal_kind"):
+		modal_kind = str(view.get("_modal_kind"))
 
 	var label := "title" if at_title else "map"
 	if save_ui:
@@ -612,6 +620,8 @@ func _scene_info() -> Dictionary:
 		label += "_submenu"
 	elif not choices.is_empty():
 		label += "_choice"
+	if not modal_kind.is_empty():
+		label += "_modal"
 
 	var events: Array = []
 	var debug_events = _optional_call(wolf, "debug_event_snapshot")
@@ -633,6 +643,7 @@ func _scene_info() -> Dictionary:
 		at_title,
 		save_ui,
 		submenu,
+		modal_kind,
 		choices,
 		events,
 		running,
@@ -648,6 +659,11 @@ func _scene_info() -> Dictionary:
 func _target_key(target: Dictionary) -> String:
 	var kind := str(target.get("kind", "sprite"))
 	match kind:
+		"modal":
+			return "modal:%d:%s" % [
+				int(target.get("index", -1)),
+				_stable_token(str(target.get("action", ""))),
+			]
 		"choice":
 			return "choice:%d:%s" % [
 				int(target.get("index", -1)),
@@ -681,6 +697,15 @@ func _target_less(a: Dictionary, b: Dictionary) -> bool:
 		return a_rank < b_rank
 	var a_kind := str(a.get("kind", ""))
 	var b_kind := str(b.get("kind", ""))
+	if a_kind == "modal" and b_kind == "modal":
+		var a_action_rank := _modal_action_rank(str(a.get("action", "")))
+		var b_action_rank := _modal_action_rank(str(b.get("action", "")))
+		if a_action_rank != b_action_rank:
+			return a_action_rank < b_action_rank
+		var a_index := int(a.get("index", -1))
+		var b_index := int(b.get("index", -1))
+		if a_index != b_index:
+			return a_index < b_index
 	if a_kind == "choice" and b_kind == "choice":
 		var a_index := int(a.get("index", -1))
 		var b_index := int(b.get("index", -1))
@@ -697,19 +722,36 @@ func _target_less(a: Dictionary, b: Dictionary) -> bool:
 	return str(a.get("target_key", "")) < str(b.get("target_key", ""))
 
 
+func _modal_action_rank(action: String) -> int:
+	match action:
+		"cancel":
+			return 0
+		"load":
+			return 1
+		"title":
+			return 2
+		"save":
+			return 8
+		"quit":
+			return 9
+	return 5
+
+
 func _kind_rank(kind: String) -> int:
 	match kind:
-		"choice":
+		"modal":
 			return 0
-		"control":
+		"choice":
 			return 1
-		"save_slot":
+		"control":
 			return 2
-		"map_event":
+		"save_slot":
 			return 3
-		"sprite":
+		"map_event":
 			return 4
-	return 5
+		"sprite":
+			return 5
+	return 6
 
 
 func _stable_token(text: String, limit: int = 64) -> String:

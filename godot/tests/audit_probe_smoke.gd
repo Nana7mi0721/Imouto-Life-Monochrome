@@ -103,6 +103,37 @@ func _init() -> void:
 		_fail(view, probe, "targets() did not expose the title choices: %s" % str(targets))
 		return
 
+	# A modal owns all input. It must hide the underlying grid/room targets and
+	# expose its own safe button rectangles instead.
+	probe.reset()
+	probe.stall_limit_frames = 5
+	probe.text_audit_interval = 0x7fffffff
+	probe.mark_input("before_modal")
+	view._ensure_modal_layer()
+	view._modal_kind = "save_slot"
+	var modal_actions: Array[String] = ["load", "cancel"]
+	var modal_labels: Array[String] = ["读取此存档", "取消"]
+	view._modal_actions = modal_actions
+	view._modal_layer.labels = modal_labels
+	view._modal_layer.focus_index = 1
+	view._modal_layer.open = true
+	for _i in range(10):
+		await physics_frame
+	if _has_kind(probe.take_violations(), "stall_after_input"):
+		_fail(view, probe, "opening a modal was misreported as a stall")
+		return
+	var modal_targets: Array = probe.targets()
+	if modal_targets.size() != 2:
+		_fail(view, probe, "modal targets were not isolated: %s" % str(modal_targets))
+		return
+	for target in modal_targets:
+		if str(target.get("kind", "")) != "modal":
+			_fail(view, probe, "non-modal target leaked through the modal: %s" % str(target))
+			return
+	view._close_modal()
+	for _i in range(2):
+		await physics_frame
+
 	# Exercise the text auditor without mutating the live packet.
 	var synthetic := [
 		{

@@ -129,6 +129,10 @@ func take_violations() -> Array:
 ##   choice   - option text runs on the engine-owned choice panel;
 ##   save_slot- CE131 rows resolved through WolfGame.save_slot_at().
 func targets() -> Array:
+	var modal_targets := _modal_targets()
+	if not modal_targets.is_empty():
+		return modal_targets
+
 	var result: Array = []
 	var packet := _packet()
 	var wolf = _get_wolf()
@@ -241,6 +245,40 @@ func targets() -> Array:
 				"center": center,
 				"z": 12_050 + row * 20,
 			})
+	return result
+
+
+## Front-end modal buttons are canvas overlays, not WOLF picture slots. While a
+## modal is open it owns input, so it must be the only target set the audit
+## driver sees; otherwise a click can fall through to the grid behind it.
+func _modal_targets() -> Array:
+	if not _view_valid() or not _view_properties.has("_modal_kind"):
+		return []
+	if str(view.get("_modal_kind")).is_empty():
+		return []
+	var layer = view.get("_modal_layer")
+	if layer == null or not is_instance_valid(layer) or not bool(layer.get("open")):
+		return []
+	var labels := _array_copy(layer.get("labels"))
+	var actions := _array_copy(view.get("_modal_actions"))
+	var rects: Array = layer.call("button_rects")
+	var focus := int(layer.get("focus_index"))
+
+	var result: Array = []
+	for index in range(mini(labels.size(), rects.size())):
+		var rect: Rect2 = rects[index]
+		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			continue
+		result.append({
+			"kind": "modal",
+			"index": index,
+			"action": str(actions[index]) if index < actions.size() else "",
+			"text": str(labels[index]),
+			"selected": index == focus,
+			"rect": rect,
+			"center": rect.get_center(),
+			"z": 2_000_000,
+		})
 	return result
 
 
@@ -540,6 +578,7 @@ func _stall_signature(packet: Dictionary) -> Array:
 		_array_copy(packet.get("choices", [])),
 		_call_bool(wolf, "save_ui_active"),
 		_call_bool(wolf, "in_submenu"),
+		_modal_signature(),
 		int(packet.get("last_action_event", -1)),
 		_optional_call(wolf, "message_active"),
 		_optional_call(wolf, "message_text"),
@@ -559,6 +598,7 @@ func _capture_state(include_history: bool) -> Dictionary:
 		"choices": _array_copy(packet.get("choices", [])),
 		"save_ui": _call_bool(wolf, "save_ui_active"),
 		"in_submenu": _call_bool(wolf, "in_submenu"),
+		"modal": _modal_signature(),
 		"last_action_event": int(packet.get("last_action_event", -1)),
 		"transcript_size": _transcript_size(wolf),
 		"freeze": bool(packet.get("freeze", false)),
@@ -651,6 +691,23 @@ func _get_wolf():
 	if not _view_valid() or not _view_properties.has("wolf"):
 		return null
 	return view.get("wolf")
+
+
+func _modal_signature() -> Array:
+	if not _view_valid() or not _view_properties.has("_modal_kind"):
+		return []
+	var kind := str(view.get("_modal_kind"))
+	if kind.is_empty():
+		return []
+	var layer = view.get("_modal_layer")
+	if layer == null or not is_instance_valid(layer) or not bool(layer.get("open")):
+		return []
+	return [
+		kind,
+		int(layer.get("focus_index")),
+		_array_copy(layer.get("labels")),
+		_array_copy(view.get("_modal_actions")),
+	]
 
 
 func _view_font(bold: bool) -> Font:

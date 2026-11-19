@@ -2163,3 +2163,20 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     测试仍只剩既有玩家存档夹具失败
     `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`。
   * **状态**：随本轮提交推送。
+
+* 2026-11-19（MCP/Godot 实机验证：modal 目标与停滞误报修复）：
+  * **实机路径**：通过 MCP `project_run` 启动游戏，`game_eval` 挂载
+    `McpAuditProbe`/`McpAuditDriver`；标题选择读取存档、点击槽位、取消弹窗，
+    再只读加载当前存档进入地图。全程未调用存档写入。
+  * **发现并修复**：① 弹窗打开后探针仍返回底层存档槽，自动驱动可能穿透点击；
+    现在弹窗期间 `targets()` 只返回 `modal` 按钮，驱动优先 `cancel`。
+    ② 打开弹窗被 `stall_after_input` 误报为 60 帧停滞；停滞签名现包含
+    modal kind/focus/labels/actions。③ 驱动场景 key 未区分弹窗；现增加
+    `_modal` 场景后缀。
+  * **结果**：取消弹窗后正常回到存档页；等待 80 帧无停滞告警；读档后
+    `targets()` 枚举到 4 个 `map_event` 与 3 个 `control`，默认
+    `plan_next()` 返回 `unsafe_or_guarded`，安全门生效；`capture()` 与
+    `write_report()` 均成功，`save_writes=0`。
+  * **验证**：`tools/audit-godot.sh`、`tools/audit-explore.sh` 通过；GDScript
+    `--check-only` 通过；完整 `tools/smoke-godot.sh` 13 组全过。
+  * **状态**：随本轮提交推送。

@@ -47,11 +47,13 @@ return probe.snapshot()
 
 探针还提供：
 
-- `targets()`：当前可见的 `sprite/control/choice/save_slot/map_event` 目标及
+- `targets()`：当前可见的
+  `modal/sprite/control/choice/save_slot/map_event` 目标及
   `rect/center`，供覆盖式点击。标题菜单的 `menu1..menu3` 没有独立文本
   run，探针会按原脚本实际绘制它们的图片槽位 3..5 暴露为 `choice`；
   `map_event` 来自只读 `wolf.debug_action_targets()`，列出当前条件下会选中的
   ActionKey 事件矩形、事件名、页码以及 `running/starts` 状态；
+  弹窗打开时只返回当前 `modal` 按钮，避免自动点击穿透到底层存档栏或地图。
 - `audit_text_items(items)`：对任意 `packet.texts` 风格数组做文本检查；
 - `take_violations()` / `reset()` / `write_report(path)`：抽取、清空和落盘。
 
@@ -70,7 +72,8 @@ return found
 
 - `stall_after_input`：`mark_input()` 后连续 `stall_limit_frames` 个非冻结帧，
   transcript 长度、choices、save UI、submenu、last action event、
-  message active/text，以及非并行 VM 实例的 `page/pc/wait` 均无变化。
+  message active/text、modal kind/focus/labels/actions，以及非并行 VM 实例的
+  `page/pc/wait` 均无变化。
 - `sprite_state_flap`：30 帧内同一图片槽位只在两个离散
   `(src, rect, blend)` 状态间切换至少 6 次。指针 2998/2999 默认忽略，
   可用 `exempt_slots` 增加已知呼吸/眨眼槽位。
@@ -93,6 +96,7 @@ bash tools/audit-godot.sh
 
 - 探针可以挂载和读取 VM 快照；
 - 标题菜单可从图片槽位暴露为至少 3 个 `choice` 目标；
+- 模拟存档弹窗时只暴露 `modal` 按钮，打开弹窗本身不会被误报为停滞；
 - 人为构造的显式换行、窄框溢出和残留格式码会分别触发文本告警；
 - 输入后无状态推进会触发 `stall_after_input`；
 - JSON 报告可写。
@@ -118,6 +122,8 @@ return driver.plan_next()
 - `plan_next(false)`（默认）只返回默认安全计划：标题界面只允许进入
   「继续/读取」，标题存档页允许读档；一旦进入地图事件流程，默认拒绝执行，
   避免自动探索触发存档写入。
+- 弹窗打开时优先规划 `cancel`，其次才是标题界面的 `load`；`save/quit/title`
+  等动作默认不执行，必须由 Harness 显式处理。
 - `plan_next(true)` 仍可只读地取出全部未访问目标（包括新游戏/退出等），但
   `execute_plan()` 会拒绝不安全计划。
 - 只有在对 `work/out/audit_fixtures/` 之类的**一次性存档目录**运行时，才设置

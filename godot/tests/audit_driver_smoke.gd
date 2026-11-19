@@ -76,6 +76,42 @@ func _init() -> void:
 		_fail("expected at least 3 choice targets, got %d: %s" % [choice_count, str(targets)])
 		return
 
+	view._ensure_modal_layer()
+	view._modal_kind = "save_slot"
+	var modal_actions: Array[String] = ["load", "cancel"]
+	var modal_labels: Array[String] = ["读取此存档", "取消"]
+	view._modal_actions = modal_actions
+	view._modal_layer.labels = modal_labels
+	view._modal_layer.focus_index = 1
+	view._modal_layer.open = true
+	for _index in range(2):
+		await physics_frame
+	var modal_targets: Array = driver.targets()
+	if modal_targets.size() != 2:
+		_fail("driver did not isolate modal targets: %s" % str(modal_targets))
+		return
+	for target in modal_targets:
+		if str(target.get("kind", "")) != "modal":
+			_fail("driver leaked a background target through the modal: %s" % str(target))
+			return
+	var modal_plan: Dictionary = driver.plan_next()
+	if (
+		str(modal_plan.get("kind", "")) != "modal"
+		or str(modal_plan.get("target", {}).get("action", "")) != "cancel"
+		or not bool(modal_plan.get("execution_safe", false))
+	):
+		_fail("driver did not plan the safe modal cancel: %s" % str(modal_plan))
+		return
+	var modal_click: Dictionary = driver.execute_plan(modal_plan, true)
+	if not bool(modal_click.get("ok", false)):
+		_fail("driver failed to click modal cancel: %s" % str(modal_click))
+		return
+	for _index in range(3):
+		await physics_frame
+	if not str(view._modal_kind).is_empty():
+		_fail("modal cancel did not close the dialog")
+		return
+
 	var safe_plan: Dictionary = driver.plan_next()
 	if (
 		not bool(safe_plan.get("ok", false))

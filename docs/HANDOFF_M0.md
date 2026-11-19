@@ -263,7 +263,18 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
-* **2026-11-19 MCP/Godot 运行时审计探针 v2（当前工作区最新）**：
+* **2026-11-19 MCP/Godot 运行时审计探针 v3（实机验证，当前工作区最新）**：
+  通过 Godot MCP 实际启动游戏并挂载探针/驱动，走通
+  标题 → 读取存档页 → 槽位确认弹窗 → 取消 → 读档进入地图的只读路径。
+  实机发现并修复 3 个测试工具问题：弹窗未枚举导致底层目标泄漏、打开弹窗
+  被停滞探针误报、场景 key 未区分弹窗状态。现在弹窗打开时 `targets()` 只
+  返回 `modal` 按钮，停滞签名包含 modal kind/focus/labels/actions；默认只能
+  取消弹窗，标题读档安全，地图内自动点击仍被安全门拒绝。实机验证中
+  `save_writes` 未触发，加载存档后 `map_event/control` 目标正常枚举，
+  `plan_next()` 在地图返回 `unsafe_or_guarded`，viewport 截图与 JSON 报告
+  均成功。
+
+* **2026-11-19 MCP/Godot 运行时审计探针 v2**：
   在 v1 上新增 `MapRuntime::action_key_targets` /
   `WolfGame.debug_action_targets()`，只读枚举当前条件下选中的 ActionKey
   事件矩形、事件名、页码、`running/starts`，并接入 `targets().map_event`。
