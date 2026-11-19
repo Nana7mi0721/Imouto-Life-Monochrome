@@ -2180,3 +2180,42 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **验证**：`tools/audit-godot.sh`、`tools/audit-explore.sh` 通过；GDScript
     `--check-only` 通过；完整 `tools/smoke-godot.sh` 13 组全过。
   * **状态**：随本轮提交推送。
+
+* 2026-11-19（0.1.0 Windows/Android 发布、存档清理与工作区整理）：
+  * **发布路径**：Windows NSIS 安装版、便携 ZIP 与 Android arm64 release APK
+    统一交付到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`。Setup 147,841,600 B
+    / `d3998c4a87858736f140f0ddec576d77221dbded2d59cbca42513a72119cd1a7`；
+    ZIP 159,435,986 B /
+    `d5cd573d3965e0a1a663ecb1d8b903913fca39b16454f15194da0fe51bc924a2`；
+    APK 144,902,270 B /
+    `2c3157ebae1c7f97ef7cb907e1f650bcf50b6a947f091069c825cffd951baf7f`。
+    Windows `SHA256SUMS.txt`、Android `checksums.txt` 与 APK release 签名
+    校验均通过。
+  * **Android 签名**：证书 DN
+    `CN=Imouto Life, OU=Release, O=Inusuku, L=Shanghai, ST=Shanghai, C=CN`，
+    证书 SHA-256
+    `ea94042afd8ced39ddbd03137bfaeee4fdb74ae31220a1698fb368544a4dd653`。
+    keystore 与本地口令说明保留在 gitignore 的
+    `work/out/android/private/`，不得提交、上传或打进发行包。
+  * **存档清理**：删除 `work/Data/Save/SaveData*.sav` 共 10 个，并删除
+    `player_saves_2026-11-10/15`、`retail_saves/SaveData01..05`、
+    `review/save_backup`、`save_analysis/synth`、根级 roundtrip/current 存档与
+    evidence 中的旧坏档快照。`work/Data/Save/System.sav` 用干净零售模板重置，
+    与 `work/out/retail_saves/System.sav` 同为 155,615 B、SHA-256
+    `aaf62fc54c1df1ee63f3e5338b05ec349476346ec1a42b532c8cba0e3b3d888d`。
+    仓库内现在只允许这两个 `System.sav`。
+  * **工作区清理**：删除 `target/`（约 11.7 GB）与重复的 `work/work/`；
+    `work/out` 删除 680 个顶层一次性文件及 `event_reach/godot_api/icon_work/
+    m14_ab/m14_visual/m3_*_backup/media-pack-tests/nsis/player_saves_*/
+    portable/re_all/re_anchor/re_dump_gdi/review/save_analysis/shot_metrics/
+    text_calib/wolfmanual` 等目录；删除旧 `ImoutoLife_fix_bundle_*.zip`、
+    已解压的 `dist/godot/0.1.0`、Android 重复 `media.pak` 与 debug keystore。
+    仅保留最终 Setup/ZIP/APK、`work/out/tools/nsis-3.11`、干净
+    `System.sav`、release 签名材料与 `_archive/` 历史证据/报告。
+    清理后工作区 **0.66 GB / 2,794 个文件**，其中 `work` 619.43 MB
+    （`work/Data` 175.47 MB、`work/out` 443.91 MB），`target/` 已不存在。
+  * **文档**：更新 `docs/PACKAGING.md` §8.6、本文件、`docs/HANDOFF_M0.md`
+    §11.1、`README.md`、`docs/GODOT_DEBUGGING.md` §5 与
+    `docs/PROJECT_ASSETS.md` 的清理补记。依赖旧玩家编号存档的视觉/夜间测试
+    今后需重新生成夹具，不得再引用已删除的快照目录。
+  * **状态**：待随本轮文档提交推送。

@@ -378,3 +378,73 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
   `GameView.gd` 再按实际 DPI 选择标题栏尺寸，避免把 256×256 图交给
   Windows 标题栏现场缩小。
 
+### 8.6 0.1.0 最终发布与清理记录（2026-11-19）
+
+本轮 Windows / Android 发布包已统一放到普通用户目录，避免从 `work/out`
+继承 Low Mandatory Level / 受限 ACL：
+
+```text
+D:\REISEN\Downloads\Imouto Life 0.1.0\
+  README.txt
+  Windows\
+    Imouto Life setup.exe
+    Imouto Life setup.exe.sha256
+    Imouto Life setup.zip
+    Imouto Life setup.zip.sha256
+    README.txt
+    按键功能指引.txt
+    SHA256SUMS.txt
+  Android\
+    ImoutoLife-0.1.0-arm64.apk
+    ImoutoLife-0.1.0-arm64.apk.idsig
+    ImoutoLife-0.1.0-arm64.apk.sha256
+    README_ANDROID.txt
+    checksums.txt
+```
+
+实际交付物与校验值：
+
+| 产物 | 字节数 | SHA-256 |
+|---|---:|---|
+| `Imouto Life setup.exe` | 147,841,600 | `d3998c4a87858736f140f0ddec576d77221dbded2d59cbca42513a72119cd1a7` |
+| `Imouto Life setup.zip` | 159,435,986 | `d5cd573d3965e0a1a663ecb1d8b903913fca39b16454f15194da0fe51bc924a2` |
+| `ImoutoLife-0.1.0-arm64.apk` | 144,902,270 | `2c3157ebae1c7f97ef7cb907e1f650bcf50b6a947f091069c825cffd951baf7f` |
+
+Windows 便携 ZIP 顶层固定为 `妹！生活 ～单色～ Godot/`，`Data/Save/` 只含
+干净 `System.sav`。Windows `SHA256SUMS.txt`、Android `checksums.txt` 与 APK
+签名校验均已通过。
+
+Android 0.1.0 使用 release 签名，证书 DN 为
+`CN=Imouto Life, OU=Release, O=Inusuku, L=Shanghai, ST=Shanghai, C=CN`，
+证书 SHA-256 为
+`ea94042afd8ced39ddbd03137bfaeee4fdb74ae31220a1698fb368544a4dd653`。
+签名材料保存在：
+
+```text
+work/out/android/private/imouto-life-release.keystore
+work/out/android/private/release-keystore.txt
+```
+
+这两个文件被 git 忽略，**不得上传、打进 APK/ZIP/安装器或公开文档**；必须离线备份，
+后续覆盖升级必须继续使用同一 keystore 和 alias。口令只保存在同目录的本地说明文件
+中，不写入仓库。
+
+发布后清理了 `target/`、`work/out` 顶层一次性截图/日志/提交说明、旧
+`ImoutoLife_fix_bundle_*.zip`、重复的 Android `media.pak`、`portable/`、
+`re_all/`、`wolfmanual/` 等临时或可重建产物。`work/out` 现在只保留：
+
+- `dist/godot/` 与 `dist/android/0.1.0/` 最终发布包；
+- `android/private/` release 签名材料；
+- `retail_saves/System.sav` 干净存档模板；
+- `tools/nsis-3.11/` 安装器构建工具；
+- `_archive/` 历史证据/报告（保留最终截图、审计报告与小型复现脚本；
+  已删除其中所有旧 `.sav`）。
+
+项目内所有 `SaveData*.sav` 已删除；`work/Data/Save/System.sav` 已用干净零售模板
+重置，当前两者 SHA-256 均为
+`aaf62fc54c1df1ee63f3e5338b05ec349476346ec1a42b532c8cba0e3b3d888d`。
+因此依赖旧玩家编号存档的视觉/夜间夹具测试不会再用损坏或漂移的本地存档；
+需要这些夹具时应从干净模板新建，而不是恢复已删除的旧快照。
+清理后工作区为 **0.66 GB / 2,794 个文件**（`work` 619.43 MB，
+`work/out` 443.91 MB），`target/` 已不存在。
+

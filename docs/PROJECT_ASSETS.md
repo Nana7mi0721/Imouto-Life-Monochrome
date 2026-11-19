@@ -4,6 +4,14 @@
 > 背景：用户决定停止继续重构《妹！生活 ～単色～》，清理发布包与无用产物；本文件用于盘点**仍可复用的资产**，供后续判断用途。
 > 结论先说：**已放弃的是“完整可玩替代品”目标，不是代码与逆向资料。** 当前最有价值的是 WOLF RPG Editor 数据/存档/字节码工具链，而不是这套不完整的游戏前端。
 
+> **2026-11-19 最新清理补记**：本文 §1、§3.4、§3.5 的体积与目录清单是历史快照，
+> 已被本轮发布清理取代。当前 `target/` 已删除，`work/out` 只保留最终
+> Setup/ZIP/APK、NSIS 工具、干净 `System.sav`、Android release 签名材料与
+> `_archive/` 历史证据/报告；`re_all/`、`re_anchor/`、`wolfmanual/`、
+> `event_reach/`、`shot_metrics/`、`m14_visual/` 等可重建材料已删除。
+> 项目内 `SaveData*.sav` 也已经删除，`work/Data/Save/System.sav` 已重置为
+> 干净零售模板。发布细节见 `docs/PACKAGING.md` §8.6。
+
 ---
 
 ## 1. 本次已清理的内容

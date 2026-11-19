@@ -15,7 +15,7 @@
 - M7 三项增强：完成（完整英语语言包 `docs/translations/en.full.tsv`、mod 记录级二进制补丁、模拟器热键重绑定 `--hotkeys`；本地提交）
 - **Godot 迁移：P0/P1/P2 完成**（GDExtension 混合前端；标题菜单与 Rust capture 基线 **99.779% 像素完全一致**；输入/读档/文字校准/600-1800 帧长程 parity 已通）。见 **[docs/GODOT_MIGRATION.md](docs/GODOT_MIGRATION.md)**
 - **深度审查 BUG-25..48：修复完成**（构建/默认测试全绿，真实数据仅 2 项既有姊妹作 `db` 差异；verify 64/1 SKIP、precompile 19/0、m14 5/5、Godot smoke/parity PASS）。见 **[docs/HANDOFF_DEEP_REVIEW_FIX.md](docs/HANDOFF_DEEP_REVIEW_FIX.md)**
-- **0.1.0 正式发包（2026-11-18）**：NSIS 3.11 安装器 + 便携 ZIP 已产出（`work/out/dist/godot/`），实机 UX 收口（live RNG / 光标 / 睡姿热区 / 存读档）与开场取消穿透已修，`wolf-cli verify` 64/1 SKIP、Godot smoke 全绿。打包流程见 **[docs/PACKAGING.md](docs/PACKAGING.md)**
+- **0.1.0 正式发包（2026-11-19）**：Windows NSIS 安装器 + 便携 ZIP、Android arm64 release APK 已交付到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`；Windows/Android 校验和与 Android release 签名均通过。项目内旧编号存档已清理，`work/Data/Save/System.sav` 已重置为干净模板。打包与发布细节见 **[docs/PACKAGING.md](docs/PACKAGING.md)**。
 
 当前状态摘要与遗留事项见 **[docs/HANDOFF_M0.md](docs/HANDOFF_M0.md) §11**；完整历史进度见 **[docs/HANDOFF_PROGRESS.md](docs/HANDOFF_PROGRESS.md)**。
 开工前必读协作约定见 **[AGENTS.md](AGENTS.md)**。

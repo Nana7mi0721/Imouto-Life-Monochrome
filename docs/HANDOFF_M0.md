@@ -263,7 +263,26 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
-* **2026-11-19 MCP/Godot 运行时审计探针 v3（实机验证，当前工作区最新）**：
+* **2026-11-19 0.1.0 Windows/Android 发布、存档清理与工作区整理（当前最新）**：
+  Windows NSIS 安装版、便携 ZIP 与 Android arm64 release APK 已交付到
+  `D:\REISEN\Downloads\Imouto Life 0.1.0\`；Windows `SHA256SUMS.txt`、
+  Android `checksums.txt` 与 APK release 签名均已校验。Android 证书 DN
+  `CN=Imouto Life, OU=Release, O=Inusuku, L=Shanghai, ST=Shanghai, C=CN`，
+  证书 SHA-256
+  `ea94042afd8ced39ddbd03137bfaeee4fdb74ae31220a1698fb368544a4dd653`。
+  keystore 留在 gitignore 的 `work/out/android/private/`，不得上传或打包。
+  发布后删除 `target/`（约 11.7 GB）与 `work/out` 中 680 个一次性文件及
+  re_all/wolfmanual/portable/旧 fix bundle/重复媒体包等临时产物；
+  `work/out` 仅保留最终 Setup/ZIP/APK、NSIS、干净 `System.sav`、签名材料和
+  历史证据/报告；清理后工作区 0.66 GB，`target/` 已不存在。
+  项目内全部 `SaveData*.sav` 已删除，
+  `work/Data/Save/System.sav` 重置为干净零售模板
+  `aaf62fc54c1df1ee63f3e5338b05ec349476346ec1a42b532c8cba0e3b3d888d`。
+  依赖旧玩家编号存档的视觉/夜间夹具测试需重新生成存档，不能再引用已删除的
+  `player_saves_*`、`save_analysis` 或 `review/save_backup`。
+  详见 `docs/PACKAGING.md` §8.6 与 `docs/HANDOFF_PROGRESS.md` 末条。
+
+* **2026-11-19 MCP/Godot 运行时审计探针 v3（实机验证）**：
   通过 Godot MCP 实际启动游戏并挂载探针/驱动，走通
   标题 → 读取存档页 → 槽位确认弹窗 → 取消 → 读档进入地图的只读路径。
   实机发现并修复 3 个测试工具问题：弹窗未枚举导致底层目标泄漏、打开弹窗

@@ -128,21 +128,22 @@ GDExtension 额外 API（GDScript/测试可用）：
 
 ## 5. 存档 fixture 的坑
 
-`work/Data/Save/SaveData01.sav` / `SaveData02.sav` 是**可被玩家覆盖**的实机存档。
+`work/Data/Save/SaveData01.sav` / `SaveData02.sav` 原本是**可被玩家覆盖**的实机存档
+（现已按 2026-11-19 清理删除）。
 视觉回归基线（`m14_visual_regression`）原本按“50 picture 的出货存档”录制；
 玩家在游戏里保存后会变成当前画面（例如带存档界面的 64 picture），整帧基线
 自然对不上。本轮已：
 
-- 把玩家当前存档备份到 `work/out/player_saves_2026-11-10/`；
-- 用 `work/out/save_analysis/synth/SaveData01/02.sav`（50-picture 出货状态）
-  恢复 `work/Data/Save/`，让全套 `m3_*` / `m14` 视觉基线重新可跑；
 - `m14_visual_regression` 增加 `depends_on_save` 守卫：以后玩家再覆盖
   SaveData01 时，依赖该存档的三个场景会打印 skip，而不是误报渲染回归；
 - 存档格式/读写回归由 `m3_save_load` / `m3_save_byte_fidelity` /
   `m3_save_newgame_part1` / `m3_save_ui_roundtrip` 负责，不依赖视觉基线。
 
-要恢复玩家存档：把 `work/out/player_saves_2026-11-10/SaveData01.sav` /
-`SaveData02.sav` 复制回 `work/Data/Save/`（测试会按上面的守卫跳过视觉场景）。
+> **2026-11-19 清理**：项目内旧的 `SaveData*.sav`、`player_saves_*`、
+> `save_analysis` 与 `review/save_backup` 已全部删除（部分本地存档已损坏）。
+> `work/Data/Save/` 目前只保留干净 `System.sav`；需要视觉/夜间夹具时，请从
+> 干净 System 模板新建存档，或使用测试自己生成的临时夹具，不要再引用上述
+> 已删除目录。
 
 ## 6. 测试入口
 
