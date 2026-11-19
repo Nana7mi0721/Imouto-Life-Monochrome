@@ -48,7 +48,7 @@ cd '/e/Study/github program/Imouto Life' && source tools/env.sh >/dev/null 2>&1
 
 - 仓库是 Cargo workspace，9 个 crate：wolf-format / wolf-save / wolf-vm / wolf-render / wolf-audio / wolf-game / wolf-cli / wolf-launcher / wolf-gdext。Godot 前端代码在 `godot/`（GDScript + 工程文件），不是 Cargo crate。
 - 不新增外部依赖，除非有充分理由并先问 lead。`wolf-gdext` 的 `godot`（gdext）依赖是 Godot 迁移的既定选择，版本锁定 0.5.5 + `api-4-7`。
-- 提交身份：`git -c user.name='imoto lead' -c user.email='lead@imoto.local' commit -F <msgfile>`。
+- 提交身份：仓库拥有者 `Nana7mi0721 <linxin070410@gmail.com>`；建议在仓库内固定 `git config user.name 'Nana7mi0721'` 与 `git config user.email 'linxin070410@gmail.com'`，或按命令传入 `git -c user.name='Nana7mi0721' -c user.email='linxin070410@gmail.com' commit -F <msgfile>`。不要使用 `imoto lead <lead@imoto.local>`。
 - push：全局 http.proxy 是死代理，必须 `git -c http.proxy= -c https.proxy= push origin master`。
 - 不要提交 work/、tools/bin|cmake|ffmpeg、*.exe、prt sc/、docs/相关链接.txt。
 - 不要提交 Godot 生成物：`godot/.godot/`、`godot/bin/*.dll`、`godot/bin/*.pdb`；`godot/bin/wolf_gdext.gdextension` 与 `godot/` 下的脚本/场景要提交。

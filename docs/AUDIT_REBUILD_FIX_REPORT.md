@@ -196,6 +196,6 @@ Godot_v4.7.2-stable_win64.exe --headless --path godot --script res://tests/<each
 
 - 已删除临时草稿 `work/out/audit_round_notes.md`、跑分脚本 `work/out/bar_measure.py` 与 `target/debug/incremental`；`work/out/m14_visual/`、`work/out/m14_ab/` 保留作证据。
 - 清理后仓库合计 **7.99 GiB**（work 1.07 GiB / target 6.64 GiB / work/out 0.90 GiB，其中 `work/Data` 0.17 GiB）。
-- 已 commit `b2b6998` 并 push 到 `origin/master`（2026-11-13）；提交身份 `imoto lead <lead@imoto.local>`。
+- 已 commit `b2b6998` 并 push 到 `origin/master`（2026-11-13）；提交身份 `Nana7mi0721 <linxin070410@gmail.com>`。
 - 交付包：`work/out/dist/ImoutoLife_fix_bundle_b2b6998_2026-11-13.zip`（22 个改动文件 + `FIX_MANIFEST.md`）。
 - 证据目录：`work/out/m14_visual/`（五个场景 PNG+LOG）、`work/out/m14_ab/`（A/B 对比与左缘放大图）。

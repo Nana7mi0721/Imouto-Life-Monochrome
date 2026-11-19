@@ -8,7 +8,7 @@
 > 日期：2026-11-14  
 > 仓库：`E:\Study\github program\Imouto Life`  
 > 本轮基线：`47dd4e0`（上一轮 T12 产物）  
-> 身份：`imoto lead <lead@imoto.local>`  
+> 身份：`Nana7mi0721 <linxin070410@gmail.com>`  
 > 范围：T12 性能补丁/审计收口（第一轮）+ `docs/imouto_life_rebuild_fixes_and_full_audit.md` 与 `重构游戏问题截图/` 实机复核（第二轮）  
 > 约束：不改 `work/Data`，不改零售参考图；所有结论以当前源码、真实数据反汇编、Rust 截图和用户实机截图互证。
 

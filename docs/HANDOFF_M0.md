@@ -223,7 +223,7 @@ Sys 变量（type 6，135 行）中 row 104 = `Ｘスクロール値`、row 105 
 7. **临时输出放 `work/out/`**：`/tmp` 在 Windows 上映射到系统临时目录，bash 派生的子进程写它会 `PermissionDenied (os error 5)`；测试临时目录用 `target/test-scratch` + `env!(CARGO_MANIFEST_DIR)`。
 8. 交互式截图/报告都落到 `work/out/`；`work/` 与 `/tools/{bin,cmake,ffmpeg}/` 已 gitignore。
 9. 团队规模上限 8 人（lead + 7）；共享任务板用 `team_task_*`；写作用域按文件/目录切分。
-10. 提交身份按命令传入：`git -c user.name='imoto lead' -c user.email='lead@imoto.local' commit ...`；`git add` 的 CRLF 警告无害。
+10. 提交身份固定为仓库拥有者：`git -c user.name='Nana7mi0721' -c user.email='linxin070410@gmail.com' commit ...`（或先 `git config user.name/user.email`）；不要再使用 `imoto lead <lead@imoto.local>`；`git add` 的 CRLF 警告无害。
 
 ---
 
