@@ -2020,7 +2020,15 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **产物**：Android APK
     `work/out/dist/android/0.1.0/ImoutoLife-0.1.0-arm64.apk`
     **152,234,688 B**，SHA-256
-    `3fe5cefbb613555af2345282c194f78112d6822807ebecfd512114a2b448e5fb`；
+    `244b492382632ea4e2db8d5466f7092a31c47895c58c5df8c0e574e58f0e17f9`；
     debug 签名（沿用上一版流程），`verify-apk` 通过：132 zip entries /
     33 assets / arm64 `libwolf_gdext.so` present / 17 manifest files。
-  * **状态**：已提交并推送 `3c7115e`；Android 包已重打。
+  * **Android 覆盖安装修复**：旧 APK 的 `android_data_manifest.json` 版本
+    只有 `0.1.0`，与设备 `user://data/.staged_version` 相同就会跳过释放，
+    覆盖安装后仍沿用旧 `media.pak`，这是格子条再次消失的根因。
+    `tools/package/android_data.py` 现对全部明文 payload、`media.pak` 和
+    干净 `System.sav` 计算 SHA-256，取前 16 位作为释放版本
+    （本包为 `0.1.0+cb30c85f48cb4630`）；旧设备首次启动会重新释放资源，
+    已有 `Save/` 不会被覆盖。`media.pak` 仍为 733 文件 / 113,002,637 B，
+    容器 113,039,230 B。
+  * **状态**：已提交并推送 `3c7115e`；Android 包已按内容哈希版本重打。

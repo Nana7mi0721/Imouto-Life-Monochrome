@@ -8,6 +8,7 @@ prefix filtering so Android and Windows ship the exact same game-data contract.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -29,6 +30,36 @@ MANIFEST_FILENAME = "android_data_manifest.json"
 BLOB_SUFFIX = ".blob"
 MEDIA_PAK_REL = "media.pak"
 SYSTEM_SAVE_REL = release_data.SYSTEM_SAVE_REL
+
+
+def payload_digest(
+    root: Path,
+    entries: list[str],
+    media_pak: Path,
+    system_save: Path,
+) -> str:
+    """Hash the logical payload so same-version rebuilds still restage.
+
+    The app version stays 0.1.0 across rebuilds, but media.pak and the
+    plaintext data can change without it. Android's ``.staged_version`` gate
+    only compares the manifest string, so using the app version alone kept an
+    old media.pak on devices after an update.
+    """
+    digest = hashlib.sha256()
+
+    def add(label: str, path: Path) -> None:
+        digest.update(label.encode("utf-8"))
+        digest.update(b"\0")
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
+
+    for rel in sorted(entries):
+        add(rel, release_data.resolve_source(root, rel))
+    add(MEDIA_PAK_REL, media_pak)
+    add(SYSTEM_SAVE_REL, system_save)
+    return digest.hexdigest()
 
 REQUIRED_APK_ASSETS = (
     f"android_data/{MANIFEST_FILENAME}",
@@ -139,6 +170,10 @@ def stage_android_data(
     release_data.manifest_files(resolved_root, entries)
     resolved_media_pak = validate_media_pak(media_pak)
     resolved_system_save = release_data.validate_system_save(system_save)
+    staging_version = (
+        f"{version}+"
+        f"{payload_digest(resolved_root, entries, resolved_media_pak, resolved_system_save)[:16]}"
+    )
 
     if safe_dest.exists():
         if safe_dest.is_dir():
@@ -191,7 +226,7 @@ def stage_android_data(
     )
 
     manifest_payload = {
-        "version": version,
+        "version": staging_version,
         "blob_suffix": BLOB_SUFFIX,
         "file_count": len(sorted_files),
         "total_bytes": total_bytes,
@@ -213,7 +248,7 @@ def stage_android_data(
 
     written_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if (
-        written_manifest.get("version") != version
+        written_manifest.get("version") != staging_version
         or written_manifest.get("blob_suffix") != BLOB_SUFFIX
         or written_manifest.get("file_count") != len(sorted_files)
         or written_manifest.get("total_bytes") != total_bytes
@@ -223,7 +258,7 @@ def stage_android_data(
 
     print(
         f"staged Android data: {len(sorted_files)} payload files + {MANIFEST_FILENAME} "
-        f"/ {total_bytes} bytes -> {safe_dest}"
+        f"/ {total_bytes} bytes (staging {staging_version}) -> {safe_dest}"
     )
 
 

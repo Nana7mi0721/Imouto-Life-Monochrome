@@ -275,8 +275,10 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   玩家存档内容漂移）、`cargo check -p wolf-game` 与
   `tools/smoke-godot.sh` 全过。已提交并推送 `3c7115e`；Android APK 已重打为
   **152,234,688 B** / SHA-256
-  `3fe5cefbb613555af2345282c194f78112d6822807ebecfd512114a2b448e5fb`
-  （debug 签名，`verify-apk` 通过）。
+  `244b492382632ea4e2db8d5466f7092a31c47895c58c5df8c0e574e58f0e17f9`
+  （debug 签名，`verify-apk` 通过）。Android 释放版本改为 payload
+  SHA-256 前 16 位（本包 `0.1.0+cb30c85f48cb4630`），修复同版本号覆盖
+  安装时旧 `media.pak` 不更新的问题。
 
 * **2026-11-19 Android 交互优化（OPT-01..05 + BUG-06，当前工作区）**：
   存档网格支持点空白退出（右侧说明框除外）、打开定位最新存档页、点击左右
