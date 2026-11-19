@@ -1,8 +1,13 @@
 
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $ScriptDir -or -not (Test-Path $ScriptDir)) {
+  $ScriptDir = 'E:\Study\github program\Imouto Life Monochrome\tools'
+}
+
 $dirs = @(
-  'E:\Study\github program\Imouto Life\tools\bin',
-  'E:\Study\github program\Imouto Life\tools\cmake\bin',
-  'E:\Study\github program\Imouto Life\tools\ffmpeg\bin',
+  (Join-Path $ScriptDir 'bin'),
+  (Join-Path $ScriptDir 'cmake\bin'),
+  (Join-Path $ScriptDir 'ffmpeg\bin'),
   "$env:USERPROFILE\.cargo\bin"
 )
 $cur = [Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $cur) { $cur='' }

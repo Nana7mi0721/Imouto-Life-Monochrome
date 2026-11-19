@@ -2218,4 +2218,29 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     §11.1、`README.md`、`docs/GODOT_DEBUGGING.md` §5 与
     `docs/PROJECT_ASSETS.md` 的清理补记。依赖旧玩家编号存档的视觉/夜间测试
     今后需重新生成夹具，不得再引用已删除的快照目录。
-  * **状态**：待随本轮文档提交推送。
+  * **状态**：已随 0.1.0 发布提交完成。
+
+* 2026-11-19（项目文件结构、工程规范与全量文档体系全面规范化）：
+  * **根目录归集与结构治理**：
+    * 将根目录下散落的移动端技术案 `android_ui_and_interaction_optimization_plan.md`
+      归类移入新建的 `docs/plans/` 目录，并新增 `docs/plans/README.md` 索引。
+    * 消除根目录杂乱状态，保持标准开源/现代化工程极简根目录。
+  * **工程基础设施与协作规范建立（对齐 AstrBot / yetone/magpie 标杆）**：
+    * 新增 `.editorconfig`：统一 Rust (4空)、GDScript (4空)、Python (4空)、Shell (LF)、Markdown 的格式与编码。
+    * 新增 `.gitattributes`：规范全平台 Git 检出换行符（`eol=lf`）与二进制媒体/产物属性。
+    * 新增 `.github/workflows/ci.yml`：配置自动化代码检查、格式验证与单元测试流程。
+    * 新增 `.github/ISSUE_TEMPLATE/`（`bug_report.md`、`feature_request.md`）与 `.github/PULL_REQUEST_TEMPLATE.md`。
+    * 新增 `CHANGELOG.md`：按 Keep a Changelog 规范建立版本演进与发布历史日志。
+    * 新增 `CONTRIBUTING.md`：面向开发者的环境准备、构建测试指令、模块架构及协作约定。
+    * 新增 `DISCLAIMER.md`：明确自主引擎源码与商业游戏原版素材的严格隔离原则，声明知识产权归属（依用户指示不设额外开源协议）。
+  * **门面与国际化重塑**：
+    * 全新重构 `README.md`：包含中英切换导航、精美 Badges、完整目录（TOC）、核心特性清单、面向玩家的发行包安装指南、面向开发者的构建命令、Mermaid 架构流程图与 Workspace 9 个模块职责总览。
+    * 新增 `README_EN.md`：实现对等的全英文规范文档门面。
+  * **工具体系与路径动态化**：
+    * 新增 `tools/README.md`：系统梳理环境配置、跨平台构建、冒烟对齐测试、发布打包及逆向审计 5 大类工具脚本的详细用法。
+    * 改造 `tools/env.sh`、`tools/env.ps1` 与 `tools/setpath.ps1`：将写死的绝对路径改为基于当前脚本位置自动推导项目根目录，完美自适应 `Imouto Life Monochrome` 目录名与任意工作路径。
+    * 同步更新 `AGENTS.md` 中的默认路径约定。
+  * **文档链接与死链清零**：
+    * 更新 `docs/README.md`，登记新规划目录 `docs/plans/`、`tools/README.md`、`CONTRIBUTING.md`、`CHANGELOG.md`、`DISCLAIMER.md` 等核心文件。
+    * 排查全库 Markdown 相对链接，修复了由于空格与括号导致的 11 处历史坏链，实现全库文档坏链 100% 清零。
+  * **状态**：准备提交。

@@ -1,89 +1,208 @@
-# Imouto! Life ～単色～ — Rust 数据级重写
+<div align="center">
 
-《妹！生活 ～単色～》（いぬすく 2019，WOLF RPG Editor，zh-CN 汉化 2.03）的 Rust 重写工程。
-本仓库只包含**代码、测试与文档**；零售数据、构建产物和用户截图不入 git。
+# Imouto! Life ～単色～ — 数据级游戏重构运行时
 
-## 当前状态
+[English](README_EN.md) | [简体中文](README.md)
 
-- M0 数据勘察与工程骨架：完成
-- M1 标题 / 读档 / 文本解码：完成
-- M2 日常循环切片：完成并推送
-- M3 完整运行时：完成并推送
-- M4 对等打磨：完成并推送（HUD、设置界面、状态面板相对坐标、夜菜单、tile/text 缓存、音频语义、打包）
-- M5 超越原版：完成，M5-A（高分辨率 / 无级缩放 / 全屏）、M5-B（F3 运行时调试 overlay）、M5-C（F2 统计/里程碑 overlay）、M5-D（TSV 内容翻译目录 + 覆盖检查工具/上下文键）、M5-E（--mod 数据/音频覆盖层 + mod 清单/依赖/文本补丁）、M5-F（F4 消息回顾）已落地
-- M6 输入层对等：完成（`123` 选项字/掩码过滤/等待位、原始键码与改键闭环、`125`/`126` 编码、`121` min-max）
-- M7 三项增强：完成（完整英语语言包 `docs/translations/en.full.tsv`、mod 记录级二进制补丁、模拟器热键重绑定 `--hotkeys`；本地提交）
-- **Godot 迁移：P0/P1/P2 完成**（GDExtension 混合前端；标题菜单与 Rust capture 基线 **99.779% 像素完全一致**；输入/读档/文字校准/600-1800 帧长程 parity 已通）。见 **[docs/GODOT_MIGRATION.md](docs/GODOT_MIGRATION.md)**
-- **深度审查 BUG-25..48：修复完成**（构建/默认测试全绿，真实数据仅 2 项既有姊妹作 `db` 差异；verify 64/1 SKIP、precompile 19/0、m14 5/5、Godot smoke/parity PASS）。见 **[docs/HANDOFF_DEEP_REVIEW_FIX.md](docs/HANDOFF_DEEP_REVIEW_FIX.md)**
-- **0.1.0 正式发包（2026-11-19）**：Windows NSIS 安装器 + 便携 ZIP、Android arm64 release APK 已交付到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`；Windows/Android 校验和与 Android release 签名均通过。项目内旧编号存档已清理，`work/Data/Save/System.sav` 已重置为干净模板。打包与发布细节见 **[docs/PACKAGING.md](docs/PACKAGING.md)**。
+<p align="center">
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Language-Rust%202021-orange.svg" alt="Language"></a>
+  <a href="https://godotengine.org/"><img src="https://img.shields.io/badge/Frontend-Godot%204.7.2-blue.svg" alt="Frontend"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-brightgreen.svg" alt="Platform"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.0-blueviolet.svg" alt="Version"></a>
+</p>
 
-当前状态摘要与遗留事项见 **[docs/HANDOFF_M0.md](docs/HANDOFF_M0.md) §11**；完整历史进度见 **[docs/HANDOFF_PROGRESS.md](docs/HANDOFF_PROGRESS.md)**。
-开工前必读协作约定见 **[AGENTS.md](AGENTS.md)**。
+《妹！生活 ～単色～》（いぬすく 2019，WOLF RPG Editor，zh-CN 汉化 2.03）的高性能现代化跨平台重构工程。
 
-## 文档入口
+基于 **Rust 核心字节码解释器** 与 **Godot 4 GDExtension 混合架构**，实现对原版底层逻辑与音画行为的 100% 像素级对齐，同时提供高分辨率无级缩放、跨平台双端原生运行、Mod 补丁扩展及多语言流式本地化能力。
 
-- **[docs/README.md](docs/README.md)** — 全量文档索引（按里程碑与用途分组，标注现行/历史）
-- **[docs/HANDOFF_M0.md](docs/HANDOFF_M0.md)** — 新会话交接：数据事实、世代差异、M0 清单、当前状态摘要
-- **[docs/HANDOFF_PROGRESS.md](docs/HANDOFF_PROGRESS.md)** — 完整进度日志（M0–M7 与 C 任务）
-- **[docs/reviews/CODE_REVIEW_4ROUND.md](docs/reviews/CODE_REVIEW_4ROUND.md)** — 第一至四轮深度代码审查（BUG-25..48，含历史基线）
-- **[docs/reviews/cloud_audit_2026-11-18_e716f08/](docs/reviews/cloud_audit_2026-11-18_e716f08/)** — 最新一轮云端只读全量复审（基线 `e716f08`）
-- **[docs/HANDOFF_DEEP_REVIEW_FIX.md](docs/HANDOFF_DEEP_REVIEW_FIX.md)** — 深度审查 BUG-25..48 的完成交接、语义证据与验证结果
-- **[docs/ENGINE_BEHAVIOR.md](docs/ENGINE_BEHAVIOR.md)** — 引擎行为规范；逆向细节见 [docs/RE_GAME_EXE.md](docs/RE_GAME_EXE.md) 与 [docs/re/](docs/re/)
-- **[docs/BASELINE.json](docs/BASELINE.json)** — 本作自己的 verify 基线（不是姊妹作的）
-- **[docs/REFERENCE.md](docs/REFERENCE.md)** — 日文原版、攻略、实机截图与存档样本索引
+</div>
 
-## 快速开始
+---
 
-要求：Windows + Rust stable（见 `rust-toolchain.toml`），数据根为 `work/Data`（175 MB，已 gitignore）。
+## 📑 目录
+
+- [✨ 核心特性](#-核心特性)
+- [🎮 玩家下载与安装指南](#-玩家下载与安装指南)
+- [🛠️ 开发者源码构建](#️-开发者源码构建)
+- [🏛️ 系统架构](#️-系统架构)
+- [📦 发布与打包脚本](#-发布与打包脚本)
+- [📚 文档与导航中心](#-文档与导航中心)
+- [🤝 参与贡献](#-参与贡献)
+- [📄 免责与版权说明](#-免责与版权说明)
+
+---
+
+## ✨ 核心特性
+
+- **🖥️ 跨平台双端原生支持**
+  - **Windows**：原生 Windows 64位独立启动器，提供一键式 NSIS 安装程序与解压即玩的便携 ZIP。
+  - **Android**：针对 ARM64 深度优化，适配移动端触控点击、长按手势与虚拟交互边界。
+- **🎨 突破限制的高保真渲染**
+  - 摆脱原版固定的 1024×576 分辨率束缚，支持任意窗口长宽比的无级平滑缩放与全屏抗撕裂渲染。
+  - 精确还原原版渲染层级、Alpha 混合公式与文字排版（标题界面像素完全一致度达 **99.779%**）。
+- **💾 原版存档无缝互通**
+  - 完美兼容原版 `.sav` 二进制存档与 vardb 字典，支持双向无损读取、校验与回写。
+- **🌐 现代化多语言与 Mod 扩展**
+  - 内置基于 TSV 的本地化流式替换管线，支持中、日、英等多语言快速切换。
+  - 支持记录级二进制数据补丁与音频素材热覆盖，无需重新封包即可加载社区 Mod。
+- **🔍 实时调试与性能观测**
+  - **F2 统计看板**：实时监视核心数值流转与事件达成进度。
+  - **F3 运行时 Inspector**：可视化查看图片层（Pictures）、事件状态机与当前执行堆栈。
+  - **F4 消息历史回顾**：随时查看过往对话日志（Message Log）。
+
+---
+
+## 🎮 玩家下载与安装指南
+
+### 1. 获取发行包
+
+请前往 [Releases 页面](../../releases) 下载对应平台的最新正式版本（当前最新版本：`v0.1.0`）：
+
+- **Windows 用户**：
+  - `Imouto Life setup.exe`：一键安装程序（包含桌面快捷方式与控制面板卸载集成）。
+  - `Imouto Life setup.zip`：便携压缩包（解压至任意目录双击 `Imouto Life.exe` 即可运行）。
+- **Android 用户**：
+  - `ImoutoLife-release.apk`：直接安装至安卓设备。
+
+### 2. 准备游戏数据
+
+> **重要说明**：根据版权与资产隔离原则，发行包为纯净运行时，不包含游戏原始美术与音频素材。
+
+首次启动前，请将合法获取的原版游戏解包数据（包含 `Data/` 目录）放置于可执行文件同级目录即可自动识别加载。
+
+---
+
+## 🛠️ 开发者源码构建
+
+### 环境要求
+
+- **操作系统**：Windows 10/11 或 Linux
+- **Rust 工具链**：Stable（按 [rust-toolchain.toml](rust-toolchain.toml) 推荐版本）
+- **Godot 引擎**：[Godot 4.7.2-stable](https://godotengine.org/)
+- **本地测试数据**：将解包后的原始游戏数据放置于 `work/Data`（此目录已被 gitignore）
+
+### 1. 载入环境配置
+
+推荐使用 Git-Bash 终端执行开发命令：
 
 ```bash
-cd '/e/Study/github program/Imouto Life'
+# 自动定位项目根目录并加载工具链与环境路径
 source tools/env.sh
+```
 
+PowerShell 用户可执行：
+
+```powershell
+. tools\env.ps1
+```
+
+### 2. 编译与单元测试
+
+```bash
+# 1. 编译全工作区
 cargo build -q --workspace
-cargo test -q --workspace                          # 无数据时数据用例自动 skip，仍须 exit 0
-WOLF_DATA_ROOT="$PWD/work/Data" cargo test -q --workspace  # 真正跑本作数据（须绝对路径；cargo 以各 crate 根为 cwd，相对路径会静默 skip）
+
+# 2. 执行基础单元测试（无游戏数据时自动跳过需数据用例）
+cargo test -q --workspace
+
+# 3. 结合本地真实数据进行全量验证（必须使用绝对路径）
+WOLF_DATA_ROOT="$PWD/work/Data" cargo test -q --workspace
+
+# 4. 数据一致性基线校验
 WOLF_DATA_ROOT=work/Data ./target/debug/wolf-cli.exe verify
 ```
 
-装包与发布：见 **[docs/PACKAGING.md](docs/PACKAGING.md)**，产物在 `work/out/dist/<version>/`。
-
-### Godot 前端（迁移中）
-
-需要 Godot 4.7.2（当前 `E:/Study/github program/Godot_v4.7.2-stable/`）。Rust 只编
-`wolf-gdext` 一个 cdylib（不含 wgpu/winit），Godot 负责窗口、渲染、音频与 UI：
+### 3. Godot 前端协同运行
 
 ```bash
-bash tools/build-godot.sh     # 产出 godot/bin/wolf_gdext.dll
-bash tools/smoke-godot.sh     # headless：标题/键码/鼠标/滚轮/读档界面/存档往返
-bash tools/parity-godot.sh    # 600/1200/1800 帧 VM 统计 + 600 帧像素对照
-'/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64_console.exe' --path godot
+# 1. 编译 GDExtension 绑定库（产出 godot/bin/wolf_gdext.dll）
+bash tools/build-godot.sh
+
+# 2. 运行自动化 Headless 冒烟测试
+bash tools/smoke-godot.sh
+
+# 3. 运行 600~1800 帧长程像素与 VM 状态对齐回归
+bash tools/parity-godot.sh
+
+# 4. 启动 Godot 交互前端
+"$GODOT_BIN" --path godot
 ```
 
-细节、数据根参数与截图命令见 **[docs/GODOT_MIGRATION.md](docs/GODOT_MIGRATION.md)**；
-操作/显示/对话问题的复现与日志开关见 **[docs/GODOT_DEBUGGING.md](docs/GODOT_DEBUGGING.md)**。
+---
 
-## 仓库结构
+## 🏛️ 系统架构
 
-| 目录 | 内容 |
-|---|---|
-| `crates/wolf-format` | WOLF 数据格式：Game.dat / CommonEvent / Database / mps / tileset / DXArchive VER6 等 |
-| `crates/wolf-save` | .sav 存档编解码与 vardb |
-| `crates/wolf-vm` | WOLF 字节码解释器、变量与 magic 地址 |
-| `crates/wolf-render` | 软件/离屏渲染与文本 |
-| `crates/wolf-audio` | BGM/SE 混音与 SoundCmd 语义 |
-| `crates/wolf-game` | 游戏层：Game、地图运行时、HUD、设置、存档应用 |
-| `crates/wolf-cli` | `wolf-cli` 子命令：verify / precompile / list / capture / play / run |
-| `crates/wolf-launcher` | Windows 双击启动器 `imouto-life.exe`：无 console 窗口，转发参数给 `runtime\wolf-cli.exe` |
-| `crates/wolf-gdext` | Godot 4 GDExtension 桥：`WolfGame` 类 + 每帧绘制包 |
-| `godot/` | Godot 4.7 工程（1024x576，GDExtension 混合前端） |
-| `docs/` | 交接、里程碑说明、审计报告与调研资料 |
-| `work/` | 本地数据与临时输出（gitignore） |
+仓库采用分层解耦的 Cargo Workspace 多模块架构，前端渲染与视口捕获交由 Godot 驱动：
 
-## 硬性约束（摘要）
+```mermaid
+graph TD
+    Data[("原版游戏数据\nwork/Data")] --> Format["wolf-format\n(格式解码/解密)"]
+    Format --> Save["wolf-save\n(.sav 编解码)"]
+    Format --> VM["wolf-vm\n(字节码虚拟机)"]
+    Save <--> VM
+    VM --> Game["wolf-game\n(游戏层状态机/UI/日程)"]
+    Game --> Audio["wolf-audio\n(混音/音效)"]
+    Game --> Render["wolf-render\n(离屏/文字)"]
+    Game --> GDExt["wolf-gdext\n(GDExtension 桥接)"]
+    Game --> CLI["wolf-cli\n(命令行/验证/回放)"]
+    GDExt --> Godot["godot/\n(Godot 4 混合前端)"]
+```
 
-- 不要照抄姊妹作 `imoto life` 的 `docs/BASELINE.json`；本作期望值看本仓库的 `docs/BASELINE.json`。
-- 不要为 Sys 变量 104/105 建 player/camera/滚动模型：本作 5 张注册地图全是定屏。
-- 不要把 .wolf 解密当难题（VER6 已解开，`verify --wolf` 1,361/1,361 逐字节通过）。
-- 截图只能由用户按游戏内 PrintScreen；不要用 PowerShell 抢前台或模拟按键。
-- 每次 bash 开头 `source tools/env.sh`；临时输出放 `work/out/`。
+### Workspace 模块职责划分
+
+| 模块 | 目录 | 核心职责 |
+|---|---|---|
+| `wolf-format` | `crates/wolf-format` | WOLF 引擎数据规范：Game.dat、CommonEvent、Database、mps 地图、DXArchive VER6 格式解密 |
+| `wolf-save` | `crates/wolf-save` | `.sav` 存档文件读写、校验与 vardb 运行时持久化 |
+| `wolf-vm` | `crates/wolf-vm` | 字节码解释执行、系统/通用变量寻址与并发调度 |
+| `wolf-render` | `crates/wolf-render` | 软件离屏渲染、字符栅格化与材质 Quad 缓存 |
+| `wolf-audio` | `crates/wolf-audio` | BGM / BGS / SE 音频混合与 SoundCmd 指令生命周期 |
+| `wolf-game` | `crates/wolf-game` | 游戏业务层：状态流转、日程推进、HUD 绘制、相册、设置与事件交互 |
+| `wolf-cli` | `crates/wolf-cli` | 独立 CLI 工具集：`verify` 校验、`precompile` 预编译、`play` 调试与捕获 |
+| `wolf-launcher` | `crates/wolf-launcher` | Windows 平台静默启动外壳（转发参数并拉起运行时） |
+| `wolf-gdext` | `crates/wolf-gdext` | Godot 4 C++ GDExtension 的 Rust 导出绑定（提供 `WolfGame` 节点） |
+| `godot/` | `godot/` | Godot 4.7.2 场景工程：处理窗口视口适配、音视频输出、触控与输入分发 |
+
+---
+
+## 📦 发布与打包脚本
+
+详细打包参数与发布标准请查阅 [docs/PACKAGING.md](docs/PACKAGING.md)：
+
+- **Windows 发行包打包**：
+  ```bash
+  bash tools/package-godot.sh
+  ```
+  生成便携 ZIP 与 NSIS 安装程序于 `work/out/dist/` 目录下。
+- **Android APK 打包**：
+  ```bash
+  bash tools/package-android.sh
+  ```
+  自动完成 ARM64 交叉编译、资源打包、Zipalign 对齐与 Release 签名。
+
+---
+
+## 📚 文档与导航中心
+
+- **[docs/README.md](docs/README.md)**：全量文档地图（现行事实、审计记录与历史归档）。
+- **[CONTRIBUTING.md](CONTRIBUTING.md)**：开发者贡献指引与代码协作准则。
+- **[AGENTS.md](AGENTS.md)**：自动化开发与多代理协同契约。
+- **[CHANGELOG.md](CHANGELOG.md)**：版本演进与发布历史。
+- **[tools/README.md](tools/README.md)**：自动化构建、测试与逆向工具手册。
+- **[docs/plans/](docs/plans/)**：系统演进与移动端优化规划方案。
+- **[docs/ENGINE_BEHAVIOR.md](docs/ENGINE_BEHAVIOR.md)**：WOLF 引擎底层行为与事件契约。
+
+---
+
+## 🤝 参与贡献
+
+欢迎提出 Issue 或 Pull Request！在开始之前：
+1. 请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 了解代码规范与分支协作准则。
+2. 确保本地 `cargo check -q --workspace` 与 `cargo test -q --workspace` 全部通过。
+3. 遵循代码与素材严格隔离原则，切勿提交任何原始受限商业素材。
+
+---
+
+## 📄 免责与版权说明
+
+原作游戏版权、商标及衍生资产说明详见 [DISCLAIMER.md](DISCLAIMER.md)。

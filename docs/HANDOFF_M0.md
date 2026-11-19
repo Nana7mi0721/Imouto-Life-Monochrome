@@ -263,7 +263,15 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
-* **2026-11-19 0.1.0 Windows/Android 发布、存档清理与工作区整理（当前最新）**：
+* **2026-11-19 仓库文件结构、工程规范与文档体系全面规范化（当前最新）**：
+  对齐顶级开源仓库（如 AstrBot、yetone/magpie）规范：
+  将根目录散落的技术方案收纳至 `docs/plans/`；落地 `.editorconfig`、`.gitattributes`、
+  `.github/`（CI、Issue 与 PR 模板）、`CHANGELOG.md`、`CONTRIBUTING.md`、`DISCLAIMER.md`；
+  全新重构并落地中英双语门面 `README.md` 与 `README_EN.md`（含架构 Mermaid 图、双端特性、
+  玩家安装与开发者构建指引）；输出 `tools/README.md` 手册，并将环境脚本路径改为动态推导；
+  排查修复全库 Markdown 链接，死链 100% 清零。详见 `docs/HANDOFF_PROGRESS.md` 末条。
+
+* **2026-11-19 0.1.0 Windows/Android 发布、存档清理与工作区整理**：
   Windows NSIS 安装版、便携 ZIP 与 Android arm64 release APK 已交付到
   `D:\REISEN\Downloads\Imouto Life 0.1.0\`；Windows `SHA256SUMS.txt`、
   Android `checksums.txt` 与 APK release 签名均已校验。Android 证书 DN

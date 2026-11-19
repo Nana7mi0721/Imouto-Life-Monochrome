@@ -12,11 +12,11 @@
 | 文件 | 问题组 | 主题 |
 |---|---|---|
 | [GPT_RESEARCH_GROUPS.md](gpt-reports/GPT_RESEARCH_GROUPS.md) | 前置 | 6 个问题组的提问原文；每组规定固定 7 段报告格式与「事实 / 推测」分界规则 |
-| [deep-research-report (4).md](<gpt-reports/deep-research-report (4).md>) | 第 1 组 | 日常循环与时间/日程/行动力：主角四种身份、行动力上限与消耗、时间段划分 |
-| [deep-research-report (5).md](<gpt-reports/deep-research-report (5).md>) | 第 2 组 | 妹妹状态与人际数值：状态面板字段、警戒度与性興味、阈值事件、状态图标 |
-| [deep-research-report (2).md](<gpt-reports/deep-research-report (2).md>) | 第 3 组 | H 场景系统、相册与结局：场景分类与进入条件、操作方式、结局数量 |
-| [deep-research-report (3).md](<gpt-reports/deep-research-report (3).md>) | 第 4 组 | UI、操作、设置与存档：按键与引擎行为，以及公开资料查不到的项清单 |
-| [deep-research-report (1).md](<gpt-reports/deep-research-report (1).md>) | 第 5 组 | WOLF RPG Editor 2.00 世代引擎事实：版本发布时间线、「基本システム Ver2.20」模板、2.00 命令语义变更、官方手册术语 |
+| [deep-research-report (4).md](gpt-reports/deep-research-report%20%284%29.md) | 第 1 组 | 日常循环与时间/日程/行动力：主角四种身份、行动力上限与消耗、时间段划分 |
+| [deep-research-report (5).md](gpt-reports/deep-research-report%20%285%29.md) | 第 2 组 | 妹妹状态与人际数值：状态面板字段、警戒度与性興味、阈值事件、状态图标 |
+| [deep-research-report (2).md](gpt-reports/deep-research-report%20%282%29.md) | 第 3 组 | H 场景系统、相册与结局：场景分类与进入条件、操作方式、结局数量 |
+| [deep-research-report (3).md](gpt-reports/deep-research-report%20%283%29.md) | 第 4 组 | UI、操作、设置与存档：按键与引擎行为，以及公开资料查不到的项清单 |
+| [deep-research-report (1).md](gpt-reports/deep-research-report%20%281%29.md) | 第 5 组 | WOLF RPG Editor 2.00 世代引擎事实：版本发布时间线、「基本システム Ver2.20」模板、2.00 命令语义变更、官方手册术语 |
 | [deep-research-report.md](gpt-reports/deep-research-report.md) | 第 6 组 | 版本谱系与中文化：正式名与发售、1.0→2.03 履历、汉化来源、Steam 版、与续作沿革 |
 
 > 无后缀的那份是**第 6 组**，不是第 1 组。

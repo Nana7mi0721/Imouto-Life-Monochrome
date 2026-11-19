@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # Source this in git-bash:  source "/e/Study/github program/Imouto Life/tools/env.sh"
 # NOTE: use msys paths (/c/..., /e/...). Windows-style paths (C:/...) DO NOT work in git-bash PATH.
-T="/e/Study/github program/Imouto Life/tools"
-export IMO="/e/Study/github program/Imouto Life"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR" ]; then
+    T="$SCRIPT_DIR"
+    export IMO="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+else
+    T="/e/Study/github program/Imouto Life Monochrome/tools"
+    export IMO="/e/Study/github program/Imouto Life Monochrome"
+fi
 export PATH="$T/bin:$T/cmake/bin:$T/ffmpeg/bin:/c/Users/REISEN/.cargo/bin:$PATH"
 export RUSTUP_DIST_SERVER="https://mirrors.ustc.edu.cn/rust-static"
 export RUSTUP_UPDATE_ROOT="https://mirrors.ustc.edu.cn/rust-static/rustup"

@@ -12,7 +12,7 @@
 ## 1. 每次 bash 的固定开头
 
 ```bash
-cd '/e/Study/github program/Imouto Life' && source tools/env.sh >/dev/null 2>&1
+cd '/e/Study/github program/Imouto Life Monochrome' && source tools/env.sh >/dev/null 2>&1
 ```
 
 - 路径用 msys 形式（/e/...）；PowerShell 路径只在 env.ps1 等 Windows 脚本里用。

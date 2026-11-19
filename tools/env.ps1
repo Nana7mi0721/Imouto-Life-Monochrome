@@ -1,5 +1,10 @@
 # . "E:\Study\github program\Imouto Life\tools\env.ps1"
-$T = 'E:\Study\github program\Imouto Life\tools'
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ($ScriptDir -and (Test-Path $ScriptDir)) {
+    $T = $ScriptDir
+} else {
+    $T = 'E:\Study\github program\Imouto Life Monochrome\tools'
+}
 $env:Path = "$T\bin;$T\cmake\bin;$T\ffmpeg\bin;$env:USERPROFILE\.cargo\bin;$env:Path"
 $env:RUSTUP_DIST_SERVER = 'https://mirrors.ustc.edu.cn/rust-static'
 $env:RUSTUP_UPDATE_ROOT   = 'https://mirrors.ustc.edu.cn/rust-static/rustup'
