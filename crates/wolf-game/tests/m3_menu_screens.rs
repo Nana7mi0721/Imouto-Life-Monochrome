@@ -264,12 +264,13 @@ fn ce131_slot_hit_boxes_are_the_visible_panels_not_the_skin_texture() {
             .picture_rect(12090, |file| assets.texture_size(file))
             .expect("the third slot panel has a rectangle")
     };
-    // The slot window is a 928x115.2 panel after the tenths UI scale. Its skin is
-    // only 18x18; using the texture size made the hit box 1.8x1.8 and a click in the
-    // middle of the visible row fell through to slot 1.
-    assert!(
-        rect[2] > 900.0 && rect[3] > 100.0,
-        "slot 3 hit box must cover the visible panel, got {rect:?}"
+    // The reference layout narrows CE94's 928x115.2 panel to the left column.
+    // Its skin is only 18x18; using the texture size made the hit box 1.8x1.8
+    // and a click in the middle of the visible row fell through to slot 1.
+    assert_eq!(
+        rect,
+        [48.0, 84.0 + 2.0 * 116.0, 636.0, 112.0],
+        "slot 3 hit box must cover the visible left-column panel"
     );
 
     // Move (not click) onto the middle of the visible row. CE131 writes the slot

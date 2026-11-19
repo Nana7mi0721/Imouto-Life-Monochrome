@@ -263,6 +263,18 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
+* **2026-11-19 存档页宿主跳页文字修复（当前工作区最新）**：
+  `initialize_save_grid_page()` / `step_save_grid_page()` 直接改 CE131
+  页码后不会重放 CE94，导致 `save_grid_label_is_current()` 持续判定为
+  旧页并把整行文字清空。现由 `apply_save_grid_layout()` 每帧同步当前页
+  标签为 `数据 {slot}`，空槽时长固定为“没有数据”、状态为空串，打开定位
+  最新页和紫色箭头翻页后文字都会即时显示。另在 Rust 空白退出判定中排除
+  “回到标题”按钮矩形 `(892,330,90,70)`，并给 Godot 触屏分支补上
+  `_modal_release_guard`。`m25_save_slot` 19 passed、
+  `m3_menu_screens` 4 passed、`m3_hud_buttons` 9/10（唯一失败为既有
+  玩家存档内容漂移）、`cargo check -p wolf-game` 与
+  `tools/smoke-godot.sh` 全过。已纳入 2026-11-19 修复提交。
+
 * **2026-11-19 Android 交互优化（OPT-01..05 + BUG-06，当前工作区）**：
   存档网格支持点空白退出（右侧说明框除外）、打开定位最新存档页、点击左右
   紫色箭头翻页（3 页 × 4 槽，箭头由宿主按 `<TRI-LEFT/RIGHT>` 补齐）；

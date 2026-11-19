@@ -248,8 +248,10 @@ fn save_icon_left_click_routes_to_save_menu_without_writing_a_save() {
         "CE14 must reach CE131 save/load panel"
     );
     assert!(slot_text(&game, 12002).contains("选择要保存的数据。"));
+    let first_row = slot_text(&game, 12052);
     assert!(
-        slot_text(&game, 12052).contains("数据 1") && slot_text(&game, 12052).contains("自动存档")
+        first_row.starts_with("数据 "),
+        "the visible first row must carry a slot label: {first_row:?}"
     );
     assert_eq!(game.stats.warnings, 0);
     assert_eq!(

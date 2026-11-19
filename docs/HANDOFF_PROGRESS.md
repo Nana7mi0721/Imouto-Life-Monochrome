@@ -1996,3 +1996,25 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **清理**：删除 `target/debug/incremental`、`target/release`、
     `target/ver6`、`work/out/saveprobe`、临时 `ce303_probe` 与
     `headcheck` 工作树；清理后 `du -sh .` = **6.3 GB**。
+
+* 2026-11-19（存档页宿主跳页后文字空白修复）：
+  * **现象**：打开存档/读档页时，如果宿主自动定位到第 2/3 页，或点击紫色
+    左右箭头翻页，槽位标签、游玩时长和状态摘要会整行消失；再用键盘翻页
+    或翻回第 1 页才恢复。
+  * **根因**：`initialize_save_grid_page()` / `step_save_grid_page()` 直接写
+    CE131 的 `self[611]`，不会重放 CE94 重建 `12052/12053/12055 + 20*row`。
+    防旧文字闪烁的 `save_grid_label_is_current()` 因此一直看到上一页的数字
+    后缀并返回 `false`，`save_slot_text_override()` 把整行覆写为空。
+  * **修复**：`apply_save_grid_layout()` 每帧把当前页每行标签同步为
+    `数据 {slot}`，让宿主跳页后立即成为文字权威；空槽的时长固定显示
+    “没有数据”、状态摘要为空串，不再回退到上一页脚本文本。
+    `reset_to_title()` 同时复位 `save_grid_page_initialized`。
+  * **输入防护**：`sync_save_grid_cursor()` 的空白退出判定新增排除
+    `SAVE_RETURN_RECT`（`892,330,90,70`）；Godot 触屏点击该按钮时补设
+    `_modal_release_guard`，避免松开手指被 CE131 读成槽位确认。
+  * **测试**：`m25_save_slot` 19 passed（新增箭头翻页后标签即时断言、
+    返回标题按钮区域不取消网格）；`m3_menu_screens` 4 passed（命中框
+    断言更新为左列 `636x112`）；`m3_hud_buttons` 9/10，唯一失败
+    `data_icon_left_click_opens_the_play_tendency_panel` 是玩家存档内容
+    漂移；`cargo check -q -p wolf-game` 与 `tools/smoke-godot.sh` 全过。
+  * **状态**：纳入 2026-11-19 修复提交；提交后重打 Android 包。

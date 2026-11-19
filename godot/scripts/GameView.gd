@@ -1057,6 +1057,9 @@ func _handle_screen_touch(event: InputEventScreenTouch) -> void:
 		)
 		_touch_last_pos = local_pos
 		if _wolf_save_ui_active() and not _wolf_at_title() and SAVE_RETURN_RECT.has_point(Vector2(local_pos)):
+			# Hold the guard until the finger is up so the tap cannot reach CE131
+			# and be read as a grid confirm.
+			_modal_release_guard = true
 			_open_return_modal(true)
 			return
 		if _open_save_slot_modal_at(local_pos):

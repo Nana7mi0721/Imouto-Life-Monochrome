@@ -147,6 +147,11 @@ fn the_page_arrows_turn_the_grid_without_confirming_a_slot() {
         5,
         "the right arrow turns to page 2"
     );
+    assert_eq!(
+        slot_text(&game, 12052),
+        "数据 5",
+        "a host page turn must relabel the first row without waiting for CE94"
+    );
     assert!(
         game.vm
             .instances()
@@ -162,6 +167,11 @@ fn the_page_arrows_turn_the_grid_without_confirming_a_slot() {
         1,
         "the left arrow returns to page 1"
     );
+    assert!(
+        slot_text(&game, 12052).contains("数据 1 自动存档"),
+        "returning to page 1 restores the auto-save label: {:?}",
+        slot_text(&game, 12052)
+    );
 }
 
 #[test]
@@ -176,6 +186,17 @@ fn blank_background_closes_the_grid_but_the_notice_panel_does_not() {
             .iter()
             .any(|instance| instance.event == 131),
         "clicking the notice must not cancel the grid"
+    );
+
+    // The front-end "back to title" button lives below the notice panel; the
+    // Rust-side blank-click fallback must not treat it as the backdrop either.
+    click_at(&mut game, 930, 360);
+    assert!(
+        game.vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 131),
+        "clicking the return-to-title button area must not cancel the grid"
     );
 
     click_at(&mut game, 20, 40);

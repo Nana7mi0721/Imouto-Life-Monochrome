@@ -617,6 +617,8 @@ const SAVE_GRID_HEIGHT: i32 = 112;
 const SAVE_GRID_LAST_PAGE: i32 = 2;
 /// The front-end notice panel drawn over the save grid.
 const SAVE_NOTICE_RECT: [f32; 4] = [716.0, 96.0, 276.0, 216.0];
+/// The front-end "back to title" button below the notice panel.
+const SAVE_RETURN_RECT: [f32; 4] = [892.0, 330.0, 90.0, 70.0];
 const SAVE_GRID_PITCH: i32 = 116;
 
 fn save_grid_row_layout(row: i32) -> [f32; 4] {
@@ -2128,6 +2130,7 @@ impl Game {
         for row in 0..grid.per_page {
             let [x, y, width, height] = save_grid_row_layout(row);
             let base = 12050 + 20 * row;
+            let slot = grid.slot_of_row(row);
             for offset in [0, 1] {
                 if let Some(picture) = self.screen.get_mut(base + offset) {
                     picture.x = x as i32;
@@ -2142,6 +2145,12 @@ impl Game {
             }
             for (number, dx, dy) in [(base + 2, 22, 19), (base + 3, 28, 72), (base + 5, 240, 70)] {
                 if let Some(picture) = self.screen.get_mut(number) {
+                    if number == base + 2 {
+                        // The host can change CE131's page without replaying CE94.
+                        // Keep the label authoritative so the stale-row guard sees
+                        // the current slot and the text overrides take over at once.
+                        picture.text = format!("数据 {slot}");
+                    }
                     picture.x = x as i32 + dx;
                     picture.y = y as i32 + dy;
                     picture.anchor = 0;
@@ -2421,12 +2430,13 @@ impl Game {
                 if let Some(summary) = self.save_summary(slot) {
                     return Some(format!("\\f[19] {}", summary.playtime()));
                 }
-                continue;
+                return Some("没有数据".to_owned());
             }
             if number == status {
                 if let Some(summary) = self.save_summary(slot) {
                     return Some(format!("\\f[16]{}", summary.status_line()));
                 }
+                return Some(String::new());
             }
         }
         None
@@ -2648,6 +2658,7 @@ impl Game {
         self.boot_map_active = false;
         self.load_grid_open = false;
         self.load_cancel_pending = false;
+        self.save_grid_page_initialized = false;
         self.choice_cursor = 0;
         self.previous_title_cursor = None;
         self.playtime_frames = 0;
@@ -4941,11 +4952,13 @@ impl Game {
             return;
         }
         if clicked {
-            let in_notice = (x as f32) >= SAVE_NOTICE_RECT[0]
-                && (x as f32) < SAVE_NOTICE_RECT[0] + SAVE_NOTICE_RECT[2]
-                && (y as f32) >= SAVE_NOTICE_RECT[1]
-                && (y as f32) < SAVE_NOTICE_RECT[1] + SAVE_NOTICE_RECT[3];
-            if !in_notice {
+            let in_frontend_chrome = [SAVE_NOTICE_RECT, SAVE_RETURN_RECT].iter().any(|rect| {
+                (x as f32) >= rect[0]
+                    && (x as f32) < rect[0] + rect[2]
+                    && (y as f32) >= rect[1]
+                    && (y as f32) < rect[1] + rect[3]
+            });
+            if !in_frontend_chrome {
                 self.inject_key_and_consume_click(crate::key::CANCEL);
             } else {
                 self.consume_current_click();
