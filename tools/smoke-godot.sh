@@ -11,6 +11,7 @@
 #   9. the front-end save-slot confirmation (click a used slot, cancel, load).
 #  10. the P0 black-cover/scenery and night-UI interaction regressions.
 #  11. the F4/F8/F5/W/F11 presentation hotkey dispatch and sizing cycle.
+#  12. the MCP audit probe (VM snapshot, text checks, stall/flicker detectors).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -67,3 +68,6 @@ fi
 
 "$GODOT" --headless --path godot --script res://tests/save_roundtrip.gd -- \
     --data-root="$DATA_ROOT" --save-path="$PWD/work/out/godot_roundtrip.sav"
+
+"$GODOT" --headless --path godot --script res://tests/audit_probe_smoke.gd -- \
+    --data-root="$DATA_ROOT"

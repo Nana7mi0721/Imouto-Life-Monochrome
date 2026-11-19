@@ -263,7 +263,24 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
-* **2026-11-19 `audit_report_530de8af` 核验（当前工作区最新）**：
+* **2026-11-19 MCP/Godot 运行时审计探针 v1（当前工作区最新）**：
+  `wolf-gdext` 新增只读 `debug_event_snapshot()`（event/instance/parallel/
+  pc/wait/self_base/page）、`message_active()`、`message_text()`；
+  新增测试专用 `godot/tests/mcp_audit_probe.gd`，通过 `game_eval` 挂到
+  GameView 后可持续检查停滞、图片状态闪烁、隐式折行/文本溢出/同层重叠/
+  残留格式码，并提供 `targets()` 枚举可见图片、HUD、选项和存档槽
+  （标题菜单 `menu1..menu3` 映射到实际图片槽位 3..5），输出带 VM 快照的 JSON。
+  `tools/audit-godot.sh` 和
+  `tools/smoke-godot.sh` 已接入无头 smoke；Godot 4.7.2 默认路径同步到
+  `E:\Study\tools\Godot_v4.7.2-stable`。探针只在 `tests/`，不进入发行 PCK。
+  验证：`audit_probe_smoke` 通过（events=5、targets=4 含 3 个标题选项、
+  stall/text/flicker/report 全过），
+  完整 Godot smoke 通过，`cargo check -p wolf-gdext` 与 Android check-only
+  通过。全量 `cargo test --workspace` 仍有既有存档夹具失败
+  `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`，
+  与本轮只读 GDExtension 改动无关。随本轮提交推送。
+
+* **2026-11-19 `audit_report_530de8af` 核验**：
   `F-530-02` 属实并已修复：宿主覆写的存档槽标签与空槽提示现统一带
   `\f[19]`，与自动存档标签、时长和状态摘要保持 19 px。
   `F-530-01` 第 1 条不采纳：给 `mouse_key_bits()` 增加

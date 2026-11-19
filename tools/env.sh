@@ -7,6 +7,11 @@ export PATH="$T/bin:$T/cmake/bin:$T/ffmpeg/bin:/c/Users/REISEN/.cargo/bin:$PATH"
 export RUSTUP_DIST_SERVER="https://mirrors.ustc.edu.cn/rust-static"
 export RUSTUP_UPDATE_ROOT="https://mirrors.ustc.edu.cn/rust-static/rustup"
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
+if [ -x /e/Study/tools/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64.exe ]; then
+    export GODOT_BIN="/e/Study/tools/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64.exe"
+elif [ -x "/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64.exe" ]; then
+    export GODOT_BIN="/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64.exe"
+fi
 # Static RE toolchain for the original Game.exe (installed 2026-11-02, D:\Program per user policy).
 # Ghidra 12.2 requires JDK 25+; JDK 21 is kept alongside for javac/other tools.
 # Always drive Ghidra through tools/re/ghidra/run_ghidra.sh (it calls analyzeHeadless.bat via

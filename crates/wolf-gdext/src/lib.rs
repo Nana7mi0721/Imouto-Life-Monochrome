@@ -28,7 +28,7 @@ use wolf_game::atlas::{Atlas, SpriteQuad, TextQuad};
 use wolf_game::game::BOOT_MAP;
 use wolf_game::message::{self, Run as MessageRun};
 use wolf_game::{Game, OverlayLayer};
-use wolf_vm::{ChoiceReply, SoundAction, SoundChannel};
+use wolf_vm::{ChoiceReply, SoundAction, SoundChannel, WaitState};
 
 struct WolfGdext;
 
@@ -365,6 +365,53 @@ impl WolfGame {
             out.push(&line);
         }
         out
+    }
+
+    /// Snapshot of every live VM coroutine, for probe diagnostics.
+    ///
+    /// The wait field is a stable category: `none`, `timer`, `message`,
+    /// `message_choice`, `choice`, `child`, or `key`. `page` is the active map
+    /// page that owns the instance, or -1 for common/child/unowned instances.
+    #[func]
+    fn debug_event_snapshot(&self) -> Array<VarDictionary> {
+        let mut out: Array<VarDictionary> = Array::new();
+        let Some(game) = self.game.as_ref() else {
+            return out;
+        };
+        let pages = game.runtime.slots();
+        for instance in game.vm.instances() {
+            let mut event = VarDictionary::new();
+            event.set("event", i64::from(instance.event));
+            event.set("instance", i64::from(instance.id));
+            event.set("parallel", instance.is_parallel);
+            event.set("pc", instance.pc as i64);
+            event.set("wait", wait_state_name(&instance.wait));
+            event.set("self_base", instance.program.self_base as i64);
+            let page = pages
+                .iter()
+                .find(|slot| slot.instance() == Some(instance.id))
+                .map_or(-1, |slot| slot.page as i64);
+            event.set("page", page);
+            out.push(&event);
+        }
+        out
+    }
+
+    /// True while the native message layer has a visible message.
+    #[func]
+    fn message_active(&self) -> bool {
+        self.game
+            .as_ref()
+            .is_some_and(|game| !game.messages.is_empty())
+    }
+
+    /// Text of the newest visible message, or an empty string when none is active.
+    #[func]
+    fn message_text(&self) -> GString {
+        let Some(message) = self.game.as_ref().and_then(|game| game.messages.last()) else {
+            return GString::new();
+        };
+        GString::from(message.text.as_str())
     }
 
     /// Reads one raw media file from the mod/loose/`media.pak` lookup chain.
@@ -1248,6 +1295,18 @@ fn message_run_dict(run: &MessageRun) -> VarDictionary {
     dict.set("weight", 700_i64);
     dict.set("z", UI_Z);
     dict
+}
+
+fn wait_state_name(wait: &WaitState) -> &'static str {
+    match wait {
+        WaitState::None => "none",
+        WaitState::Frames(_) => "timer",
+        WaitState::Message => "message",
+        WaitState::MessageWithChoices { .. } => "message_choice",
+        WaitState::Choice { .. } => "choice",
+        WaitState::Child(_) => "child",
+        WaitState::Key => "key",
+    }
 }
 
 fn rect2(rect: [f32; 4]) -> Rect2 {

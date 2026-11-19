@@ -2112,3 +2112,32 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `m3_save_ui_roundtrip` 1/1、`m16_parallel_input` 5/5、
     `m3_map_click` 9/9 全过。
   * **状态**：随本轮提交推送。
+
+* 2026-11-19（MCP/Godot 运行时审计探针 v1）：
+  * **Rust 快照**：`wolf-gdext` 新增只读
+    `debug_event_snapshot()`、`message_active()`、`message_text()`。
+    每个存活实例提供 event/instance/parallel/pc/wait/self_base/page；
+    wait 使用稳定字符串 none/timer/message/message_choice/choice/child/key，
+    page=-1 表示公共事件、子事件或不属于当前地图活动页。
+  * **GDScript 探针**：新增 `godot/tests/mcp_audit_probe.gd`。通过 MCP
+    `game_eval` 挂到当前 GameView，提供 attach/start、mark_input、snapshot、
+    take_violations、reset、write_report、audit_text_items、targets。
+    `targets()` 枚举可见图片、已知 HUD、选项文本和存档槽；标题脚本的
+    `menu1..menu3` 没有文本 run，按实际点击图片映射为槽位 3..5 的 choice。
+  * **检测项**：输入后停滞（只比较前台非并行 VM 实例和语义 UI 状态，
+    不把后台 instructions 增长当作推进）、30 帧图片双状态抖动、非 wrap
+    多行 shaping、文本宽度溢出、同 z 文本实际包围盒重叠、残留格式码/
+    U+FFFD/控制字符。文本检查默认每 6 帧一次，复用 WolfText 段落缓存。
+  * **运行入口**：新增 `tools/audit-godot.sh`；`tools/smoke-godot.sh`
+    末尾增加 audit smoke。`tools/env.sh` 优先使用
+    `/e/Study/tools/Godot_v4.7.2-stable/...`，并保留旧路径回退。
+  * **安全边界**：探针位于 `tests/`，不进入发行 PCK；只读游戏状态，
+    不调用存档写入接口。场景夹具应复制到 `work/out/audit_fixtures/`，
+    不能覆盖玩家 `Save/`。
+  * **验证**：`audit_probe_smoke` 通过（events=5、targets=4 含 3 个标题选项、
+    stall、4 类文本检查、flicker、JSON report）；`tools/smoke-godot.sh` 全过；
+    `cargo check -p wolf-gdext`、`cargo fmt --check`、
+    `build-android.sh --check-only` 全过。全量 workspace 测试只剩
+    既有 `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`
+    存档夹具失败，未改 wolf-game 游玩逻辑。
+  * **状态**：随本轮提交推送。
