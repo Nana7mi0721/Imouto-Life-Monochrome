@@ -2090,3 +2090,25 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `bash tools/build-android.sh --check-only` 与
     `bash tools/smoke-godot.sh` 均通过。未导出 APK，未打包。
   * **状态**：随本轮提交推送。
+
+* 2026-11-19（`audit_report_530de8af` 核验与存档字号修复）：
+  * **F-530-02 属实并修复**：`apply_save_grid_layout()` 写入的
+    `数据 {slot}` 与空槽提示 `没有数据` 原为默认 20 px，而槽 1 的
+    “自动存档”标签、时长和状态摘要为 19 px。现两处统一加 `\f[19]`，
+    新增 `save_grid_labels_and_empty_prompts_use_the_same_19px_face`
+    断言 TextQuad 的实际字号。
+  * **F-530-01 第 1 条不采纳**：`mouse_key_bits()` 的当前行为是让同一帧
+    一次点击被每个并行 `123` 轮询器各看到一次，再由帧末统一清 pending。
+    若入口检查 `mouse_consumed` 会破坏 BUG-30 的广播契约，
+    `m16_parallel_input` 5/5 通过确认现状必须保留。
+  * **F-530-01 第 2 条无需改**：CE230 设置 `v70 = 1` 后，白天妹妹事件
+    选择的是 1 格空页，`m3_map_click` 已覆盖“夜间身体点击不会启动
+    ev3”。只有正常流程不会出现的 `v100 = 1, v70 = 0` 才会重叠。
+  * **F-530-01 第 3 条与 F-530-03**：前者缺少阻塞场景复现，后者报告自身
+    建议维持现状，本轮不改。`F-530-04` 是本地 `work/Data/Save` 被实机
+    游玩污染，不能用测试覆盖回滚玩家存档，保留为已知夹具噪音。
+  * **测试**：`WOLF_DATA_ROOT="$PWD/work/Data"` 下
+    `m25_save_slot` 20/20、`m3_menu_screens` 4/4、
+    `m3_save_ui_roundtrip` 1/1、`m16_parallel_input` 5/5、
+    `m3_map_click` 9/9 全过。
+  * **状态**：随本轮提交推送。

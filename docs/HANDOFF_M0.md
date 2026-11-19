@@ -263,7 +263,18 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
-* **2026-11-19 Android 系统字体与单行折行修复（当前工作区最新）**：
+* **2026-11-19 `audit_report_530de8af` 核验（当前工作区最新）**：
+  `F-530-02` 属实并已修复：宿主覆写的存档槽标签与空槽提示现统一带
+  `\f[19]`，与自动存档标签、时长和状态摘要保持 19 px。
+  `F-530-01` 第 1 条不采纳：给 `mouse_key_bits()` 增加
+  `mouse_consumed` 早退会破坏 BUG-30 的既定契约——同帧一次点击必须
+  广播给所有并行 `123` 轮询器；`m16_parallel_input` 5/5 通过。第 2 条
+  深夜晚间穿透也已由 `v70 == 1` 的空页门控和 `m3_map_click` 9/9 实测覆盖。
+  `F-530-03` 维持现状；`F-530-04` 是本地存档夹具漂移，不覆盖玩家存档。
+  `m25_save_slot` 20/20、`m3_menu_screens` 4/4、
+  `m3_save_ui_roundtrip` 1/1 全过。随本轮提交推送。
+
+* **2026-11-19 Android 系统字体与单行折行修复**：
   Android 的 `_load_font()` 不再尝试 Windows 字体或原版日文 TTF，
   改用系统 `Noto Sans CJK SC` / `Source Han Sans SC` / `sans-serif`，
   Bold/Regular 与符号 fallback 保持对应字重；`wolf-gdext` 的 Android

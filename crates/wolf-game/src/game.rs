@@ -2149,7 +2149,7 @@ impl Game {
                         // The host can change CE131's page without replaying CE94.
                         // Keep the label authoritative so the stale-row guard sees
                         // the current slot and the text overrides take over at once.
-                        picture.text = format!("数据 {slot}");
+                        picture.text = format!("\\f[19]数据 {slot}");
                     }
                     picture.x = x as i32 + dx;
                     picture.y = y as i32 + dy;
@@ -2430,7 +2430,7 @@ impl Game {
                 if let Some(summary) = self.save_summary(slot) {
                     return Some(format!("\\f[19] {}", summary.playtime()));
                 }
-                return Some("没有数据".to_owned());
+                return Some("\\f[19]没有数据".to_owned());
             }
             if number == status {
                 if let Some(summary) = self.save_summary(slot) {

@@ -475,6 +475,36 @@ fn slot_text(game: &Game, number: i32) -> String {
         .join("")
 }
 
+fn slot_font_px(game: &Game, number: i32, needle: &str) -> Vec<f32> {
+    game.text_quads()
+        .into_iter()
+        .filter(|text| text.number == number && text.text.contains(needle))
+        .map(|text| text.font_px)
+        .collect()
+}
+
+#[test]
+fn save_grid_labels_and_empty_prompts_use_the_same_19px_face() {
+    let Some(mut game) = grid() else { return };
+    assert!(
+        slot_font_px(&game, 12052, "数据 1 自动存档")
+            .iter()
+            .all(|px| *px == 19.0),
+        "the slot label must match the row's 19 px detail face: {:?}",
+        slot_font_px(&game, 12052, "数据 1 自动存档")
+    );
+
+    let (x, y) = arrow_centre(&mut game, 12005).expect("right arrow");
+    click_at(&mut game, x, y);
+    if !save_file(7).is_file() {
+        let font_px = slot_font_px(&game, 12093, "没有数据");
+        assert!(
+            !font_px.is_empty() && font_px.iter().all(|px| *px == 19.0),
+            "an empty slot prompt must use the same 19 px face: {font_px:?}"
+        );
+    }
+}
+
 /// Asserts that every visible row belongs to `first_slot`'s page.
 ///
 /// A row in the middle of a page turn may be blank while its pictures are waiting
