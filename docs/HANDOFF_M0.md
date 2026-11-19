@@ -273,7 +273,10 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `_modal_release_guard`。`m25_save_slot` 19 passed、
   `m3_menu_screens` 4 passed、`m3_hud_buttons` 9/10（唯一失败为既有
   玩家存档内容漂移）、`cargo check -p wolf-game` 与
-  `tools/smoke-godot.sh` 全过。已纳入 2026-11-19 修复提交。
+  `tools/smoke-godot.sh` 全过。已提交并推送 `3c7115e`；Android APK 已重打为
+  **152,234,688 B** / SHA-256
+  `3fe5cefbb613555af2345282c194f78112d6822807ebecfd512114a2b448e5fb`
+  （debug 签名，`verify-apk` 通过）。
 
 * **2026-11-19 Android 交互优化（OPT-01..05 + BUG-06，当前工作区）**：
   存档网格支持点空白退出（右侧说明框除外）、打开定位最新存档页、点击左右

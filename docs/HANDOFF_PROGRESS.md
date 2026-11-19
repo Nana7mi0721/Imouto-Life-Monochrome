@@ -2017,4 +2017,10 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     断言更新为左列 `636x112`）；`m3_hud_buttons` 9/10，唯一失败
     `data_icon_left_click_opens_the_play_tendency_panel` 是玩家存档内容
     漂移；`cargo check -q -p wolf-game` 与 `tools/smoke-godot.sh` 全过。
-  * **状态**：纳入 2026-11-19 修复提交；提交后重打 Android 包。
+  * **产物**：Android APK
+    `work/out/dist/android/0.1.0/ImoutoLife-0.1.0-arm64.apk`
+    **152,234,688 B**，SHA-256
+    `3fe5cefbb613555af2345282c194f78112d6822807ebecfd512114a2b448e5fb`；
+    debug 签名（沿用上一版流程），`verify-apk` 通过：132 zip entries /
+    33 assets / arm64 `libwolf_gdext.so` present / 17 manifest files。
+  * **状态**：已提交并推送 `3c7115e`；Android 包已重打。
