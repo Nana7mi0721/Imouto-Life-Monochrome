@@ -263,7 +263,30 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
-* **2026-11-19 存档页宿主跳页文字修复（当前工作区最新）**：
+* **2026-11-19 Android 系统字体与单行折行修复（当前工作区最新）**：
+  Android 的 `_load_font()` 不再尝试 Windows 字体或原版日文 TTF，
+  改用系统 `Noto Sans CJK SC` / `Source Han Sans SC` / `sans-serif`，
+  Bold/Regular 与符号 fallback 保持对应字重；`wolf-gdext` 的 Android
+  测宽优先读取系统 CJK 字体，失败时回退全角/半角估算，不再用缺字的
+  日文字体测宽；`WolfText.gd` 默认不再让 `TextParagraph` 对 Rust 已排好
+  的单行 `TextQuad` 二次折行，只有错误弹窗显式保留 `wrap=true`。
+  Android 打包同时排除原版 `◆GenJyuuGothicX-P-Bold.ttf` 与
+  `07やさしさゴシックボールド.ttf`：当前共享 manifest 仅含前者，暂存
+  载荷由 17 项降为 16 项，原始字节减少 11,575,152 B；`verify-apk` 会
+  拒绝 `.ttf` / `.ttf.blob` 或旧 manifest 残留。Windows 字体与公共
+  manifest 不变。随本轮提交推送。
+
+* **2026-11-19 强制演出服装层 pattern 闪烁修复**：
+  `290` kind 8/9/10 在 action time 0 时原被当作 1 帧 pingpong 启动，
+  导致 `CE284` 分支结尾的停止指令反而让槽位 1015 每帧在 pattern 1/2
+  间翻转。现改为 `duration <= 0` 清除 `picture.pattern`，回到 `150`
+  指定的基础 cell。375 个图片层单测、强制演出回归、`m3_ui_screens`
+  14 项与 `tools/smoke-godot.sh` 全过；其余夜间用例失败为玩家存档夹具
+  漂移。Android APK 已重打为 **152,234,688 B** / SHA-256
+  `a06cae55dbc8f72d95ff70fa1065276627c9a7649c44146b65b315223c6819a0`。
+  随本轮提交推送。
+
+* **2026-11-19 存档页宿主跳页文字修复**：
   `initialize_save_grid_page()` / `step_save_grid_page()` 直接改 CE131
   页码后不会重放 CE94，导致 `save_grid_label_is_current()` 持续判定为
   旧页并把整行文字清空。现由 `apply_save_grid_layout()` 每帧同步当前页

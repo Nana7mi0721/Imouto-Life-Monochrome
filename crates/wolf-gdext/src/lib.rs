@@ -1276,23 +1276,52 @@ fn tint_colour(rgb: [f32; 3]) -> Color {
 /// ships two fallback faces. Whichever parses first wins, matching the CLI's search
 /// order closely enough for the title and HUD.
 fn install_font_metrics(game: &mut Game, root: &Path) {
-    let mut candidates = vec![PathBuf::from("C:/Windows/Fonts/msyhbd.ttc")];
-    for name in [
-        "◆GenJyuuGothicX-P-Bold.ttf",
-        "07やさしさゴシックボールド.ttf",
-    ] {
-        candidates.push(root.join(name));
-    }
-    for path in candidates {
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
-        if game.set_font_metrics(bytes) {
-            godot_print!("wolf-gdext: font metrics {}", path.display());
-            return;
+    #[cfg(target_os = "android")]
+    {
+        let _ = root;
+        // Android has no Microsoft YaHei and the retail Japanese face is a
+        // proportional subset with missing Simplified Chinese glyphs.  Use the
+        // system CJK face when a vendor exposes it; otherwise keep the standard
+        // em/half-em fallback instead of measuring with the wrong font.
+        for path in [
+            "/system/fonts/NotoSansCJK-Regular.ttc",
+            "/system/fonts/NotoSansCJKsc-Regular.otf",
+            "/system/fonts/NotoSansCJK.ttc",
+            "/system/fonts/NotoSansSC-Regular.otf",
+            "/system/fonts/SourceHanSansSC-Regular.otf",
+            "/system/fonts/DroidSansFallback.ttf",
+        ] {
+            let Ok(bytes) = std::fs::read(path) else {
+                continue;
+            };
+            if game.set_font_metrics(bytes) {
+                godot_print!("wolf-gdext: Android font metrics {path}");
+                return;
+            }
         }
+        godot_warn!("wolf-gdext: no usable Android system font metrics; using em/half-em fallback");
+        return;
     }
-    godot_warn!("wolf-gdext: no usable font metrics found");
+    #[cfg(not(target_os = "android"))]
+    {
+        let mut candidates = vec![PathBuf::from("C:/Windows/Fonts/msyhbd.ttc")];
+        for name in [
+            "◆GenJyuuGothicX-P-Bold.ttf",
+            "07やさしさゴシックボールド.ttf",
+        ] {
+            candidates.push(root.join(name));
+        }
+        for path in candidates {
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
+            if game.set_font_metrics(bytes) {
+                godot_print!("wolf-gdext: font metrics {}", path.display());
+                return;
+            }
+        }
+        godot_warn!("wolf-gdext: no usable font metrics found");
+    }
 }
 
 #[cfg(test)]

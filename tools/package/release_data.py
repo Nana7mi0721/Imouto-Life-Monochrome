@@ -149,22 +149,33 @@ def normalize_prefixes(values: list[str]) -> list[str]:
     return prefixes
 
 
-def normalize_extra(value: str) -> str:
+def normalize_relative_file(value: str, option: str) -> str:
     if not value:
-        fail("--extra must not be empty")
+        fail(f"{option} must not be empty")
     if "\x00" in value or "\\" in value:
-        fail(f"--extra contains an invalid path character: {value!r}")
+        fail(f"{option} contains an invalid path character: {value!r}")
     if ":" in value:
-        fail(f"--extra must be a relative POSIX path: {value!r}")
+        fail(f"{option} must be a relative POSIX path: {value!r}")
     if value.endswith("/") or "//" in value:
-        fail(f"--extra must name a file, not a directory: {value!r}")
+        fail(f"{option} must name a file, not a directory: {value!r}")
     rel = PurePosixPath(value)
     if rel.is_absolute() or any(part in ("", ".", "..") for part in rel.parts):
-        fail(f"--extra must be a relative path without '.' or '..': {value!r}")
+        fail(f"{option} must be a relative path without '.' or '..': {value!r}")
     canonical = rel.as_posix()
     if canonical == SYSTEM_SAVE_REL:
-        fail(f"--extra must not repeat {SYSTEM_SAVE_REL}")
+        fail(f"{option} must not repeat {SYSTEM_SAVE_REL}")
     return canonical
+
+
+def normalize_extra(value: str) -> str:
+    return normalize_relative_file(value, "--extra")
+
+
+def normalize_excluded_files(values: list[str]) -> set[str]:
+    return {
+        normalize_relative_file(value, "--exclude-file")
+        for value in values
+    }
 
 
 def is_excluded(rel: str, prefixes: list[str]) -> bool:
@@ -194,13 +205,25 @@ def print_plan(
     entries: list[str],
     exclude_prefixes: list[str],
     system_save: Path | None,
+    exclude_files: set[str] | None = None,
 ) -> tuple[dict[str, int], int]:
     sizes, total = manifest_files(root, entries)
-    filtered = filter_entries(entries, exclude_prefixes)
+    exclude_files = exclude_files or set()
+    unknown_exclusions = sorted(exclude_files - set(entries))
+    if unknown_exclusions:
+        fail(
+            "exact file exclusions are not present in the manifest:\n  "
+            + "\n  ".join(unknown_exclusions)
+        )
+    prefix_filtered = filter_entries(entries, exclude_prefixes)
+    prefix_filtered_set = set(prefix_filtered)
+    filtered = [rel for rel in prefix_filtered if rel not in exclude_files]
     filtered_set = set(filtered)
     filtered_sizes = {rel: sizes[rel] for rel in filtered}
     filtered_total = sum(filtered_sizes.values())
-    pack_sizes = {rel: size for rel, size in sizes.items() if rel not in filtered_set}
+    pack_sizes = {
+        rel: size for rel, size in sizes.items() if rel not in prefix_filtered_set
+    }
     pack_total = sum(pack_sizes.values())
 
     actual = dict(iter_data_files(root))
@@ -227,6 +250,8 @@ def print_plan(
         prefix_bytes = sum(pack_sizes[rel] for rel in prefix_files)
         print(f"  {len(prefix_files):4d} files  {prefix_bytes:12d} bytes  {prefix}/")
     print(f"release manifest after exclusion: {len(filtered)} files / {filtered_total} bytes")
+    for rel in sorted(exclude_files):
+        print(f"  excluded file  {sizes[rel]:12d} bytes  {rel}")
     for name in sorted(counts):
         print(f"  {counts[name]:4d} files  {sizes_by_top[name]:12d} bytes  {name}/")
     print(f"source Data (excluding Save/): {len(actual)} files / {actual_bytes} bytes")
@@ -433,6 +458,7 @@ def main() -> None:
     plan.add_argument("--root", required=True, type=Path)
     plan.add_argument("--manifest", required=True, type=Path)
     plan.add_argument("--exclude-prefix", action="append", default=[])
+    plan.add_argument("--exclude-file", action="append", default=[])
     plan.add_argument("--system-save", type=Path)
 
     check = sub.add_parser("check", help="validate manifest syntax and source files")
@@ -474,7 +500,13 @@ def main() -> None:
     excludes = normalize_prefixes(getattr(args, "exclude_prefix", []))
 
     if args.command == "plan":
-        print_plan(root, entries, excludes, args.system_save)
+        print_plan(
+            root,
+            entries,
+            excludes,
+            args.system_save,
+            normalize_excluded_files(args.exclude_file),
+        )
     elif args.command == "check":
         verify_manifest_only(root, entries)
     elif args.command == "stage":

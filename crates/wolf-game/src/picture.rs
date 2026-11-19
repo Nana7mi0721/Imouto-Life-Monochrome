@@ -1671,10 +1671,19 @@ impl Screen {
                 _ => {
                     // 8, 9 and 10: the third value is not part of the instruction at all
                     // (docs/OPCODE_290.md section 5.8), and the action time is the hold.
-                    let base = picture
-                        .pattern
-                        .map_or(picture.pattern_index as i32, |fx| fx.base);
-                    picture.pattern = Some(PatternFx::new(kind, v1, v2, duration, base));
+                    // The shipped data also uses action time 0 as the stop spelling for
+                    // these three kinds, exactly as it does for flash/blink. Starting a
+                    // one-frame loop there makes the layer alternate cells at frame rate;
+                    // CE284's branch exits send `[1, 2, 0]` to stop the clothing
+                    // animation, not to run it.
+                    if duration <= 0 {
+                        picture.pattern = None;
+                    } else {
+                        let base = picture
+                            .pattern
+                            .map_or(picture.pattern_index as i32, |fx| fx.base);
+                        picture.pattern = Some(PatternFx::new(kind, v1, v2, duration, base));
+                    }
                 }
             }
         }
@@ -3872,6 +3881,33 @@ mod effect_tests {
         assert_eq!(walk(EFFECT_PATTERN_LOOP, 3), vec![1, 2, 3, 1]);
         // 10 turns around at the far end and walks back.
         assert_eq!(walk(EFFECT_PATTERN_PINGPONG, 3), vec![1, 2, 3, 2]);
+    }
+
+    #[test]
+    fn a_zero_action_time_stops_a_pattern_animation() {
+        for kind in [
+            EFFECT_PATTERN_ONCE,
+            EFFECT_PATTERN_LOOP,
+            EFFECT_PATTERN_PINGPONG,
+        ] {
+            let mut screen = screen_with(&[700]);
+            assert!(screen.effect(i32::from(kind), 8, &args(1, 700, 700, [1, 2, 0])));
+            assert!(
+                screen.get(700).expect("picture").pattern.is_some(),
+                "kind {kind} should start an animation"
+            );
+
+            assert!(screen.effect(i32::from(kind), 0, &args(1, 700, 700, [1, 2, 0])));
+            assert!(
+                screen.get(700).expect("picture").pattern.is_none(),
+                "kind {kind}: action time 0 must stop the animation"
+            );
+            assert_eq!(
+                screen.get(700).expect("picture").pattern_now(),
+                None,
+                "kind {kind}: the base cell must own the picture again"
+            );
+        }
     }
 
     /// A shift displaces the finished rectangle until another shift replaces it.

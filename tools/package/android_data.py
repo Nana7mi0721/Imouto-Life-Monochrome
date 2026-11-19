@@ -73,11 +73,30 @@ FORBIDDEN_ASSET_PREFIXES = (
     "addons/godot_ai/",
     "tests/",
 )
+# Android renders through the device's Simplified Chinese system font.  Keep
+# the retail Japanese faces in the shared Windows manifest, but never stage or
+# accept them in an APK.
+ANDROID_EXCLUDED_FONT_FILES = frozenset(
+    {
+        "◆GenJyuuGothicX-P-Bold.ttf",
+        "07やさしさゴシックボールド.ttf",
+    }
+)
+ANDROID_EXCLUDED_FONT_FILES_CASEFOLD = frozenset(
+    name.casefold() for name in ANDROID_EXCLUDED_FONT_FILES
+)
 SAVEDATA_RE = re.compile(r"^savedata.*\.sav(\.blob)?$", re.IGNORECASE)
 
 
 def fail(message: str) -> "NoReturn":
     release_data.fail(message)
+
+
+def is_android_excluded_font(rel: str) -> bool:
+    name = PurePosixPath(rel).name
+    if name.endswith(BLOB_SUFFIX):
+        name = name[: -len(BLOB_SUFFIX)]
+    return name.casefold() in ANDROID_EXCLUDED_FONT_FILES_CASEFOLD
 
 
 def atomic_write_text(path: Path, content: str) -> None:
@@ -157,7 +176,14 @@ def stage_android_data(
         fail(f"data root is not a directory: {root}")
 
     all_entries = release_data.read_manifest(manifest.resolve())
-    entries = release_data.filter_entries(all_entries, exclude_prefixes)
+    entries = [
+        rel
+        for rel in release_data.filter_entries(all_entries, exclude_prefixes)
+        if not is_android_excluded_font(rel)
+    ]
+    excluded_fonts = sorted(
+        rel for rel in all_entries if is_android_excluded_font(rel)
+    )
     reserved = {MANIFEST_FILENAME, MEDIA_PAK_REL, SYSTEM_SAVE_REL}
     collisions = sorted(set(entries) & reserved)
     if collisions:
@@ -260,6 +286,8 @@ def stage_android_data(
         f"staged Android data: {len(sorted_files)} payload files + {MANIFEST_FILENAME} "
         f"/ {total_bytes} bytes (staging {staging_version}) -> {safe_dest}"
     )
+    if excluded_fonts:
+        print("excluded Android retail font files: " + ", ".join(excluded_fonts))
 
 
 def parse_pck_entries(data: bytes, source_label: str) -> set[str]:
@@ -379,6 +407,11 @@ def verify_apk(apk_path: Path, require_so: bool) -> None:
                     continue
                 if check_target.startswith("android_data/") and SAVEDATA_RE.match(base_lower):
                     forbidden_hits.append(entry)
+                    continue
+                if check_target.startswith("android_data/") and is_android_excluded_font(
+                    check_target
+                ):
+                    forbidden_hits.append(entry)
 
             for pck_entry in sorted(pck_asset_paths):
                 base_lower = PurePosixPath(pck_entry).name.lower()
@@ -392,6 +425,9 @@ def verify_apk(apk_path: Path, require_so: bool) -> None:
                     forbidden_hits.append(f"(pck) {pck_entry}")
                     continue
                 if pck_entry.startswith("android_data/") and SAVEDATA_RE.match(base_lower):
+                    forbidden_hits.append(f"(pck) {pck_entry}")
+                    continue
+                if is_android_excluded_font(pck_entry):
                     forbidden_hits.append(f"(pck) {pck_entry}")
 
             if forbidden_hits:
@@ -418,6 +454,14 @@ def verify_apk(apk_path: Path, require_so: bool) -> None:
                     fail(
                         f"{manifest_zip_key} file_count ({manifest_doc.get('file_count')}) "
                         f"does not match len(files) ({len(listed)})"
+                    )
+                excluded_listed = sorted(
+                    rel for rel in listed if is_android_excluded_font(rel)
+                )
+                if excluded_listed:
+                    fail(
+                        f"{manifest_zip_key} still lists Android-excluded retail fonts:\n  "
+                        + "\n  ".join(excluded_listed)
                     )
                 blob_suffix = manifest_doc.get("blob_suffix", "")
                 if not isinstance(blob_suffix, str):

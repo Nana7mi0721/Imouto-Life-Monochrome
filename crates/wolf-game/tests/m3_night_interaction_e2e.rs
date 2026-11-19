@@ -493,6 +493,43 @@ fn forced_ejaculation_fires_at_120_but_not_at_100_or_119() {
     assert_eq!(game.stats.warnings, 0, "warnings");
 }
 
+/// The clothing layer must not alternate its two cells every frame.
+///
+/// CE284's branch exits send `290 kind 10` with action time 0 for slots 1015
+/// and 1000. The data uses 0 as the stop spelling for these pattern effects,
+/// the same way it does for flash/blink. Treating 0 as a one-frame hold made
+/// the slot flip between cells at frame rate during the forced sequence.
+#[test]
+fn forced_ejaculation_does_not_alternate_the_clothing_pattern_every_frame() {
+    let Some(mut game) = enter_interface() else {
+        return;
+    };
+    game.vm.vars.set(66, 120);
+    let mut seen = Vec::new();
+    let mut last_pattern = None;
+    let mut changes = 0;
+    let mut saw_forced_phase = false;
+    for _ in 0..120 {
+        step_collect(&mut game, &mut seen);
+        saw_forced_phase |= var(&game, 125) == 1;
+        if let Some(picture) = game.screen.get(1015) {
+            let pattern = picture.pattern_now();
+            if pattern != last_pattern {
+                changes += 1;
+                last_pattern = pattern;
+            }
+        }
+    }
+    assert!(
+        saw_forced_phase,
+        "the forced phase should run at v66=120: {seen:?}"
+    );
+    assert!(
+        changes < 8,
+        "the clothing pattern must not alternate every frame (changes={changes})"
+    );
+}
+
 #[test]
 fn end_choice_runs_the_trigger_zero_exit_script() {
     // The real exit script is SampleMapA event 21 (終了仮): trigger 0

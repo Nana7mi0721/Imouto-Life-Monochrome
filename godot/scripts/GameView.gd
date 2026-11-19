@@ -42,6 +42,15 @@ const SYSTEM_FONT_NAMES: Array[String] = [
 	"WenQuanYi Micro Hei",
 	"sans-serif",
 ]
+## Android's system stack.  Asking for the Windows families first can make
+## FontConfig resolve an unavailable name to a Japanese face, which is the
+## mixed-glyph fallback this list exists to avoid.
+const ANDROID_SYSTEM_FONT_NAMES: Array[String] = [
+	"Noto Sans CJK SC",
+	"Source Han Sans SC",
+	"Noto Sans SC",
+	"sans-serif",
+]
 ## Symbol-only fallback attached to both primary faces.  Microsoft YaHei has no
 ## U+266A (the message "♪" glyph), so the shaper must be able to reach a face that
 ## does.  The list is probed by the platform, not assumed to exist.
@@ -314,6 +323,7 @@ class _ModalLayer extends Node2D:
 				"colour": Color(0.88, 0.88, 0.92, 1.0),
 				"alpha": 1.0,
 				"outline": true,
+				"wrap": true,
 			},
 			bold_font,
 			regular_font
@@ -534,9 +544,8 @@ func _ready() -> void:
 	regular_font = _load_font(false)
 	# U+266A and other symbols missing from the primary faces are shaped through
 	# Font.fallbacks; TextParagraph passes the whole chain to the shaper.
-	var symbol_fallback := _make_symbol_font()
-	_attach_fallback(bold_font, symbol_fallback)
-	_attach_fallback(regular_font, symbol_fallback)
+	_attach_fallback(bold_font, _make_symbol_font(true))
+	_attach_fallback(regular_font, _make_symbol_font(false))
 	_assign_modal_fonts()
 	print("startup: godot_fonts_ms=", "%.1f" % ((Time.get_ticks_usec() - fonts_started) / 1000.0))
 
@@ -2813,6 +2822,13 @@ func _parse_args() -> void:
 ## Every departure from the first choice is logged, including which candidate won.
 func _load_font(is_bold: bool) -> Font:
 	var kind := "bold" if is_bold else "regular"
+	if _is_android_runtime():
+		var android := _make_system_ui_font(is_bold)
+		print(
+			"font: %s <- Android SystemFont %s"
+			% [kind, str(ANDROID_SYSTEM_FONT_NAMES)]
+		)
+		return android
 	var candidates: Array[String] = []
 	candidates.append(WINDOWS_FONT_BOLD if is_bold else WINDOWS_FONT_REGULAR)
 	if not data_root.is_empty():
@@ -2836,7 +2852,8 @@ func _load_font(is_bold: bool) -> Font:
 
 func _make_system_ui_font(is_bold: bool) -> Font:
 	var system := SystemFont.new()
-	system.font_names = PackedStringArray(SYSTEM_FONT_NAMES)
+	var names := ANDROID_SYSTEM_FONT_NAMES if _is_android_runtime() else SYSTEM_FONT_NAMES
+	system.font_names = PackedStringArray(names)
 	system.font_weight = 700 if is_bold else 400
 	system.allow_system_fallback = true
 	return system
@@ -2845,9 +2862,10 @@ func _make_system_ui_font(is_bold: bool) -> Font:
 ## Symbol-only face used through `Font.fallbacks`.  It only contributes glyphs the
 ## primary face lacks (U+266A in Microsoft YaHei), so its metrics do not replace
 ## the primary face's line metrics.
-func _make_symbol_font() -> Font:
+func _make_symbol_font(is_bold: bool) -> Font:
 	var symbol := SystemFont.new()
 	symbol.font_names = PackedStringArray(SYMBOL_FONT_NAMES)
+	symbol.font_weight = 700 if is_bold else 400
 	symbol.allow_system_fallback = true
 	return symbol
 

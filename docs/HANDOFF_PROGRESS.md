@@ -2032,3 +2032,61 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     已有 `Save/` 不会被覆盖。`media.pak` 仍为 733 文件 / 113,002,637 B，
     容器 113,039,230 B。
   * **状态**：已提交并推送 `3c7115e`；Android 包已按内容哈希版本重打。
+
+* 2026-11-19（强制演出时服装层 pattern 闪烁修复）：
+  * **现象**：`v66` 达到 120 触发强制演出后，服装层（槽位 1015）在
+    两个 cell 之间按帧率反复切换。
+  * **根因**：`CE284` 的多个分支结尾对槽位 1015/1000 发送
+    `290 kind=10, action=0`。数据中的 action time 0 是 pattern 动画的
+    停止写法（`CE212/CE270/CE297/CE302` 同样用 0 结束 kind 8/9/10），
+    但引擎把它当成 1 帧间隔启动 pingpong，导致每帧在 pattern 1/2 之间
+    翻转。一次性探针在 120 帧内记录到 118 次切换。
+  * **修复**：`PictureScreen::effect()` 对 kind 8/9/10 的
+    `duration <= 0` 改为清除 `picture.pattern`，回到 `150` 指定的基础
+    cell；非零时长仍按原语义启动 once/loop/pingpong。
+  * **测试**：`cargo test -q -p wolf-game --lib` 375 passed；新增
+    `a_zero_action_time_stops_a_pattern_animation` 与
+    `forced_ejaculation_does_not_alternate_the_clothing_pattern_every_frame`
+    通过；`m3_ui_screens` 14 passed；`tools/smoke-godot.sh` 全过。
+    `m3_night_interaction_e2e` / `m4_night_gaps` 的其余失败仍是
+    `work/Data/Save` 夹具漂移（BAD 比例、v66=100 被旧存档状态影响），
+    与本轮 pattern 改动无关。
+  * **产物**：Android APK
+    `work/out/dist/android/0.1.0/ImoutoLife-0.1.0-arm64.apk`
+    **152,234,688 B**，SHA-256
+    `a06cae55dbc8f72d95ff70fa1065276627c9a7649c44146b65b315223c6819a0`；
+    APK 内 `lib/arm64-v8a/libwolf_gdext.so` SHA-256
+    `68f64147c2f1a92e52550973607d3f69cc76c22e0aaa071fd42fa52e4014675b`，
+    debug 签名，`verify-apk` 通过。
+  * **状态**：随本轮提交推送。
+
+* 2026-11-19（Android 系统字体、单行折行与 APK 字体排除）：
+  * **Android 字体**：`GameView.gd` 在 Android 上跳过
+    `C:/Windows/Fonts/...` 与 `BUNDLED_FONT_NAMES`，直接使用系统
+    `Noto Sans CJK SC` / `Source Han Sans SC` / `Noto Sans SC` /
+    `sans-serif`；Bold/Regular 分别设置 700/400，符号 fallback 同步
+    对应字重，避免个别简体字回退成细体或日文字形。
+  * **Rust 测宽**：`wolf-gdext::install_font_metrics()` 在 Android 上
+    优先读取 `/system/fonts/NotoSansCJK-Regular.ttc` 等系统 CJK 字体；
+    全部不可用时保留 `font_metrics=None`，走全角 1.0 em / 半角 0.5 em
+    的稳定估算，不再读取缺字的原版日文 TTF。
+  * **禁止二次折行**：`WolfText.gd::_shape()` 默认对 Rust 已排好的单行
+    `TextQuad` 使用 `TextParagraph.width=-1`，只有错误弹窗显式
+    `wrap=true`。这消除了数据界面中 Godot 再折一行、覆盖下一行文字的
+    堆叠问题。
+  * **Android 打包排除字体**：`tools/package/android_data.py` 新增
+    Android 专用排除集，暂存阶段跳过
+    `◆GenJyuuGothicX-P-Bold.ttf` 与
+    `07やさしさゴシックボールド.ttf`；`verify-apk` 拒绝 APK assets/PCK
+    中残留的 `.ttf`、`.ttf.blob`，并拒绝仍列出这些字体的旧 manifest。
+    公共 release manifest 和 Windows 包不受影响。
+  * **验证**：`python -m py_compile tools/package/android_data.py` 通过；
+    临时 staging 得到 16 个 payload 文件 / 116,545,566 B，
+    `font_entries=[]`、`font_blobs=[]`，较排除前少 11,575,152 B
+    （当前 manifest 只包含 `◆GenJyuuGothicX-P-Bold.ttf`；另一个字体
+    原本就不在 manifest 中，但运行时和校验器同样禁止）；
+    伪造含 `◆GenJyuuGothicX-P-Bold.ttf.blob` 的 APK 被
+    `verify-apk` 正确拒绝。`cargo check -q -p wolf-gdext`、
+    `bash tools/build-android.sh --check-only` 与
+    `bash tools/smoke-godot.sh` 均通过。未导出 APK，未打包。
+  * **状态**：随本轮提交推送。

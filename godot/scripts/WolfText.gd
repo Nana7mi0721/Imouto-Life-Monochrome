@@ -182,13 +182,31 @@ static func line_spacing(font: Font, size: float) -> float:
 ## The key assumes the caller's two faces are the ones GameView loads (bold for
 ## weight >= 600, regular otherwise); that is the only pair any caller passes.
 static func _shape(
-	text: String, font: Font, px: int, width: float, spacing: float, bold: bool
+	text: String,
+	font: Font,
+	px: int,
+	width: float,
+	spacing: float,
+	bold: bool,
+	allow_wrap: bool = false
 ) -> TextParagraph:
-	var key := ("b|" if bold else "r|") + str(px) + "|" + str(width) + "|" + text
+	var key := (
+		("b|" if bold else "r|")
+		+ str(px)
+		+ "|"
+		+ ("w" + str(width) if allow_wrap else "n")
+		+ "|"
+		+ text
+	)
 	if _paragraph_cache.has(key):
 		return _paragraph_cache[key]
 	var paragraph := TextParagraph.new()
-	paragraph.width = width
+	if allow_wrap:
+		paragraph.width = width
+	else:
+		# Every TextQuad is already a single line laid out by Rust.  Letting
+		# TextParagraph wrap it again paints a second line over the next run.
+		paragraph.width = -1.0
 	paragraph.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	paragraph.line_spacing = spacing
 	paragraph.add_string(text, font, px)
@@ -227,6 +245,7 @@ static func draw_text(
 
 	var px := maxi(1, int(round(size)))
 	var bold := int(item.get("weight", 700)) >= 600
+	var allow_wrap := bool(item.get("wrap", false))
 	# TextParagraph hands the font's whole RID chain (including `Font.fallbacks`)
 	# to the shaper, so a character the primary face lacks -- U+266A in Microsoft
 	# YaHei -- is shaped from the symbol fallback without splitting the string.
@@ -238,7 +257,8 @@ static func draw_text(
 		px,
 		rect.size.x + WIDTH_SLACK_PX,
 		line_spacing(font, size),
-		bold
+		bold,
+		allow_wrap
 	)
 
 	# Rust rounds the item origin; Godot truncates it, so round explicitly.

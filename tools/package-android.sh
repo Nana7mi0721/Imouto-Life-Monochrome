@@ -13,7 +13,7 @@
 #   2. Build libwolf_gdext.so (arm64-v8a) via tools/build-android.sh (unless
 #      --skip-build) and ensure target/release/media-pack.exe is built.
 #   3. Pack media assets into work/out/android/media.pak.
-#   4. Stage plaintext data + media.pak + clean System.sav +
+#   4. Stage plaintext data (without the retail Japanese font) + media.pak + clean System.sav +
 #      android_data_manifest.json into godot/android_data/ (always cleaned up on
 #      EXIT via trap so Windows packaging is never polluted).
 #   5. Export APK using Godot prebuilt templates (use_gradle_build=false; no
@@ -55,6 +55,10 @@ MEDIA_PREFIXES=(
     "CharaChip/"
     "SystemFile/"
     "BalloonBase_CafeLatte/"
+)
+ANDROID_EXCLUDED_FONTS=(
+    "◆GenJyuuGothicX-P-Bold.ttf"
+    "07やさしさゴシックボールド.ttf"
 )
 
 usage() {
@@ -461,8 +465,16 @@ if [ "$DRY_RUN" -eq 1 ]; then
         PACK_PREFIX_SUMMARY="${PACK_PREFIX_SUMMARY}${PACK_PREFIX_SUMMARY:+, }$prefix"
         RELEASE_PLAN_ARGS+=(--exclude-prefix "$prefix")
     done
+    for font in "${ANDROID_EXCLUDED_FONTS[@]}"; do
+        if grep -Fqx -- "$font" "$MANIFEST"; then
+            RELEASE_PLAN_ARGS+=(--exclude-file "$font")
+        fi
+    done
     echo "==> media pack: android_data/media.pak (staged temporarily in godot/android_data/)"
     echo "    include prefixes: $PACK_PREFIX_SUMMARY"
+    echo "    Android staging also excludes the retail Japanese fonts:"
+    echo "      ◆GenJyuuGothicX-P-Bold.ttf"
+    echo "      07やさしさゴシックボールド.ttf"
     python "$RELEASE_DATA_TOOL" "${RELEASE_PLAN_ARGS[@]}"
     echo "    would create media.pak: $MEDIA_PAK"
     echo "    would stage temporarily: $STAGE_DATA_DIR (auto-cleaned on EXIT)"
@@ -717,8 +729,9 @@ sed 's/$/\r/' > "$OUT_DIR/README_ANDROID.txt" <<EOF
        adb install -r "$APK_NAME"
 
 【首次启动说明】
-  - 游戏资源（media.pak、BasicData、MapData、字体及初始 System.sav）
+  - 游戏资源（media.pak、BasicData、MapData 及初始 System.sav）
     已打包进 APK，首次启动时会自动释放到本地应用数据目录，可能需要数秒。
+  - 界面文字使用设备系统自带的简体中文字体，不随 APK 携带原版日文字体。
   - 本 APK 不申请网络权限，所有存档均保存在设备本地。
 
 【签名说明】

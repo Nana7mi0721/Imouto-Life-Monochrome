@@ -67,6 +67,13 @@ work/out/dist/<version>/
 其它 `*.ttf/otf/ttc`。Windows 通常自带 `msyhbd.ttc`；缺失时回退到数据目录/安装目录内
 附带字体。发布包不额外内嵌字体。
 
+Android 不读取上述 Windows 或原版日文字体，而是使用设备系统的
+`Noto Sans CJK SC` / `Source Han Sans SC` / `sans-serif`，并保持
+Bold/Regular 两套字重。`tools/package-android.sh` 的 APK 数据暂存会排除
+原版 `◆GenJyuuGothicX-P-Bold.ttf` 与 `07やさしさゴシックボールド.ttf`；
+`android_data.py verify-apk` 也会拒绝 `.ttf`、`.ttf.blob` 或旧 manifest
+中残留的这两个文件。公共 release manifest 与 Windows 发行包不受影响。
+
 ## 5. 验收（本任务执行记录）
 
 ```bash
