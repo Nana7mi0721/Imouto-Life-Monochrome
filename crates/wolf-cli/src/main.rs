@@ -740,7 +740,7 @@ fn print_help() {
     );
     println!("    --hotkeys <FILE>  Rebind the simulator function keys from a UTF-8 config");
     println!("                      file (action = key lines); omitted actions keep defaults.");
-    println!("                      See docs/M7_HOTKEYS.md. The in-game keys are unaffected.");
+    println!("                      See docs/milestones/M7_HOTKEYS.md. The in-game keys are unaffected.");
     println!("    --translation <FILE>  Replace exact message/choice strings using a UTF-8 TSV");
     println!("                      catalog (original<TAB>translation; # comments); works in play/capture.");
     println!("    --mod <DIR>       Data overlay root mirroring the data tree (repeatable; later");

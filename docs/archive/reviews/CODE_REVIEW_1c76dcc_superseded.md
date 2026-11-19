@@ -1,6 +1,6 @@
 # 《妹！生活 ～単色～》全量静态代码审查与优化建议报告（基线 + `1c76dcc` 修复包）
 
-> **归档说明（2026-11-18）**：本文为Gemini 全量静态代码审查 `1c76dcc` 的原始报告，内容已被 [`docs/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`](../../GEMINI_REVIEW_1c76dcc_FIX_REPORT.md) 与 [`docs/reviews/CODE_REVIEW_4ROUND.md`](../../reviews/CODE_REVIEW_4ROUND.md) 取代，
+> **归档说明（2026-11-18）**：本文为Gemini 全量静态代码审查 `1c76dcc` 的原始报告，内容已被 [`docs/reviews/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`](../../reviews/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md) 与 [`docs/reviews/CODE_REVIEW_4ROUND.md`](../../reviews/CODE_REVIEW_4ROUND.md) 取代，
 > 仅作证据链追溯，**不再代表当前工程事实**。文中行号、计数与结论可能已过时，
 > 引用前请先核对现行文档。
 

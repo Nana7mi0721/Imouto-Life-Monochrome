@@ -1,6 +1,6 @@
 # 《妹！生活 ～単色～》T12 收口与实机截图复核报告
 
-> **归档说明（2026-11-18）**：本文为T12 收口与实机截图复核报告，内容已被 [`docs/AUDIT_REBUILD_FIX_REPORT.md`](../AUDIT_REBUILD_FIX_REPORT.md) 与 [`docs/LIVE_PLAY_FIX_REPORT.md`](../LIVE_PLAY_FIX_REPORT.md) 取代，
+> **归档说明（2026-11-18）**：本文为T12 收口与实机截图复核报告，内容已被 [`docs/reviews/AUDIT_REBUILD_FIX_REPORT.md`](../reviews/AUDIT_REBUILD_FIX_REPORT.md) 与 [`docs/reviews/LIVE_PLAY_FIX_REPORT.md`](../reviews/LIVE_PLAY_FIX_REPORT.md) 取代，
 > 仅作证据链追溯，**不再代表当前工程事实**。文中行号、计数与结论可能已过时，
 > 引用前请先核对现行文档。
 
@@ -206,7 +206,7 @@
 * 本报告：`docs/ROUND_T12_AND_SCREENSHOT_FIX_REPORT.md`
 * 修复包（最终版）：`work/out/dist/ImoutoLife_fix_bundle_7eb2395_final.zip`（312,832 B，SHA-256 `815D805D23D15A83EA262C734F4D6BC6043E46D300479678903C6378E0FFDBF5`；云端 `https://aka.doubaocdn.com/s/TJUzxGs6sB`）
 * 证据：`work/out/ev0_newgame.tsv`、`work/out/prologue_fixed360.png`、`work/out/all_strings.tsv`、`work/out/name360.png`、`work/out/boot_new_*.png`
-* 参考：`docs/HANDOFF_T12_PATCH_AND_LEDGER.md`、`docs/AUDIT_REBUILD_FIX_REPORT.md`、`docs/Full Code Review 1c76dcc.md`
+* 参考：`docs/HANDOFF_T12_PATCH_AND_LEDGER.md`、`docs/reviews/AUDIT_REBUILD_FIX_REPORT.md`、`docs/Full Code Review 1c76dcc.md`
 
 ## 6. 提交与推送状态
 

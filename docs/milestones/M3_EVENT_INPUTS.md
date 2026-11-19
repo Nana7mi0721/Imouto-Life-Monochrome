@@ -1,6 +1,6 @@
 # M3-AK 自有事件真实输入可达性审计（task-41）
 
-本文件由 `crates/wolf-game/tests/m3_event_inputs.rs` 的实测输出生成，记录本作**自有**公共事件 CE212..=CE303（共 92 个）在**真实按键注入**下的可达性。`docs/M3_EVENT_MAP.md`（task-11）只验证事件能启动、跑帧、warnings==0；本审计进一步用输入驱动，看事件能否真的推进/结束，或如实记录它在等什么输入。
+本文件由 `crates/wolf-game/tests/m3_event_inputs.rs` 的实测输出生成，记录本作**自有**公共事件 CE212..=CE303（共 92 个）在**真实按键注入**下的可达性。`docs/milestones/M3_EVENT_MAP.md`（task-11）只验证事件能启动、跑帧、warnings==0；本审计进一步用输入驱动，看事件能否真的推进/结束，或如实记录它在等什么输入。
 
 ## 方法
 

@@ -316,5 +316,5 @@ Godot_v4.7.2-stable_win64_console.exe --path godot -- \
   配置文件要提交。
 - **数据根不要进工程**：`work/Data` 176 MB，继续 gitignore；玩家侧后续用外部
   `Data` 目录或导出包内 `Data/`。
-- 本文件只记录迁移层；WOLF 语义仍以 `docs/HANDOFF_M0.md`、`docs/ENGINE_BEHAVIOR.md`
+- 本文件只记录迁移层；WOLF 语义仍以 `docs/HANDOFF_M0.md`、`docs/engine/ENGINE_BEHAVIOR.md`
   和 `docs/BASELINE.json` 为准。

@@ -1,6 +1,6 @@
 //! M3-F: byte fidelity of text-picture payloads across load -> save.
 //!
-//! `docs/M3_MANUAL_ALIGNMENT.md` gap #9 used to record that a text picture's `md1`
+//! `docs/milestones/M3_MANUAL_ALIGNMENT.md` gap #9 used to record that a text picture's `md1`
 //! stream was normalized by decode -> encode: the canonical encoder only knows the
 //! `\E` / `\f[n]` / `\c[n]` spellings, while the shipped saves also contain a
 //! `01 02 20` control escape and a second font-size form (`01 05 1d ..`). The loader

@@ -1,7 +1,7 @@
 # tools/re/ghidra — Ghidra 12.2 headless decompile helpers
 
 用于对原版 `Game.exe`（WOLF RPG Editor ver2.22, PE32/i386, DxLib 静态链接）做批量反编译、
-按字符串锚点定位引擎常量实现。产出的是 Ghidra 伪 C，用于核对 `docs/ENGINE_BEHAVIOR.md` §3
+按字符串锚点定位引擎常量实现。产出的是 Ghidra 伪 C，用于核对 `docs/engine/ENGINE_BEHAVIOR.md` §3
 的引擎常量，不做自动改写。
 
 ## 环境前提

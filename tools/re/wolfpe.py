@@ -3,7 +3,7 @@
 
 Purpose: reproducible, engine-free reconnaissance of the WOLF RPG Editor runtime
 binary (PE32, x86, statically linked DxLib) used to verify engine-behaviour
-constants documented in docs/ENGINE_BEHAVIOR.md.
+constants documented in docs/engine/ENGINE_BEHAVIOR.md.
 
 Requires: pefile, capstone  (both present in the local python env).
 

@@ -4,7 +4,7 @@
 //! bounded number of frames, and its externally visible behaviour is recorded: whether it
 //! started, how many frames it ran, whether it finished, the messages / choices / pictures /
 //! sounds it produced, and any interpreter warnings or unmodelled diagnostics. The companion
-//! document docs/M3_EVENT_MAP.md is generated from this test's output.
+//! document docs/milestones/M3_EVENT_MAP.md is generated from this test's output.
 //!
 //! Missing data (WOLF_DATA_ROOT) or an unreadable save causes the whole test to skip, matching
 //! the rest of the suite.
@@ -175,7 +175,7 @@ fn selected_ids() -> Vec<u32> {
 /// Events that cannot be smoke-run standalone and are documented instead of executed.
 /// CE212 is a parameterised helper: it is invoked by other events with arguments in its self
 /// variables, and with the default self=0 its opcode-170 loop never satisfies the opcode-112
-/// exit comparison (self1600006 / self1600008), so it spins forever. See docs/M3_EVENT_MAP.md.
+/// exit comparison (self1600006 / self1600008), so it spins forever. See docs/milestones/M3_EVENT_MAP.md.
 const CONTEXT_DEPENDENT: &[(u32, &str)] = &[(
     212,
     "parameterised bubble-text helper; standalone self=0 loops forever at opcode170",

@@ -1,6 +1,6 @@
 //! M4 v8 semantics: normal variable 8 is the night time limit, not action points.
 //!
-//! Static audit of `BasicData/CommonEvent.dat`. See docs/M4_V8_AUDIT.md.
+//! Static audit of `BasicData/CommonEvent.dat`. See docs/milestones/M4_V8_AUDIT.md.
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 

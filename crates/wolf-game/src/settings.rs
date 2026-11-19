@@ -24,7 +24,7 @@
 //! Out of scope here: "key position save", "key repeat" and "combat mashing" are
 //! CDataBase type 18 rows 56..58 (ス script reads them through opcode 250 at CE132
 //! start-up). They live in the variable database, which now round-trips through every
-//! save (docs/M3_VARDB_BUG.md), not in `System.sav`.
+//! save (docs/milestones/M3_VARDB_BUG.md), not in `System.sav`.
 
 use wolf_save::SavePart2;
 

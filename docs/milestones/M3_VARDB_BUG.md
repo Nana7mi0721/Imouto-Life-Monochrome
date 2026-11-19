@@ -100,5 +100,5 @@ assert!(save.vardb.types.is_empty());            // 当前 bug：CDataBase 一�
 
 - 补全的字符串单元格按引擎既有约定写 **UTF-8**（`VariableDatabase::set_text`），
   与零售存档的 GBK/CP932 字节不兼容：Rust 引擎自洽，但把这样的存档交给零售
-  Game.exe 读取会乱码。M4 需决定写盘编码（见 docs/M4_PARITY.md §3）。
+  Game.exe 读取会乱码。M4 需决定写盘编码（见 docs/milestones/M4_PARITY.md §3）。
 - System.sav 模板本身仍是空 vardb；补全发生在 `Game::new` 的克隆上，不改磁盘文件。

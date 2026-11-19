@@ -4,7 +4,7 @@
 不优化**：所有优化候选都只列在 §6，尚未落代码。
 
 配套：测试入口 `crates/wolf-game/tests/m3_perf_baseline.rs`；计划见
-`docs/M4_PARITY.md`；数据/环境见 `docs/HANDOFF_M0.md`。
+`docs/milestones/M4_PARITY.md`；数据/环境见 `docs/HANDOFF_M0.md`。
 
 ## 1. 目标与边界
 

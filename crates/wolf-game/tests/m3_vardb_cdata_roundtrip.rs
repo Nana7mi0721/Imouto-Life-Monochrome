@@ -2,7 +2,7 @@
 //!
 //! Game::new uses Save/System.sav as its save template. This build's System.sav carries
 //! an empty variable database, so Game::new seeds the CDataBase schema from the static
-//! table (docs/M3_VARDB_BUG.md). These tests pin that fix: a new game must be able to
+//! table (docs/milestones/M3_VARDB_BUG.md). These tests pin that fix: a new game must be able to
 //! save every 可変DB cell, and a runtime edit must survive save_to -> load_save.
 //!
 //! Tests are data-driven: when WOLF_DATA_ROOT is missing or unreadable, they print a

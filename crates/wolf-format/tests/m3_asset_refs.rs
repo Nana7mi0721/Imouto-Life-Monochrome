@@ -19,7 +19,7 @@
 //! maps, the default "original title A", the ぴぽや icon demo). Those assets
 //! were never packed into `Data.wolf`. They are listed in
 //! [`KNOWN_UNSHIPPED`] so the test stays green while still failing on any
-//! *new* missing reference. See docs/M3_ASSET_REFS.md for the provenance.
+//! *new* missing reference. See docs/milestones/M3_ASSET_REFS.md for the provenance.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -29,7 +29,7 @@ const AUDIO_EXTS: &[&str] = &["mp3", "ogg", "wav"];
 
 /// References that appear in the shipped scripts but whose files are absent
 /// from `Data.wolf`. Every one is a leftover of WOLF's built-in sample project
-/// (see docs/M3_ASSET_REFS.md §4); they never load during normal play.
+/// (see docs/milestones/M3_ASSET_REFS.md §4); they never load during normal play.
 const KNOWN_UNSHIPPED: &[&str] = &[
     // CE42 "オリジナルタイトル画面Ａ" — the sample title screen.
     "Picture/title2.jpg",

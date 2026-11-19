@@ -1,6 +1,6 @@
 //! M3-F: whole-file byte fidelity of `Game::load_save -> Game::save_to`.
 //!
-//! `docs/M3_RUNTIME.md` §6 used to record a residual 1,863 bytes (SaveData01) and
+//! `docs/milestones/M3_RUNTIME.md` §6 used to record a residual 1,863 bytes (SaveData01) and
 //! 1,684 bytes (SaveData02) of difference after the vardb text fix. The cause was
 //! `picture_to_record`: it rebuilt every `SavePart5_1` from the live screen, and a
 //! `Picture` only models the geometry the renderer uses. A retail record also carries

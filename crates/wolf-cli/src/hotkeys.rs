@@ -18,7 +18,7 @@
 //! A plain UTF-8 text file of `action = key` lines. Blank lines and lines that
 //! begin with `#` or `;` are ignored; action names and key names are matched
 //! case-insensitively. A file may set any subset of the actions; anything it
-//! omits keeps its default binding. See `docs/M7_HOTKEYS.md` for a full example.
+//! omits keeps its default binding. See `docs/milestones/M7_HOTKEYS.md` for a full example.
 //!
 //! If a line names an unknown action or an unknown key, the parser records a
 //! clear error and *leaves that action's default in place* rather than dropping

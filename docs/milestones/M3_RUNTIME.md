@@ -4,9 +4,9 @@
 350 个公共事件与 5 张注册地图都能在 headless 解释器里被真实调度、真实读写变量/图片/
 声音，并把玩家可见的日常循环、菜单、存档、设置、夜间互动与结局都钉进回归测试。
 
-配套文档：`docs/HANDOFF_M0.md`（数据/世代/环境）、`docs/M3_EVENT_MAP.md`（CE212..303
-冒烟）、`docs/M3_MAP_EVENTS.md`、`docs/M3_STRING_DECODE.md`、`docs/M3_VARDB_BUG.md`、
-`docs/M3_ASSET_REFS.md`、`docs/M3_MANUAL_ALIGNMENT.md`（说明书核对）。
+配套文档：`docs/HANDOFF_M0.md`（数据/世代/环境）、`docs/milestones/M3_EVENT_MAP.md`（CE212..303
+冒烟）、`docs/milestones/M3_MAP_EVENTS.md`、`docs/milestones/M3_STRING_DECODE.md`、`docs/milestones/M3_VARDB_BUG.md`、
+`docs/milestones/M3_ASSET_REFS.md`、`docs/milestones/M3_MANUAL_ALIGNMENT.md`（说明书核对）。
 
 ## 1. 验收基线（M3 完成条件）
 
@@ -78,13 +78,13 @@ WOLF_DATA_ROOT=work/Data ./target/debug/wolf-cli.exe verify --wolf <安装目录
 7. **290 特效诊断**：所有本作出现过的 kind 都已实现；剩余诊断明确区分「无活动图片
    （真实 no-op）」与「未建模」。
 8. **新游戏 vardb**：`Game::new` / `save_to` 从静态 CDataBase 结构补全空模板，
-   新游戏存档不再丢失全部 CData 单元格（`docs/M3_VARDB_BUG.md`）。
+   新游戏存档不再丢失全部 CData 单元格（`docs/milestones/M3_VARDB_BUG.md`）。
 9. **F12 重启**：`wolf-cli play` 支持 F12 重新 boot（F10 仍为退出）。
 
 ## 4. 已知缺口 / M4 承接
 
 - Config.exe 等价设置界面：Game 设置 API 已提供读写/应用/持久化；窗口内设置界面
-  与音量滑条 UI 留给 M4（见 docs/M4_PARITY.md）。
+  与音量滑条 UI 留给 M4（见 docs/milestones/M4_PARITY.md）。
 - headless capture 已可用（wgpu 离屏初始化稳定，有超时保护）。字体发现已改为优先
   本作 `07やさしさゴシックボールド.ttf`（并可回退扫描 *.ttf/*.otf/*.ttc）；
   `capture --map` 黑屏根因是 SampleMapA ev0 开场把 `cg/blackscreen.jpg` 铺满屏，
@@ -121,7 +121,7 @@ WOLF_DATA_ROOT=work/Data ./target/debug/wolf-cli.exe verify --wolf <安装目录
   新增 `WOLF_RENDER_BACKEND`/`WOLF_RENDER_ADAPTER` 覆盖。7 条离屏渲染+回读测试
   约 3 s 通过。
 - **F12**：`play.rs` 新按下沿触发重建 Game 并 boot；单测覆盖键位判定。
-- **性能**：`m3_perf_baseline` 五场景 + 引擎地板（docs/M4_PERF.md）。Lead 已落地
+- **性能**：`m3_perf_baseline` 五场景 + 引擎地板（docs/milestones/M4_PERF.md）。Lead 已落地
   优化候选 1（`Assets` 记住内置 `<SHAPE>`/未命中名字，不再每帧走大小写目录扫描）：
   夜间互动 UI 从 0.525 降到 0.163 ms/帧（约 3.2x），picture_quads 0.328→0.026 ms。
 - **字体/地图截图**：`find_font` 原来只认姊妹作字体名，本作字体被跳过（截图无文字）。

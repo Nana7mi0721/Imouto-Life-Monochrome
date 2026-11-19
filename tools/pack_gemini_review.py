@@ -63,7 +63,7 @@ EXCLUDE_FILE_NAMES = {
     "wolf_gdext.dll",
 }
 EXCLUDE_REL_PATHS = {
-    "docs/攻略文档",      # 本地私有攻略素材（.gitignore）
+    "docs/wiki文档",      # 本地私有攻略素材（.gitignore）
     "tools/bin",
     "tools/cmake",
     "tools/ffmpeg",
@@ -300,7 +300,7 @@ BRIEF_TEMPLATE = """# 云端 Gemini 只读审查说明（Imouto! Life ~単色～
 2. `05_new_changes.zip`——**本轮新改动**（自 `{baseline}` 之后的全部补丁）。
 3. `01_source_code.zip` / `02_godot_frontend.zip`——完整代码。
 4. `03_docs.zip`——架构与交接文档（`docs/HANDOFF_M0.md` 是总纲，
-   `docs/TASKS_REMAINING_BUGS.md` 是当前任务清单）。
+   `docs/reviews/TASKS_REMAINING_BUGS.md` 是当前任务清单）。
 5. `06_review_reports.zip` / `07_bytecode_dumps.zip`——历史结论与数据证据。
 6. `08..10_*.zip`——原版实机截图与本轮重构问题截图（像素级比对证据）。
 
@@ -337,7 +337,7 @@ BRIEF_TEMPLATE = """# 云端 Gemini 只读审查说明（Imouto! Life ~単色～
    是否存在重复计算或状态不同步（原生鼠标光标隐藏/恢复的时机）。
 6. `godot/tests/verify_ui_and_interaction_fixes.gd` 与
    `godot/tests/verify_p0_fixes.gd` 的断言强度：是否真的能挡住回归。
-7. 已知未处理项（不要当成新缺陷重复报）：见 `docs/TASKS_REMAINING_BUGS.md`
+7. 已知未处理项（不要当成新缺陷重复报）：见 `docs/reviews/TASKS_REMAINING_BUGS.md`
    的"未处理"段与 `docs/HANDOFF_PROGRESS.md` 末尾条目。
 
 ## 输出要求

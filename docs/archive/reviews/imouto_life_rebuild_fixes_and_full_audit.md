@@ -1,6 +1,6 @@
 # 《妹！生活 ～単色～》重构问题截图纠因与全量代码审查报告
 
-> **归档说明（2026-11-18）**：本文为重构问题截图纠因与全量代码审查报告，内容已被 [`docs/AUDIT_REBUILD_FIX_REPORT.md`](../../AUDIT_REBUILD_FIX_REPORT.md) 取代，
+> **归档说明（2026-11-18）**：本文为重构问题截图纠因与全量代码审查报告，内容已被 [`docs/reviews/AUDIT_REBUILD_FIX_REPORT.md`](../../reviews/AUDIT_REBUILD_FIX_REPORT.md) 取代，
 > 仅作证据链追溯，**不再代表当前工程事实**。文中行号、计数与结论可能已过时，
 > 引用前请先核对现行文档。
 

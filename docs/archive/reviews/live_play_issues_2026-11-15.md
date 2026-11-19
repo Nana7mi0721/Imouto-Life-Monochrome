@@ -1,6 +1,6 @@
 # 《妹！生活 ～単色～》实机测试问题排查与 E/F 项修复报告
 
-> **归档说明（2026-11-18）**：本文为实机测试问题排查与 E/F 项修复报告，内容已被 [`docs/LIVE_PLAY_FIX_REPORT.md`](../../LIVE_PLAY_FIX_REPORT.md) 取代，
+> **归档说明（2026-11-18）**：本文为实机测试问题排查与 E/F 项修复报告，内容已被 [`docs/reviews/LIVE_PLAY_FIX_REPORT.md`](../../reviews/LIVE_PLAY_FIX_REPORT.md) 取代，
 > 仅作证据链追溯，**不再代表当前工程事实**。文中行号、计数与结论可能已过时，
 > 引用前请先核对现行文档。
 

@@ -1,4 +1,4 @@
-//! M4: the per-picture text layout cache (docs/M4_PERF.md candidate 3).
+//! M4: the per-picture text layout cache (docs/milestones/M4_PERF.md candidate 3).
 //!
 //! Game::text_quads used to lay every visible text picture out again on every
 //! frame. The cache keeps the last Vec<TextQuad> under a key that covers the

@@ -40,7 +40,7 @@ work/out/dist/<version>/
   checksums.txt          # 各文件 SHA-256，格式 "<hash>  <name>"（sha256sum -c 可用）
 ```
 
-这些文件全部位于 `work/` 下，天然被 git 忽略；`tools/**` 与 `docs/PACKAGING.md` 才是
+这些文件全部位于 `work/` 下，天然被 git 忽略；`tools/**` 与 `docs/release/PACKAGING.md` 才是
 需要检查/提交的源文件。
 
 ## 3. 数据根解析（启动器与 wolf-cli 的一致性）
@@ -89,7 +89,7 @@ ls -l work/out/dist/<version>/   # 期望：wolf-cli.exe README.txt Play-ImoutoL
 ## 6. 常见坑
 
 - `*.exe` 与 `work/` 都被 git 忽略，dist 产物不会误提交；提交前 `git status` 确认只含
-  `tools/package*`、`godot/export_presets.cfg` 与 `docs/PACKAGING.md`。
+  `tools/package*`、`godot/export_presets.cfg` 与 `docs/release/PACKAGING.md`。
 - 用 PowerShell 5.1 读 UTF-8 模板时务必显式按 UTF-8 读取（脚本已用
   `[System.IO.File]::ReadAllText(..., UTF8)`），否则中文 README 会乱码。
 - 启动器 `.cmd` 以无 BOM 写回（BOM 会破坏 `@echo off` 首行）；模板本身为 CRLF。

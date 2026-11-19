@@ -2,7 +2,7 @@
 
 任务：task-22（owner ver6）。交付物：
 - 测试：`crates/wolf-format/tests/m3_string_decode.rs`（4 个用例）
-- 本文档：`docs/M3_STRING_DECODE.md`
+- 本文档：`docs/milestones/M3_STRING_DECODE.md`
 
 本作是汉化版：绝大多数显示文本被替换成 GBK 字节，而引擎/模板文本仍是 CP932。所有 `t_str` 都经过
 `wolf_format::bytes::decode_wolf_str` 的 UTF-8 / CP932 / GBK 候选打分解码（M4 补：GBK「强壮」

@@ -101,7 +101,7 @@
 | Map031.mps | 1 | 1 | 0 | 0 | 0 |
 | 合计 | 390 | 317 | 48 | 24 | 1 |
 
-- 「公共 212–303」的 71 ended / 20 running + 1 spin 与 `docs/M3_EVENT_MAP.md`
+- 「公共 212–303」的 71 ended / 20 running + 1 spin 与 `docs/milestones/M3_EVENT_MAP.md`
   早先的冒烟结论（71 自然结束、20 常驻等待）逐条吻合。
 - 304–349 是模板残留空槽（1 帧结束、无标题），不是缺陷。
 

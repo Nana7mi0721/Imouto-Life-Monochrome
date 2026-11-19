@@ -1,6 +1,6 @@
 # LAYOUT_METRICS.md — 原版布局/缩放几何与仓内实现的逐项对照
 
-> 任务：docs/ENGINE_BEHAVIOR.md §3 清单里的 §3-1 / §3-2 / §3-6 / §3-7 / §3-8 / §3-9。
+> 任务：docs/engine/ENGINE_BEHAVIOR.md §3 清单里的 §3-1 / §3-2 / §3-6 / §3-7 / §3-8 / §3-9。
 > 方法：只读已有 Ghidra 12.2 全量反编译 dump（`work/out/re_all/all/*.c`，4375 函数）+
 > 只读解析游戏数据（`work/Data/BasicData/*.dat`）+ 仓内 Rust 源码。**不执行 Game.exe**。
 > 本次未新开 Ghidra 进程（已有 dump 足够覆盖本轮结论），因此没有项目锁风险。
@@ -149,7 +149,7 @@ op=121 ints=[9000002, 1600089, 10, 12544]    # Sys2 += self89 / 10
 
 - `trunc(rateY/10)` **是原版公式**（不是仓内臆造），A 级证据在 CE63 pc46。
 - 要改的是**上游 rate 的数值类型**（整数），不是这一项本身。
-- `docs/ENGINE_BEHAVIOR.md:66,73` 的「[公式推断]」可以升级为「已核对（数据侧）」。
+- `docs/engine/ENGINE_BEHAVIOR.md:66,73` 的「[公式推断]」可以升级为「已核对（数据侧）」。
 
 ---
 
@@ -190,7 +190,7 @@ FUN_0051f060((local_18 - P1(0x1c0))*s, ...);
 - **但 `choice.rs::CHOICE_LINE_SPACING PADDING=14` 在原版里找不到对应常量**：它是仓内为"选项文字不要贴边框"
   自定的内缩。原版选择面板的文字内缩**未取到**（见 §5 TODO）。所以现在只能说："3 px 是皮肤帧厚
   （对），14 px 是仓内猜测（无原版依据）"。
-- `docs/ENGINE_BEHAVIOR.md:34` 的「[未实测精确内边距]」应改成"引擎无 padding 常量；
+- `docs/engine/ENGINE_BEHAVIOR.md:34` 的「[未实测精确内边距]」应改成"引擎无 padding 常量；
   剩余未知量是**选择面板**的文字内缩，不是消息框"。
 
 ---

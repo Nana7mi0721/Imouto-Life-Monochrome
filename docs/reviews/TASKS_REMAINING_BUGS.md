@@ -1,7 +1,7 @@
 # 剩余缺陷修复任务编排与完成记录（2026-11-12）
 
 > 生成日期：2026-11-12
-> 审查来源：[reviews/CODE_REVIEW_4ROUND.md](reviews/CODE_REVIEW_4ROUND.md)（第一至四轮，BUG-25..48）
+> 审查来源：[reviews/CODE_REVIEW_4ROUND.md](CODE_REVIEW_4ROUND.md)（第一至四轮，BUG-25..48）
 > **执行结果：T0–T13 已完成（2026-11-12，最终 DLL 20:09 验收）**。T13 已完成玩法
 > 前端去瓦片、性能桥接清理、主要 UI/对话修复与旧编号复核；`saveui` 的 101 像素差异
 > 已归因为测试遗留的第四存档格，不是渲染回归。当前状态与验证数字见下方 §0；
@@ -22,7 +22,7 @@
   的数据根时，空槽文本分支 4/4 通过。`wolf-vm` 并行子协程测试已修正为保留子实例到
   断言时点，130 / 130 通过。
   > **这段是 11-13 的快照，不是当前状态**。现行测试状态见
-  > [HANDOFF_M0.md](HANDOFF_M0.md) §11.1；本文件 §1 起是历史编排快照。
+  > [HANDOFF_M0.md](../HANDOFF_M0.md) §11.1；本文件 §1 起是历史编排快照。
 - **真实数据（2026-11-13 复核）**：
   `WOLF_DATA_ROOT=<abs>/work/Data cargo test -q --workspace --no-fail-fast`
   只剩 3 个既有测试失败、分布在 2 个 target：两项姊妹作 `db` 期望差异

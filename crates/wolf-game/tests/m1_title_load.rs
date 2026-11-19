@@ -41,7 +41,7 @@ const MISSING_ZOOM_EVENT: &str =
 
 fn assert_no_unexpected_warnings(game: &Game) {
     // The retail project calls a zoom helper whose title is absent from
-    // CommonEvent.dat (docs/M3_EVENT_GRAPH.md section 6). Any other warning is fatal.
+    // CommonEvent.dat (docs/milestones/M3_EVENT_GRAPH.md section 6). Any other warning is fatal.
     let known = game
         .diagnostics
         .get(MISSING_ZOOM_EVENT)

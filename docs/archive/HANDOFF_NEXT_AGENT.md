@@ -302,7 +302,7 @@ Godot 窗口运行时不能覆盖 `godot/bin/wolf_gdext.dll`；先关窗口/编�
      - 固定模式 `2002` 的位置由 `290` shift 到 `(512,536)`，不需要角色坐标；
      - 名字牌问题的实际根因是 op112 保留 bit 24 类型标志，不在坐标系。
    - 保留“不要伪造坐标”的约束。
-3. `docs/OPCODE_122.md` 已补 op112 的双布局/比较模式：
+3. `docs/engine/OPCODE_122.md` 已补 op112 的双布局/比较模式：
    - 模式 1 = 不相等；
    - 字面量布局 vs 双变量布局；
    - `0x0100_0000` 变量类型标志。
@@ -354,7 +354,7 @@ du -sh . work work/Data target
 - [x] 默认 workspace exit 0；数据 workspace 无新增失败；verify PASS 64/1 SKIP。
 - [x] visual regression 5 passed；smoke-godot 退出 0；parity 600 帧 PASS。
 - [x] 所有临时调试打印已删除，`cargo fmt --all -- --check` 通过。
-- [x] `docs/HANDOFF_PROGRESS.md`、`docs/HANDOFF_M0.md` §11.1 与 `docs/OPCODE_122.md` 已更新。
+- [x] `docs/HANDOFF_PROGRESS.md`、`docs/HANDOFF_M0.md` §11.1 与 `docs/engine/OPCODE_122.md` 已更新。
 - [x] 已完成清理并记录 `du -sh .` = 7.5 GB。
 - [x] 工作区仍未 commit（除非用户另行指示）。
 

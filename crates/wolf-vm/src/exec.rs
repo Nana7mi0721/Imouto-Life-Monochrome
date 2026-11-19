@@ -478,7 +478,7 @@ pub enum DbValue {
 ///
 /// WOLF chooses between a slot and an explicit path by the *type* of the magic
 /// operand, not by its value: a string variable holds `Save/System.sav`, a
-/// numeric variable holds a slot number (docs/OPCODE_220_SAVE.md section 2.1).
+/// numeric variable holds a slot number (docs/engine/OPCODE_220_SAVE.md section 2.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SaveTarget {
     /// A numeric slot, one-based; the engine maps it to `Save/SaveDataNN.sav`.
@@ -3262,7 +3262,7 @@ fn execute(
             220..=222 => {
                 // The file operand is the one place where the magic *type*
                 // matters: a string variable holds an explicit path while a
-                // numeric variable holds a slot number (docs/OPCODE_220_SAVE.md
+                // numeric variable holds a slot number (docs/engine/OPCODE_220_SAVE.md
                 // section 2.1). All other operands stay raw where they are
                 // addresses (221 arg0, 221/222 arg2) and are evaluated where they
                 // are values (220 mode, 222 source, the trailing flag).
@@ -3287,7 +3287,7 @@ fn execute(
                     // literal save-bank address (9000029 = Sys29 play time) or a
                     // self variable that holds a computed database address such as
                     // 1_106_000_001 (CDataBase type 6, row 0, col 1). Evaluating it
-                    // here lets the host resolve both (docs/OPCODE_220_SAVE.md section 4).
+                    // here lets the host resolve both (docs/engine/OPCODE_220_SAVE.md section 4).
                     address: if opcode == 220 {
                         0
                     } else {

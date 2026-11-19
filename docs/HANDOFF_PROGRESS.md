@@ -41,7 +41,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **夜间菜单与就寝**（`crates/wolf-game/tests/m2_daily_loop.rs`，4 tests）：读档 1600 帧 → HUD 含 19:30/周一/行动力/持有金钱/5466円，`vars4=19 vars5=30`；`start_event(245)` 六项 `["开始交流 ","泡茶 ","泡澡 ","网上购物 ","今天就这样睡吧 ","0"]`，anchor(512,230)；选第 5 项先弹「差不多该睡了吧…？」→ `["是 ","否 "]`；CE251 必须用干净 `Game::new` 状态（读档 19:30 直接进 CE251 只吐「…………」停 00:00 等待分支），400 帧首条「早上好，哥哥！」，messages=9/pictures=74/sounds=6，时间 00:00→08:30，末尾当日行动菜单含「睡觉」。
   * **HUD 公共事件**（`crates/wolf-game/tests/m2_hud_events.rs`，4 tests）：每个事件 `start_event` 前 `game.screen.clear()` 才能归因（读档 HUD 已占 200/220/230/240/250/251/320/2300+，负槽 -5/-4 背景忽略）。CE242 状态面板正向图恰 [220,230,240,250,251]；CE243 时刻 [200,210]；CE244 行动力 [110] 带符号 +N；CE256 日中菜单无自带图，消息「那么，该怎么做呢。」+ 时钟前进（其 choice 在第 6/7、14/15 帧短暂出现并被 auto_choice_delay=2 自动回答）。
   * **验收**：默认 `cargo test -q --workspace` **exit 0**（39 target 全 ok）；`WOLF_DATA_ROOT=work/Data cargo test -q -p wolf-game --test m2_input|m2_daily_loop|m2_hud_events` = **5/4/4 passed**；`--lib` **229 passed**；`wolf-cli verify` **PASS 64 / 1 SKIP(dxarchive.header)**。
-  * **文档**：新增 `docs/M2_SLICE.md`（范围、读档状态、CE245/CE251/CE242/CE243/CE244/CE256 实测、鼠标契约与坑、验收命令）；新增仓库根 `AGENTS.md`（子代理并行、写作用域、环境/数据/提交/内容安全约定）。清理 M2 临时探针（dayprobe*.rs、cmddump/mapsum/refs examples），不提交。
+  * **文档**：新增 `docs/milestones/M2_SLICE.md`（范围、读档状态、CE245/CE251/CE242/CE243/CE244/CE256 实测、鼠标契约与坑、验收命令）；新增仓库根 `AGENTS.md`（子代理并行、写作用域、环境/数据/提交/内容安全约定）。清理 M2 临时探针（dayprobe*.rs、cmddump/mapsum/refs examples），不提交。
   * **已知非 M2 遗留**：`WOLF_DATA_ROOT=work/Data` 跑整个 `-p wolf-game` 时，姊妹作 `m6_night_menu` 等 M6 用例仍失败（本作 day-loop 语义不同，M6 按本作重写）；默认无 env 时按设计跳过。headless capture 的 wgpu 离屏初始化仍卡死（渲染阶段处理）。
 * 2026-10-31（M3 完整运行时，进行中）：
   * **测试基架**：按本作数据重写 m3 系列，不复用姊妹作 M6 期望值。已完成并通过的测试文件与用例：
@@ -52,9 +52,9 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     * `crates/wolf-game/tests/m3_visual_text.rs`（7）：CE264 消息窗口 13 pictures（12001 WindowBase_amania、text 12010=1/12014 HP&50/12018 SP&20）、CE230 打字、wrap、CE231-235 惰性、CE265-271；对话走第三方吹き出し插件，真值看 picture/text_quads，不看 game.messages；卧室常驻实例 [48,271,63,98]。
     * `crates/wolf-game/tests/m3_audio_settings.rs`（4）：BGM 27 音频+1 .url、SE214；代表解码；CE297/CE251 SoundCmd resolve；System.sav version0x80/7段/part2 vars72_74=[100,100,100]/RGBA[160,68,75,200]/按键 vars64_69。
     * `crates/wolf-game/tests/m3_menu_screens.rs`（3）：CE131 存档网格（槽1..4/「没有数据」/无 choice）、CE132 システム設定（帮助行随 DOWN 变）、CE14 dispatcher [14,131]；全程不按保存、Save 指纹不变。
-    * `crates/wolf-game/tests/m3_event_smoke.rs`（1，表驱动，12.25s）＋ `docs/M3_EVENT_MAP.md`：CE212..303 共 92 个，91 独立冒烟（started/frames>0/warnings0；71 自然结束、20 常驻等待），CE212 标 context-dependent（opcode170 循环+opcode112 比 self1600006/1600008，带参气泡辅助）。
-    * `crates/wolf-game/tests/m3_map_events.rs`（4）＋ `docs/M3_MAP_EVENTS.md`：5 注册图尺寸/事件/页/槽；读档上下文 active_page_index 零 panic；SampleMapA 35 事件 120 帧隔离冒烟 warnings0；新游戏 Map003→SampleMapA teleport。坑：v7=10000 非 HUD 5466（金钱走 DB）；start_map_event_by_name 会带起 event0 开场白污染，改用 start_map_event(&map,id)；Map024/031 第0层填充 id100000 但 has_tile_data=true。
-    * `crates/wolf-format/tests/m3_asset_refs.rs`（2）＋ `docs/M3_ASSET_REFS.md`：扫描 1,364 文件、图片引用 2433/去重661、音频161/去重34；音频 0 缺失；8 个未解析图片引用全部为 WOLF 出厂示例残留/放错目录，已用 KNOWN_UNSHIPPED 白名单放行并据实记录。
+    * `crates/wolf-game/tests/m3_event_smoke.rs`（1，表驱动，12.25s）＋ `docs/milestones/M3_EVENT_MAP.md`：CE212..303 共 92 个，91 独立冒烟（started/frames>0/warnings0；71 自然结束、20 常驻等待），CE212 标 context-dependent（opcode170 循环+opcode112 比 self1600006/1600008，带参气泡辅助）。
+    * `crates/wolf-game/tests/m3_map_events.rs`（4）＋ `docs/milestones/M3_MAP_EVENTS.md`：5 注册图尺寸/事件/页/槽；读档上下文 active_page_index 零 panic；SampleMapA 35 事件 120 帧隔离冒烟 warnings0；新游戏 Map003→SampleMapA teleport。坑：v7=10000 非 HUD 5466（金钱走 DB）；start_map_event_by_name 会带起 event0 开场白污染，改用 start_map_event(&map,id)；Map024/031 第0层填充 id100000 但 has_tile_data=true。
+    * `crates/wolf-format/tests/m3_asset_refs.rs`（2）＋ `docs/milestones/M3_ASSET_REFS.md`：扫描 1,364 文件、图片引用 2433/去重661、音频161/去重34；音频 0 缺失；8 个未解析图片引用全部为 WOLF 出厂示例残留/放错目录，已用 KNOWN_UNSHIPPED 白名单放行并据实记录。
     * `crates/wolf-game/tests/m3_mouse_menu.rs`（8）：choice_anchor=(512,230)、font_px=20、行距=LINE_HEIGHT(30)；逐行中心 choice_row_at 命中；左键 6 行分别进 CE246/茶8项/CE249/CE250(var15=1)/就寝确认/退出；CANCEL 各级关闭。**已知缺口：右键不能取消 op102 choice，hover 不移动 choice_cursor**（已转 task-24 修，task-26 回归）。
   * **引擎修复（已落地，工作树未提交）**：`crates/wolf-format/src/gbk.rs` 新增 `pub fn encode`；`crates/wolf-game/src/savegame.rs` 文本图 decode/encode 改 GBK、picture 文件名 GBK；`savegame.rs` apply 开头 `game.base_save = Some(save.clone())` 修 vardb 丢失；apply 改用 `save.part3.normal_var(index)` 逐行 span 修 vars302..336 污染。真实 SaveData01 文本解码恢复为 #200 \f[24]19:30 / #210 \c[0]\f[18]周一 / #220 早泄 强壮 哥哥（学生）/ #230 行动力60/65 / #251 10000円 / #252 同居1天。
   * **CE250 乱码结论**：源数据损坏，非引擎 bug。坏串 rawlen=30 hex=`d1c6c1e5 a1a1a1a1a1a1a1 20*11 32 30 30 30 30 83d2 20`，d1c6c1e5=GBK「哑铃」，随后 7 个 0xA1（奇数个，GBK 非法尾），Python gbk/gb18030 同拒绝；CP932 把 0xA1..0xDF 当半角片假名 → 显示 ﾑﾆﾁ蝪…20000υ。全 event 扫 gb_bad&&!cp_bad 共 138 条、136+ 为正常日文 CP932，故不能改 decode_wolf_str 判据；不伪造修复，记入文档。
@@ -115,25 +115,25 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * capture 冒烟：1024x576、512,331/589,824 非黑（86.9%）、字体 msyhbd.ttc；仅 1 个
     缺字形 '׳'（系统字体覆盖问题，非渲染 bug）。
   * 计数更正：`m3_map_click` 实际 **8** 条（上文「7 条」为准入时的旧数）。
-  * **下一次接手的入口**：从 `07ab89b` 继续；M4 优先级见 `docs/M4_PARITY.md` /
-    `docs/M4_PERF.md`（设置 UI、tile quad 缓存、SoundCmd.frames 语义、
+  * **下一次接手的入口**：从 `07ab89b` 继续；M4 优先级见 `docs/milestones/M4_PARITY.md` /
+    `docs/milestones/M4_PERF.md`（设置 UI、tile quad 缓存、SoundCmd.frames 语义、
     ActionKey 命中框细化、v8 命名审计、100 日长链与打包）。
 
 * 2026-10-31（M3 推送 + Lead 复验）：
   * 模型额度恢复后重读交接；检查 `07ab89b`/`7c79d77` 两条本地提交：无 Claude/Anthropic 尾注，作者为 Nana7mi0721（`linxin070410@gmail.com`；历史提交已统一改写为仓库拥有者），按用户授权可推送。
   * Lead 复验：默认与 `WOLF_DATA_ROOT=work/Data` 的 `cargo test -q --workspace` 均 exit 0（各 **75 target**，0 failed）；`verify` **PASS 64 / 1 SKIP**；`verify --wolf` **PASS 72 / 0 pending**（1,361/1,361）。
   * 已推送 `origin/master`：`c167c85..7c79d77`，工作树干净。
-  * **下一步**：按 `docs/M4_PARITY.md` / `docs/M4_PERF.md` 推进 M4（设置 UI、tile quad 缓存、SoundCmd.frames、ActionKey 命中框、v8 命名审计、100 日长链与打包）。
+  * **下一步**：按 `docs/milestones/M4_PARITY.md` / `docs/milestones/M4_PERF.md` 推进 M4（设置 UI、tile quad 缓存、SoundCmd.frames、ActionKey 命中框、v8 命名审计、100 日长链与打包）。
 
 * 2026-10-31（M4 对等打磨：HUD/读档/渲染修复 + 收口）：
   * **M4 已完成项**：tile quad 缓存（`crates/wolf-game/src/tilemap.rs`，A 0.430→0.070ms、
     E 帧 0.202→0.173ms，`m4_tile_cache` 3 条）；SoundCmd.frames 的 BGM 淡入/SE 延迟
     （`crates/wolf-audio/src/{mixer,engine}.rs`，`m4_soundcmd` 11 条）；100 日长链
     （`crates/wolf-game/tests/m4_long_chain.rs`，v99==100、HAPPYEND 选项与 v201=1）；
-    v8 语义审计（`docs/M4_V8_AUDIT.md` + `m4_v8_semantics` 5 条：v8=夜间可活动上限
+    v8 语义审计（`docs/milestones/M4_V8_AUDIT.md` + `m4_v8_semantics` 5 条：v8=夜间可活动上限
     23..26，不是行动力）；发布打包（`tools/package.ps1` / `tools/package.sh` /
-    `docs/PACKAGING.md`，产物 work/out/dist，不提交二进制）。
-  * **本轮修复四个玩家可见缺陷**（详见 `docs/M4_HUD.md`）：
+    `docs/release/PACKAGING.md`，产物 work/out/dist，不提交二进制）。
+  * **本轮修复四个玩家可见缺陷**（详见 `docs/milestones/M4_HUD.md`）：
     1) 负号图片被误当全屏层（`crates/wolf-game/src/picture.rs`），HUD 保存/数据图标
        不再放大、status01 不再拉成黑罩；`m4_screen_layers` 2 条。
     2) `decode_wolf_str`（`crates/wolf-format/src/bytes.rs:251`）把 GBK「强壮」
@@ -152,7 +152,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     需补触发路径）；设置 UI 与键位重绑定尚未做可视界面；msyhbd.ttc（TTC）字体支持待确认。
 
 * 2026-10-31（M4 设置屏排版 + play 读档初始化）：
-  * **CE132/CE95 设置界面已可视**（详见 `docs/M4_SETTINGS_UI.md`）：
+  * **CE132/CE95 设置界面已可视**（详见 `docs/milestones/M4_SETTINGS_UI.md`）：
     修复 `\f[0]` 字号（`crates/wolf-game/src/textpic.rs`）、文本 `290` 位移
     （`crates/wolf-game/src/game.rs` `text_quads` + `picture.rs` `effect_offset`）、
     1/10 字符格 UI 块缩放（历史实现，现已撤销：`crates/wolf-game/src/picture.rs`
@@ -216,8 +216,8 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     self600=1 显示，注意 group6 平坦索引是 600 不是 0）；`m3_hud_buttons` 与
     `m3_map_click` 旧期望 305 全改为 0，hover 指针改到面板内/外的新位置。
   * **验收**：`WOLF_DATA_ROOT=work/Data cargo test -q --workspace` 全绿（含所有数据
-    测试）；`verify` PASS 64 / 1 SKIP。文档 `docs/M4_HUD.md` §1/§6、
-    `docs/M4_PARITY.md` §6/§8 已更新；临时探针 `zz_probe_status.rs` 已删除。
+    测试）；`verify` PASS 64 / 1 SKIP。文档 `docs/milestones/M4_HUD.md` §1/§6、
+    `docs/milestones/M4_PARITY.md` §6/§8 已更新；临时探针 `zz_probe_status.rs` 已删除。
   * **仍待办**：夜菜单静态截图仍需合成输入/点击；实机键位重绑定与设置交互需用户截图
     核验；TTC 字体 capture 已实测输出 msyhbd.ttc。
   * **当前进度**：M0–M4 主体完成，M4 剩余仅夜菜单截图与实机键位/设置核验。
@@ -237,7 +237,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `C:/Windows/Fonts/seguisym.ttf`（platform common fallback 名 "Segoe UI Symbol"）。
     夜菜单 text stats 由 1 substituted 变 0 substituted，▶ 正确显示。单测
     `text::tests::a_named_fallback_covers_a_glyph_the_primary_lacks`。
-  * **文档**：`docs/M4_PARITY.md` §6/§8 与 `docs/M4_HUD.md` §6 已更新夜菜单命令、
+  * **文档**：`docs/milestones/M4_PARITY.md` §6/§8 与 `docs/milestones/M4_HUD.md` §6 已更新夜菜单命令、
     save_event、相对坐标、字体 fallback。
   * **验收**：`cargo fmt --all`；`cargo test -q --workspace` 与
     `WOLF_DATA_ROOT=work/Data cargo test -q --workspace` 全绿 0 failed；
@@ -246,7 +246,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
 
 * 2026-10-31（M4 性能：文字宽度复用）：
   * **动机**：`Game::text_quads` 对每个文字图片先 `layout` 再 `measure` 同一串，等于每帧
-    shaping 两遍（docs/M4_PERF.md §6.3/§9）。
+    shaping 两遍（docs/milestones/M4_PERF.md §6.3/§9）。
   * **实现**：`crates/wolf-game/src/textpic.rs` 的 `Run` 新增 `pub width: f32`，
     `layout_with` 推进 cursor 时记录每个 chunk 的 advance；`crates/wolf-game/src/game.rs`
     的 `text_quads` 改用 `run.width + run.font_px`，删除重复 `measure`/`measure_with`。
@@ -254,7 +254,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **验收**：同参数 capture 输出与改前 **逐字节相同**（`cmp` 退出 0）；同机稳定轮
     B `text_quads` 0.036 → 0.032 ms/call（约 11%），D 0.033 → 0.032，E 0.041 持平。
     `cargo test -q --workspace` / `WOLF_DATA_ROOT=work/Data cargo test -q --workspace`
-    全绿；`verify` PASS 64 / 1 SKIP。文档 `docs/M4_PERF.md` §7/§9 已更新。
+    全绿；`verify` PASS 64 / 1 SKIP。文档 `docs/milestones/M4_PERF.md` §7/§9 已更新。
   * **注意**：跑全量数据测试时 `m3_settings_persist::save_system_settings_...` 偶发
     Windows `PermissionDenied (os error 5)` 写 `target/test-scratch/m3_settings/System.sav`，
     单独重跑即通过，属 Defender/索引瞬时锁，非代码问题。
@@ -276,7 +276,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     性能：m3_perf_baseline B/D/E text 0.036/0.035/0.044（与 §9 的 0.032/0.032/0.041
     同噪声带）；probe 读档卧室冷 0.1122 ms → 命中 0.0324 ms/call，菜单冷 0.1079 →
     0.0373；命中虽免 shaping，但 fingerprint/克隆成本抵消，稳态无可测收益也无回归，
-    已在 docs/M4_PERF.md §7/§10 如实记录。
+    已在 docs/milestones/M4_PERF.md §7/§10 如实记录。
   * **task-48 夜间交互 e2e（test-adapt）**：新增 `crates/wolf-game/tests/m4_night_gaps.rs`
     3 条：v59 嫌恶感 `v64*100/18`（18/21/22/36→100/116/122/200）、射精感 v66 只在 120
     强制触发并清 v125、真实点 picture 1108 (984,552) 进 ev21 是/否分支选“是”后
@@ -326,7 +326,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `cargo test -q -p wolf-render --lib` 35 passed；`cargo build -q -p wolf-cli` exit0。
   * **边界**：capture 仍输出 1024x576 逻辑帧（证据链不与窗口缩放混），窗口/全屏观感需真实
     窗口；不改 Sys 104/105 相机、不改存档格式。
-  * **文档**：新增 `docs/M5_BEYOND.md`，docs/README 登记 M5 行，根 README 状态更新；
+  * **文档**：新增 `docs/milestones/M5_BEYOND.md`，docs/README 登记 M5 行，根 README 状态更新；
     M5-B 调试器 / M5-C 成就 / M5-D 多语言 / M5-E Mod 列计划与约束。
   * **当前进度**：M0–M4 完成；M5-A 完成，M5-B..E 待做。用户 m07499 授权持续推进。
 
@@ -346,7 +346,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     flat/magic slot），`cargo test -q -p wolf-cli` 17 passed。窗口 smoke：
     `play --load-save work/Data/Save/SaveData01.sav --scale fit-nearest --debug --debug-var 154,155 --until 5`
     exit0、141 frame、0 warning。capture 仍输出不带 overlay 的 1024x576 证据帧。
-  * **文档**：`docs/M5_BEYOND.md` 增 M5-B 用法/实现/测试/边界，表内 M5-B 标已完成第一切片。
+  * **文档**：`docs/milestones/M5_BEYOND.md` 增 M5-B 用法/实现/测试/边界，表内 M5-B 标已完成第一切片。
   * **当前进度**：M0–M4 完成；M5-A/M5-B 完成，M5-C..E 待做。用户 m07499 授权持续推进。
 
 * 2026-10-31（M5-C：F2 游戏倾向/里程碑 overlay，第一切片）：
@@ -368,7 +368,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **测试**：achievements 3 条；play stats 1 条；`cargo test -q -p wolf-game --lib` 246 passed，
     `cargo test -q -p wolf-cli` 18 passed。窗口 smoke：
     `play --load-save work/Data/Save/SaveData01.sav --scale fit-nearest --stats --until 5` exit0。
-  * **文档**：`docs/M5_BEYOND.md` 增 M5-C 变量/用法/实现/测试/边界，表内 M5-C 标已完成第一切片。
+  * **文档**：`docs/milestones/M5_BEYOND.md` 增 M5-C 变量/用法/实现/测试/边界，表内 M5-C 标已完成第一切片。
   * **当前进度**：M0–M4 完成；M5-A/M5-B/M5-C 完成，M5-D/E 待做。用户 m07499 授权持续推进。
 
 * 2026-10-31（M5-D：内容翻译目录，第一切片）：
@@ -564,7 +564,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `Translator::parse` 先对源列 unescape（其它反斜杠序列如 `\c[6]`/`\v[12]` 原样透传），
     向后兼容旧目录。产出 `docs/translations/en.full.tsv` 全量英文 1218 行，
     `wolf-cli translations --strict` **1218/1218 static (100%)，0 missing / 0 unused**。
-    新增 docs/M7_I18N.md、补 docs/translations/README.md。译文为机翻风格、完整对齐，
+    新增 docs/milestones/M7_I18N.md、补 docs/translations/README.md。译文为机翻风格、完整对齐，
     如需出版级可后续人工润色（非缺陷）。
   * **② 记录级补丁（wolf-format/database.rs + wolf-game/patch.rs）**：`Database` 新增字节
     级序列化 `to_bytes`（保留 version_header/trailing 与每串原始 t_str chunk，未改串逐字节
@@ -573,12 +573,12 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     SysDatabase，`WOLF_DATA_ROOT` 绝对路径实跑 3 passed）。`PatchSet::apply_bytes` 两阶段
     （先全量校验等长/越界/expect，任一不符整文件不写），`apply_records` 落 set_cell；
     db.rs 在 parse 前应用字节补丁、引擎默认值后应用记录补丁，assets.rs 在解码前应用资产
-    字节补丁；坏补丁 eprintln 忽略、不 panic、不加 CLI 参数。新增 docs/M7_PATCH.md、
+    字节补丁；坏补丁 eprintln 忽略、不 panic、不加 CLI 参数。新增 docs/milestones/M7_PATCH.md、
     tests/database_serializer.rs(3)、tests/m7_patch.rs(5)。
   * **④ 热键重绑定（wolf-cli/hotkeys.rs）**：`HotkeyConfig`（stats/debug/backlog/scale/
     fullscreen/quit/restart）+ `parse/load` + `parse_named_key`（F1..F12 与常用命名键），
     非法键/未知动作回退该动作默认；main.rs 加 `--hotkeys <FILE>`，play.rs 7 处硬编码 F 键
-    改查配置。默认映射与原固定键一致（F2/F3/F4/F9/F11/F10/F12）。新增 docs/M7_HOTKEYS.md、
+    改查配置。默认映射与原固定键一致（F2/F3/F4/F9/F11/F10/F12）。新增 docs/milestones/M7_HOTKEYS.md、
     tests/help_hotkeys.rs。
   * **验证**：`cargo build -q --workspace` exit 0。`cargo test -q --workspace`（默认无数据）
     **exit 0**；`WOLF_DATA_ROOT=work/Data` 用**绝对路径**真跑时，除 7 条**既有、非本轮**
@@ -652,7 +652,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
 
   * **清理（本轮，AGENTS §7）**：删除 target/debug/incremental、target/release、target/ver6 与临时文档块；
     du -sh . = 4.2G（target 3.8G、work 333M、work/Data 176M、.git 7.7M，保留可运行 debug 产物与 work/out/dist）。
-  * **2026-11-01（工具：`wolf-cli assets` 素材摆放目录）**：用户问「能否从游戏文件还原素材分布以降低重构摆放成本」→ 已把临时脚本固化为 `wolf-cli assets` 子命令（crates/wolf-cli/src/main.rs），文档见 docs/ASSETS.md。
+  * **2026-11-01（工具：`wolf-cli assets` 素材摆放目录）**：用户问「能否从游戏文件还原素材分布以降低重构摆放成本」→ 已把临时脚本固化为 `wolf-cli assets` 子命令（crates/wolf-cli/src/main.rs），文档见 docs/release/ASSETS.md。
     * **能力**：聚合每个 op150 绘制的图片资产（asset/category/draw_sites/distinct_placements/scopes/first_placement）；`--coords` 逐点列出 scope/event/slot/action/anchor/layer/opacity/x/y/scale/blend；`--include-maps` 并入 MapData/*.mps 事件页；`--format tsv|json`；`--filter`；`--out`。
     * **数据来源**：CommonEvent.dat 的 op150 params（head=arg0 kind/anchor/action、number=arg1 层槽、长形式 opacity/x/y/scale/blend），与 wolf-vm decode_picture 一致。
     * **实测（本作数据）**：CE 侧 561 资产 / 2162 绘制点；并入 8 张地图后 660 资产 / 2431 绘制点。样例 cg/blackscreen.jpg 55 点 / 6 摆法 slot100@(0,36)。
@@ -675,24 +675,24 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     * `tables`：Sys/Data/CData 三套库的表清单（container/type/type_name/rows/fields）。
     * `cells`：Sys 侧**全部**单元格 + 名称型表（`fields=0`，如 文字列変数名/システム変数名/通常変数名）以 `field="name"`、`value=行名` 输出；Data/CData 仅在 `--filter` 时展开单元格（体量大）。`--filter` 按表名或类型索引子串匹配。
     * 快照：**98 张表 / 1381 单元格**。Sys6（システム変数名）直接给出消息窗/选择窗坐标、姿势游标、基础字号、消息速度等槽位名，可作对齐原版依据。
-  * **A（文档/帮助）**：docs/ASSETS.md 增「DB 默认值导出（--db-defaults）」节并修正「覆盖与边界」；main.rs `print_help` 增 `--db-defaults` 说明（原 `--db` 属 dump 探针，已撞名，故用 `--db-defaults`）。
+  * **A（文档/帮助）**：docs/release/ASSETS.md 增「DB 默认值导出（--db-defaults）」节并修正「覆盖与边界」；main.rs `print_help` 增 `--db-defaults` 说明（原 `--db` 属 dump 探针，已撞名，故用 `--db-defaults`）。
   * **A（验证）**：cargo build -q --workspace exit0；`assets --db-defaults`/`--format json`/`--filter 6` 均正常；work/out/db_defaults.json 用 Python `json.load` 通过（tables=98,cells=1381,msgwin=(64,408,960,168)）；wolf-cli verify **PASS 64 / 1 SKIP**；WOLF_DATA_ROOT=<绝对> `cargo test -q --workspace` = 其余 crate 全 ok，wolf-game 283 passed / **7 failed**（与既有干净 HEAD 完全相同的姊妹作期望值/事件语义差异：db 2 + auto_events 3 + game 2，**非本轮回归**）。
-  * **B（文档）**：docs/ENGINE_BEHAVIOR.md（165 行，新增未跟踪）由子代理 944209e7 完成：§0 图例、§1 六类核心表（九宫格/文本度量换行/选择面板 H-MENU-1/1-10 UI 缩放/过渡淡入/present-swapchain，6 列含来源+现状+文件:行+核对方法）、§2 逐项说明、§3 **12 条需逆向/实测常量清单**、§4 获取途径与优先级。关键锚点：window.rs:62 nine_slice(3px)；message.rs:97/122 coordinate_scale 与 line_height=font+6；choice.rs:112/180-214/127；scaler.rs:21,23,27 + db.rs:159 + picture.rs:1046；renderer.rs:55/910 + play.rs:35。
+  * **B（文档）**：docs/engine/ENGINE_BEHAVIOR.md（165 行，新增未跟踪）由子代理 944209e7 完成：§0 图例、§1 六类核心表（九宫格/文本度量换行/选择面板 H-MENU-1/1-10 UI 缩放/过渡淡入/present-swapchain，6 列含来源+现状+文件:行+核对方法）、§2 逐项说明、§3 **12 条需逆向/实测常量清单**、§4 获取途径与优先级。关键锚点：window.rs:62 nine_slice(3px)；message.rs:97/122 coordinate_scale 与 line_height=font+6；choice.rs:112/180-214/127；scaler.rs:21,23,27 + db.rs:159 + picture.rs:1046；renderer.rs:55/910 + play.rs:35。
   * **下一步 C**：用 rea（npx rea-agents，MCP 做二进制/运行时逆向）对原版 Game.exe 定点验证 §3 的 12 条常量。
 * 2026-11-02（C 任务：原版 Game.exe 只读静态逆向，产出工具 + 报告）——用户 m02019「先做 A+B，再做 C（用 rea 等工具定点逆向验证引擎常量）」：
   * **工具链现状**：`npx rea-agents` v6.7.0 可运行，但 `doctor` = healthy:false——本机**无任何原生分析引擎**（hopper 仅 macOS、ghidra `GHIDRA_INSTALL_DIR` 未设、IDA 未配置、kuna/jadx 未设），rea 的 decompile/analyze 不可用；`inspect-binary-layout` 仅支持 ELF、不支持本作 PE32。可无引擎用的只有 `inspect-pe-resources`/`inspect-artifact`。
   * **替代方案**：用本机已有 `pefile 2024.8.26`+`capstone 5.0.7` 自建只读工具 **`tools/re/wolfpe.py`**（facts/strings/xref/disasm；按绝对 VA 在 .text 搜 4 字节立即数定位引用，遇 `0x68` 即 `push imm32` 字符串参数）。新文件已入库。
-  * **已核实的架构事实**（详 docs/RE_GAME_EXE.md §2–§4）：Game.exe sha256 `e0716a35…e5b76`、PE32 i386 GUI、ImageBase 0x400000、6,365,184 B、时间戳 2018-06-22；引擎版本串 **`Editor - 20180525_ver2.22`** + `[Ver2.00`；DxLib **静态链接**（无 Dll 导入，.rdata 含 DxLib 源码路径）；只导入系统 DLL（KERNEL32/USER32/GDI32/SHLWAPI/SHELL32/WININET/WINMM），**无 d3d9/d3d11/dxgi/opengl/ddraw** → present 走 **GDI 软件 DIB 位块**（CreateDIBSection/StretchDIBits/SetDIBitsToDevice），无 swapchain。
+  * **已核实的架构事实**（详 docs/engine/RE_GAME_EXE.md §2–§4）：Game.exe sha256 `e0716a35…e5b76`、PE32 i386 GUI、ImageBase 0x400000、6,365,184 B、时间戳 2018-06-22；引擎版本串 **`Editor - 20180525_ver2.22`** + `[Ver2.00`；DxLib **静态链接**（无 Dll 导入，.rdata 含 DxLib 源码路径）；只导入系统 DLL（KERNEL32/USER32/GDI32/SHLWAPI/SHELL32/WININET/WINMM），**无 d3d9/d3d11/dxgi/opengl/ddraw** → present 走 **GDI 软件 DIB 位块**（CreateDIBSection/StretchDIBits/SetDIBitsToDevice），无 swapchain。
   * **文本/字体**：GDI 文本 API（TextOutW/GetTextExtentPoint32W/GetTextMetricsA/GetGlyphOutlineW/CreateFontW/AddFontResourceExA）；`.text` @0x46a21d `push "*.ttf"` → `call [0x7b40d0]=KERNEL32!FindFirstFileA`，即**从数据目录枚举 ttf 加载**（work/Data 下实测 2 个 ttf）。
   * **已核对 §3 项**：九宫格 3px（`SystemFile/WindowBase.png` 实测 18x18、逐像素 3px 对称边框 → CORNER=3、无额外 padding）；过渡掩膜 `[Transition]Fade.png` 实测 640x480 mode L（8-bit 灰度）；present 后端=GDI DIB；字体来源=文件枚举；分辨率数据驱动（debug 串 `[Read]Screen size X`，assets --db-defaults 导出 1024x576）。
   * **仍未解**（需 Ghidra 反编译或逐帧实测）：盒退化、禁则、行距缩放、打字机精度、选择面板越界阈值、超宽选项、coordinate_scale 取整、default_origin trunc(rateY/10)、过渡曲线 easing 与 tint×fade 顺序、原版帧率/窗口初始尺寸。
-  * **文档**：新建 `docs/RE_GAME_EXE.md`（工具/方法/二进制身份/导入表/已核对项/剩余项/复现步骤）；`docs/ENGINE_BEHAVIOR.md` §3 增 `3.1 C 任务进展与结论` 并让 §4 逆向段引用 `tools/re/wolfpe.py`+`RE_GAME_EXE.md`。`.recon/`（证据 JSON）已在 .gitignore。
+  * **文档**：新建 `docs/engine/RE_GAME_EXE.md`（工具/方法/二进制身份/导入表/已核对项/剩余项/复现步骤）；`docs/engine/ENGINE_BEHAVIOR.md` §3 增 `3.1 C 任务进展与结论` 并让 §4 逆向段引用 `tools/re/wolfpe.py`+`RE_GAME_EXE.md`。`.recon/`（证据 JSON）已在 .gitignore。
 
 * 2026-11-02（C 任务续：安装 Ghidra+JDK 并反编译原版 Game.exe）——用户「原来的会话超上下文了，现在你继续完成 c 任务，用 2，安装 ghidra+jdk 反编译；软件装 D 盘 program，不是软件就临时装项目内」：
   * **工具链**（D:\Program，符合“软件装 D 盘”约定，不入库）：Ghidra **12.2 PUBLIC**（`D:\Program\ghidra_12.2_PUBLIC`）+ Temurin **JDK 25.0.5+8**（Ghidra 12.2 要求 25+，21 会报 “JDK 25+ could not be found”；JDK 21.0.13 一并留下备用）。`tools/env.sh` 增 `GHIDRA_INSTALL_DIR`/`GHIDRA_JAVA_HOME`/`JAVA21_HOME`。
   * **坑（已绕开，写进 RE_GAME_EXE.md §8）**：(1) Git-Bash 直接跑 `support/analyzeHeadless` 探测 JDK 失败，必须 `analyzeHeadless.bat` + `cmd //c`；(2) cmd 的 `EnableDelayedExpansion` 会吃参数里的 `!`，`.bat` 的 `%` 展开会吃 `%d`，所以脚本参数一律走 UTF-8 args 文件；(3) 项目路径含 `!`（安装目录名）会丢字符，先把 Game.exe 复制到 `work/out/ghidra/input/Game.exe`（SHA 不变）再 import；(4) 同一时刻只允许一个进程持 Ghidra 项目锁。
   * **反编译**：Import+自动分析 **238 s**、识别 **10,589 函数**（x86:LE:32:default）；随后导出 **4,375 个 ≥64B 函数**的 C 伪码到 `work/out/re_all/all/`（含 index.tsv）。工具脚本入库：`tools/re/ghidra/{DumpByAnchor.java,DumpAll.java,run_ghidra.sh,README.md}`（1422 行，子代理完成，含 `--argsfile`/`--ref-window`；javac + 201 个 Ghidra jar 编译通过）。
-  * **结论（12 项清单已闭环 9 项左右，详见 `docs/ENGINE_BEHAVIOR.md` §3.2 与 `docs/re/` 四份报告）**：
+  * **结论（12 项清单已闭环 9 项左右，详见 `docs/engine/ENGINE_BEHAVIOR.md` §3.2 与 `docs/re/` 四份报告）**：
     * §3-8 坐标倍率 = **整除/idiv 向零截断**（CE48 pc30/31：Sys116/32、Sys117/24；标准分辨率另硬编码 10/20/25）；仓内 u32 整除等价，message.rs 的 f32 除法在非整倍数屏偏。
     * §3-9 **trunc(rateY/10) 确认是原版公式**（CE63 pc44-46：Sys2=17*rateY; Sys2+=rateY/10）。
     * §3-4 行距 = `本行最大字号×S + trunc(行距配置×min(基准字号,32)/32)×S`；本作 Game.dat 行距=6、基准=16 → **额外行距 3 px**（仓内 `font+6` 只在基准≥32 时对）。
@@ -712,7 +712,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **行距**：`message.rs:134` `line_height = font + trunc(LINE_GAP(6) × min(BASE_FONT_PX,32)/32) = font+3`（新增 `BASE_FONT_PX=16`）；实机 101 窗口三行行距 23.0（20+3）三法互证，旧值 font+6 只在基准≥32 时成立。
   * **选择支面板**：`choice.rs` 常量按实机+RE 重建——`TEXT_INSET=8`（RE `2+(base<<2)/10`，实机 8.05/7.85）、`ROW_TOP=6`、`line_pitch(font)=font+trunc(14×min(16,32)/32)=font+7=27`（实测 27.18/26.88）、宽=`最宽 advance+16`（89EF 156.3=140+16 精确吻合）、高=`6+rows×pitch`（4 行 114、5 行 141）；删 `MIN_WIDTH/WIDTH_SLACK/MARKER_PX` 与 `"▶ "` 前缀；光标改用 `SystemFile/CursorBase.png`（12×12、corner=4）九宫格整行框 `[x+6,row_y,w−12,font_px]`（原版选中行就是高亮条）；`window.rs` 抽出 `nine_slice_cornered(dst,w,h,corner)`。宽度加数只到 B 级（EE37 比 89EF 宽 5.3 px 未解释，RE 的 +0x1a=26 会给出 166），已记为 open item。
   * **截图度量报告**：新建 `docs/re/SCREENSHOT_METRICS.md`——`prt sc/` 34 张全是窗口截图（scale 1.4961/1.5010，用全角 advance 反验）；消息行距 23.0、选择支行距 27、89EF 面板 156.3×114.2、EE37 161.8×140.7、高亮条 20（=字号+1）、左内缩 8；EE37 由 pitch/内缩/条高/高度式四条判据确认也是 102 面板。原始脚本与标注图在 `work/out/shot_metrics/`（未入库）。
-  * **文档回填**：`docs/ENGINE_BEHAVIOR.md` §1.2/§1.3/§2.2/§2.3/§2.5 重写为落地后语义、§3 从「12 项待逆向」改为「C 后状态」并留 3 个真正开放项、§3.2 表 5 行、§4 动作表标注已落地；`docs/re/LAYOUT_METRICS.md` 增 §9 落地记录（含宽度分歧推理）、`docs/re/TEXT_METRICS.md` §7 汇总表更新、`docs/re/TRANSITION.md` §5 改「落地前/落地后」两节。
+  * **文档回填**：`docs/engine/ENGINE_BEHAVIOR.md` §1.2/§1.3/§2.2/§2.3/§2.5 重写为落地后语义、§3 从「12 项待逆向」改为「C 后状态」并留 3 个真正开放项、§3.2 表 5 行、§4 动作表标注已落地；`docs/re/LAYOUT_METRICS.md` 增 §9 落地记录（含宽度分歧推理）、`docs/re/TEXT_METRICS.md` §7 汇总表更新、`docs/re/TRANSITION.md` §5 改「落地前/落地后」两节。
   * **测试**：`cargo test -q -p wolf-game --lib` = **300 passed**；`cargo test -q --workspace` = **exit 0 全绿**。为使 workspace 稳定通过，`wolf-save` 两个测试与**玩家本机存档漂移**解耦：`tests/save.rs` 改为 pinned 判定（长度+seeds+校验和同时吻合才算基线，否则打印 note 后只查结构），`tests/typed.rs` 删死数值表改为不变量断言（表行数、金额/游玩帧/列表/事件 CSelf 槽位等）。
   * **明确不做**（本作不触发或无证据）：`window.rs` 极小盒角折半（数据不产生 <6 px 盒）；打字机 2× 速度与「无 preroll」（`Sys9→p+0x80` 写入点未定位，且本作 CE48 把速度设 500 ≈ 瞬显，风险>收益）；`kind≥0` 掩膜过渡（全作唯一 op160 是 kind=-1）。
   * **清理**：删除 `target/debug/incremental`、`target/release`、`work/out/saveprobe` 与 work/out 下 probe/pdb；清理后 `du -sh .` = **4.6 GB**（target 4.0 G 可重编；work 543 M = Data 176 M + Ghidra 项目 166 M + 全量 dump 27 M + shot_metrics 等）。
@@ -722,7 +722,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **文档索引重建**：`docs/README.md` 重写为唯一文档地图，新增「引擎行为与逆向」（ENGINE_BEHAVIOR / RE_GAME_EXE / re/*）、「调研与实证」「翻译目录」「参考实现」「工具与工作区产物」「被引用但缺失的文档」六节；里程碑与 M3 专题表状态统一为完成。
   * **调研归档**：6 份 `deep-research-report*.md` + `GPT_RESEARCH_GROUPS.md` 移入 `docs/research/gpt-reports/`（同步更新 HANDOFF §0/§7 与 research/README 的路径）。
   * **工程约定同步**：AGENTS.md 的「进度段」规则改为「HANDOFF_PROGRESS 追加 + HANDOFF §11.1 摘要」；README.md 文档入口加 HANDOFF_PROGRESS 与 ENGINE_BEHAVIOR。
-  * **杂项**：`.gitignore` 增加 `/docs/攻略文档/`（用户本地攻略资料不入库）；`work/` 根下 15 份历史提交信息与 4 个一次性脚本移入 `work/out/_archive/`；修正 `crates/wolf-save/tests/typed.rs` 对不存在的 `docs/SAVE_FORMAT.md` 的引用。
+  * **杂项**：`.gitignore` 增加 `/docs/wiki文档/`（用户本地攻略资料不入库）；`work/` 根下 15 份历史提交信息与 4 个一次性脚本移入 `work/out/_archive/`；修正 `crates/wolf-save/tests/typed.rs` 对不存在的 `docs/SAVE_FORMAT.md` 的引用。
   * **验证**：`cargo test -q --workspace` exit 0；文档相对链接检查全部可解析；`git status` 仅含本次文档/索引改动。
 
 
@@ -751,7 +751,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     * `crates/wolf-game/tests/m3_hud_layout.rs` `hud_stable_snapshot_layers_and_hidden_state`：检测到槽 12000 存在（非干净 HUD 存档）则按跳过处理。
     * `crates/wolf-game/tests/m3_save_load.rs` 的 `save_data_01_and_02_differ_in_hud_time_and_money` 与 `opcode_220_load_request_restores_a_save`：改为自洽/对照 baseline 断言，不再硬编码 50/10000/19:30。
     * `crates/wolf-game/tests/m3_save_ui_roundtrip.rs`：比较还原卧室几何时过滤 12000..12199 存档界面 overlay 层。
-  * **文档**：`docs/re/SCREENSHOT_METRICS.md` 新增 §6（十分之一 UI 块几何）；`docs/ENGINE_BEHAVIOR.md` §1 表与 §2.4 更新为 chapter/1000 + x 不除语义。
+  * **文档**：`docs/re/SCREENSHOT_METRICS.md` 新增 §6（十分之一 UI 块几何）；`docs/engine/ENGINE_BEHAVIOR.md` §1 表与 §2.4 更新为 chapter/1000 + x 不除语义。
 
 
 * 2026-11-03（CE245/CE248 空可选行动行修复）——用户 m05098 / m02832 / m02834：
@@ -777,13 +777,13 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **实现**：新增 std-only GUI 启动器 `crates/wolf-launcher`（`#![cfg_attr(target_os="windows", windows_subsystem="windows")]`，bin 名 `imouto-life`，无外部依赖）：定位同目录 `Data\BasicData` 与 `runtime\wolf-cli.exe`，`Command` 启动 `play --root <Data> --audio`，`CREATE_NO_WINDOW (0x08000000)` 隐藏控制台，stdout/stderr 写入 `game-log.txt`，失败 MessageBox + `launcher-error.log`，额外参数原样转发。
   * **打包**：新增 `tools/package-playable.sh` 与 `tools/package/PLAYABLE_README.txt`；`cargo build --release -p wolf-cli -p imouto-launcher`（1m38s）→ 输出 `D:\program\Imouto Life\`：`Imouto Life.exe` 236,544 B、`runtime\wolf-cli.exe` 12,469,248 B、`Data\` 全量 176 MB（含 Save）、`README.txt`、`checksums.txt`；目录 188 MB。zip 用 Windows bsdtar 生成：`work/out/dist/Imouto Life-0.1.0-playable.zip` 153 MB，1,387 条目，解压后 UTF-8 文件名正确、`sha256sum -c` 全 OK。
   * **验证**：用假引擎探针确认启动器参数为 `play --root <pkg>\Data --audio` 且 cwd 正确；包内 release 引擎 `verify --root` PASS 64/1 SKIP；`--audio capture --menu-only --frames 5` 渲染 1024x576、499,899/589,824 非黑、exit0。未替用户启动 GUI 窗口（避免抢前台）。
-  * **文档**：`docs/PACKAGING.md` 新增 §7；发布包中文说明见 `tools/package/PLAYABLE_README.txt`。
+  * **文档**：`docs/release/PACKAGING.md` 新增 §7；发布包中文说明见 `tools/package/PLAYABLE_README.txt`。
 * 2026-11-07（资料集九册交付）——用户 m10366"参考《资料集通用编写要求》，借鉴imoto life的形式编写资料集和游戏"：
-  * **交付**：新建 `docs/攻略/妹生活_资料集/` 八册（按编写要求本作无战斗/迷宫/DLC，故不设"06 战斗与敌人"册）：00_总索引(7.3KB)/01_系统与数值/02_物品/03_事件/04_角色/05_日程与结局/06_收集与CG/99_内部ID与校验附录，共约 44KB。全量剧透、S/T/G/U 证据分级、成人内容中性技术表述；每册末尾"数据缺口与待核"节。
+  * **交付**：新建 `docs/wiki/妹生活_资料集/` 八册（按编写要求本作无战斗/迷宫/DLC，故不设"06 战斗与敌人"册）：00_总索引(7.3KB)/01_系统与数值/02_物品/03_事件/04_角色/05_日程与结局/06_收集与CG/99_内部ID与校验附录，共约 44KB。全量剧透、S/T/G/U 证据分级、成人内容中性技术表述；每册末尾"数据缺口与待核"节。
   * **口径对齐定稿层**：三版本口径分列（引擎 ver2.22 / 数据世代 2.00 / 副标题 Ver2.03）；相册改"16 资产=15 解锁格+album_000 背景框"（订正 #8）；结局表按订正 #13 重写——怀孕 HAPPYEND 的 v12 是社会人职业门（CE258@1425）+ 分支信赖门 v20>=100（@1427），真正标记 v200（@1594）；BADEND 着床链改 v122→v127→v96（CE258@1076/1078/1087），v10..13 标注为四职业标志（订正 #1）；补 4 条 BADEND（再见了哥哥/妹妹爆发/熊头/着床）；Grand End 维持 v197>=15 ∧ v202==1。
   * **QA**：禁词 grep 0 命中（原"姊妹作副本/姊妹作式"2 处已中性化）；内部链接 8 条全通；旧口径残留 0；99 §5 汇总 16 项 U。
   * **索引登记**：docs/README.md §6.1 正文表后新增"资料集（百科层）"节，与 guide/数据定稿 01–12、guide/妹生活超详细攻略_正文.md 互为补充（百科查表 vs 叙述攻略）；资料集 00/99 增加到定稿层的互链。
-  * **说明**：guide/ 体系的 11 个数据定稿 + 14 章正文已于 2026-11-06 完成（见 00_说明与口径.md §7）；本轮资料集是用户指定目录/结构（docs/攻略/ + 九册制）下的百科层交付，数字口径与定稿层一致。
+  * **说明**：guide/ 体系的 11 个数据定稿 + 14 章正文已于 2026-11-06 完成（见 00_说明与口径.md §7）；本轮资料集是用户指定目录/结构（docs/wiki/ + 九册制）下的百科层交付，数字口径与定稿层一致。
 
 * 2026-11-10（Godot 迁移 P0：GDExtension 混合骨架）——用户 m「rust编译占用过大，以及bug诸多，现在我想将游戏引擎换成godot」；选定 **GDExtension 混合 + 忠实复刻**：
   * **架构**：Rust 保留 `wolf-format` / `wolf-vm` / `wolf-save` / `wolf-game`，新增 `crates/wolf-gdext`（cdylib，gdext 0.5.5 + `api-4-7`）；Godot 4.7.2 负责窗口/渲染/输入/音频/UI。运行时不再编译 wgpu/winit/glyphon/cosmic-text/symphonia/cpal。
@@ -794,7 +794,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **尺寸**：`target/godot` ≈ 893 MB（gdext core rlib 约 224 MB），DLL ≈ 7.3 MB；目标是把 wgpu/winit 时代 4.1 GB 的构建压到可接受范围。`cargo build -p wolf-gdext` 1m23s（冷 profile）。清理后工作区 `du -sh .` = **4.9 GB**（target 4.6 G = debug 3.7 G（Rust CLI/测试全量 + 旧 wgpu 栈）+ godot 893 M；work 264 M）。
   * **坑**：Godot 首次不会自动生成 `.godot/extension_list.cfg`，必须先 `--headless --path godot --import`，否则 GDScript 报 `Could not find type "WolfGame"`；Windows 下 Godot 运行时 DLL 被占用，重建前先关窗口；默认 `boot` 是开场 splash（米色），标题菜单对照要用 `--entry=menu`。
   * **P0 遗留**：文本未被真实场景触发（标题是图片菜单，texts=0）；TextParagraph 行距/描边/字重待校准；音频只回传命令未播放；`161` 冻结帧过渡未实现；CE132 raw key 未映射；存读档 API 已暴露但未接 UI；尚未导出打包。
-  * **文档**：新增 `docs/GODOT_MIGRATION.md`；README、docs/README、AGENTS 登记 Godot 入口与构建命令。
+  * **文档**：新增 `docs/frontend/GODOT_MIGRATION.md`；README、docs/README、AGENTS 登记 Godot 入口与构建命令。
 
 * 2026-11-10（Godot 迁移 P1 核心：新游戏 / 文字 / 零售读档 / 基础音频）：
   * **新游戏链路**：Godot `--entry=menu --auto-new-game --frames=600`（`--frames` 改为按**游戏帧**计数，此前按渲染帧导致只跑了 164 帧）从标题三键走 Map003 → SampleMapA；`WolfGame.set_auto_play(true,0)` 对应 `wolf-cli capture --answer 0` 的 auto_advance/auto_choice。Godot 与 Rust 的 600 帧 VM 统计完全一致：**16,038 指令 / 4,526 picture op / 15 messages / 3 choices / 0 warnings**。
@@ -831,7 +831,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **字体 fallback 实验（回退）**：给 msyhbd/msyh 挂 `seguisym.ttf` 后 Godot 整段文字度量被改写，600 帧新游戏 MAE **0.368→3.11**；回退后恢复 0.368。扫描 1,218 条静态消息/选项（21,009 字符），msyhbd 只缺 5 个码点（U+E07E/U+E4DE/U+0225/U+0377/U+FFFD，私用区/乱码），正常对话不缺字形。结论：全局 fallback 关闭，真缺字时按字符分段画。
   * **确定性捕获**：`--capture` 到达目标帧后先 `set_physics_process(false)` 再等 `frame_post_draw`；修复前物理帧会在 await 期间多走一帧，捕获到 N+1 相位（左侧 25px 竖条差，parity MAE 0.749），修复后稳定 **0.3680**。
   * **测试**：新增 `crates/wolf-game/tests/m6_title_wheel.rs`（标题暗色高亮随方向键/滚轮；滚轮与 CE131 左右页键的网格状态逐字节相同）、`godot/tests/mouse_latch.gd`（快速点击锁存/按下坐标/右键/滚轮/方向键 raw code/失焦）、`godot/tests/title_wheel.gd`、`godot/tests/gameview_title_wheel.gd`（真实 GameView 的滚轮+方向键），全部进 `tools/smoke-godot.sh`。`m6_input_parity`/`m3_title_*`/`m3_save_ui_roundtrip`/`m3_hud_numeric`/`m3_mouse_menu` 全过。
-  * **诊断**：`GameView` 新增 `--log-input`（键/鼠标/滚轮/选项光标）、`--log-events`（运行中事件 + `last_action_event` + diagnostics）、`--log-messages`（帧号+消息原文）；`WolfGame.transcript()` / `running_events()` / packet `last_action_event` 已暴露；新增 `docs/GODOT_DEBUGGING.md` 记录排查流程与操作契约。
+  * **诊断**：`GameView` 新增 `--log-input`（键/鼠标/滚轮/选项光标）、`--log-events`（运行中事件 + `last_action_event` + diagnostics）、`--log-messages`（帧号+消息原文）；`WolfGame.transcript()` / `running_events()` / packet `last_action_event` 已暴露；新增 `docs/frontend/GODOT_DEBUGGING.md` 记录排查流程与操作契约。
   * **存档 fixture 坑**：玩家在游戏里保存会覆盖 `work/Data/Save/SaveData01/02.sav`（本次发现 SaveData01 变成 64-picture、带存档界面的 0:28 存档，导致 m14/hud/day_command/save_ui 基线整帧失真）。已把玩家存档备份到 `work/out/player_saves_2026-11-10/`，并用 50-picture 出货状态（`work/out/save_analysis/synth/SaveData01/02.sav`）恢复测试 fixture；`m14_visual_regression` 新增 `depends_on_save` 守卫，以后玩家再覆盖时跳过三个依赖场景而非误报。
   * **验证**：`cargo test -q --workspace` exit 0（含 m14 三场景 skip）；`WOLF_DATA_ROOT=$PWD/work/Data` 下 `m6_title_wheel` 3、`m3_title_visibility/mouse` 12、`m6_input_parity` 8、`m3_save_ui_roundtrip` 1、`m3_hud_numeric` 5、`m3_mouse_menu` 12、存档套件 2+4+9+1 全过；`wolf-cli verify` PASS 64/1 SKIP；`bash tools/smoke-godot.sh` exit 0；`bash tools/parity-godot.sh` PASS（600/1200/1800 统计一致 + 像素 **MAE 0.3680**）。未 commit。
   * **收尾清理**：删除 `work/out/nofallback*.png`、`*_after.png`、`check_save.png`、`probe_save.png`、`smoke_input*.log`、`all_text.tsv`、`godot_roundtrip.sav`、`target/debug/incremental`、`target/release` 等；玩家存档备份 `work/out/player_saves_2026-11-10/` 保留并附 README。清理后 `du -sh .` = **5.5 GB**（work 270 M；target 5.2 G，主要是 debug 测试二进制 + godot profile）。
@@ -876,7 +876,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **修复**：`crates/wolf-vm/src/exec.rs::eval_string_condition` 的左右操作数统一按 `raw & 0x00FF_FFFF` 解码；新增单测 `string_condition_strips_the_variable_type_flag_from_cself_operands`，用 `0x0100_0000 | 1_600_005` 验证带类型标志的 CSelf5 仍能匹配“妹妹”。
   * **回归测试**：`crates/wolf-game/tests/m15_balloon_name.rs` 从“曾经生成过名字牌”加强为：消息显示期间图 `36014` 连续可见至少 **60 帧**、文本含“妹妹”、矩形非空且完全位于 1024×576 内、`warnings == 0`；真实数据 1 passed。`CE268 → CE269 CSelf5 → CE270` 链路保持。
   * **视觉基线**：`m14_visual_regression` 的 title 峰值协程基线校正为 **8**（首帧启动突发为 `48/270/271/216/63/2/264/265`，之后收敛到 3，不是协程泄漏）；5 个场景 5 passed，saveui 等既有重录数字不变。
-  * **已知诊断窄化**：真实数据下 `300 CallByName` 找不到 `▲┣[ｽﾞｰﾑ]イベント位置をズーム座標に`，3 个新游戏测试合计产生 18 条已记录 warning。`m1_title_load` / `m3_map_events` / `m3_newgame_persistence` 的白名单只允许该诊断的精确计数，任何其它 warning 仍失败；已确认与 BUG-02 掩码无关。缺失 helper 见 `docs/M3_EVENT_GRAPH.md` §6。
+  * **已知诊断窄化**：真实数据下 `300 CallByName` 找不到 `▲┣[ｽﾞｰﾑ]イベント位置をズーム座標に`，3 个新游戏测试合计产生 18 条已记录 warning。`m1_title_load` / `m3_map_events` / `m3_newgame_persistence` 的白名单只允许该诊断的精确计数，任何其它 warning 仍失败；已确认与 BUG-02 掩码无关。缺失 helper 见 `docs/milestones/M3_EVENT_GRAPH.md` §6。
   * **验证**：`cargo test -q --workspace` **exit 0**；`WOLF_DATA_ROOT="$PWD/work/Data" cargo test -q --workspace --no-fail-fast` 仅 7 个既有姊妹作差异（auto_events 3、db 2、game title 2），无新增失败；`wolf-cli verify` **PASS 64 / 1 SKIP**；`cargo fmt --all -- --check` 通过；`bash tools/smoke-godot.sh` exit 0（smoke `pictures=4 sprites=4`、load_save `50/14`、roundtrip `38/38`）；`bash tools/parity-godot.sh 600 --pixel-check=0` **PASS**（instructions 15,549 / pictures 4,418 / messages 15 / choices 3 / warnings 0 / sounds 3）。
   * **清理**：删除 `target/debug/incremental`、`target/release`、`target/ver6`、`work/out/saveprobe`、`work/out/title_peak.png`、`work/out/godot_roundtrip.sav` 及本轮 trace；`du -sh .` = **7.4 GB**（work 334 M = Data 176 M + out 158 M；target 7.1 G = debug 6.2 G + godot 894 M）。未 commit。
 
@@ -902,7 +902,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     * **BUG-23**：全屏闪烁与震动演出丢弃（Opcode 290 全屏 Flash/Shake 发现 Picture 表为空时直接返回 false 放弃）；
     * **BUG-24**：按键自动连发延迟误绑定到未定义系统变量 `sys(15/16)`。
   * **全面消解文档冲突**：
-    * 修正 `docs/M3_EVENT_GRAPH.md` 中残留的 `raw - 600_000` 错误公式，统一为 `caller + (raw - 600_100)`；纠正 CE 265..268 为运行期可达而非 helper 残留。
+    * 修正 `docs/milestones/M3_EVENT_GRAPH.md` 中残留的 `raw - 600_000` 错误公式，统一为 `caller + (raw - 600_100)`；纠正 CE 265..268 为运行期可达而非 helper 残留。
     * 统一 BUG-02 口径：已完全闭环修复（Opcode 112 bit 24 掩码修复，`m15_balloon_name` 连续 60 帧 PASS）；消解 BUG-20 与 BUG-02 的重叠冲突，严守不伪造坐标约定。
     * 统一 BUG-04 为 NOT-A-BUG（原版设计规范，日常顶栏只有文本）。
     * 重写更新 `work/out/review/POST_DEEPSEEK_BUGS_INVESTIGATION_REPORT.md`，缺陷台账扩充至 24 项，升级为五批次分步修复规划。
@@ -911,15 +911,15 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
 * 2026-11-12（深度审查 BUG-25~BUG-40 修复，进行中）：
   * Wave 1 已完成并验证：`crates/wolf-vm`（Op176 ContinueLoop、Op121 完整 flags/实数/钳制/批量、CommonSelf 与 self_vars 实时双射、Field18 前台事件、Op125 TTL、CSelf5..9 字符串判定、reserve_with_args、Op180 Wait(0)、Op140 pitch/stop 判定、Op130/151 求值）→ `cargo test -p wolf-vm` 120+ 全绿；`wolf-audio` 测试适配后全绿；`auto_events.rs`（电平触发）、`map_runtime.rs`（Parallel 页立即换页、ActionKey 仍延迟）、`textpic.rs`（`\sdb` 走 `sdb`）完成；`docs/BASELINE.json` 与 `tools/audit_bytecode.py` 按 Op176 修正，`wolf-cli precompile` PASS 19/0。
   * Wave 2 大部分落地但工作区当前 `cargo check` 失败（7 errors）：`SpriteQuad.blend` 缺于 `choice.rs:335/349`、`tilemap.rs:303/326`；`game.rs:675/1345` 的 `retail_rng_seed` 类型；`game.rs:1812` 的 `PictureVars.owner_event` 字段。
-  * 详细交接（含 7 处编译错误的精确修法、剩余 10 项确认、实测修正的语义差异、验证命令）见 **docs/HANDOFF_DEEP_REVIEW_FIX.md**。
+  * 详细交接（含 7 处编译错误的精确修法、剩余 10 项确认、实测修正的语义差异、验证命令）见 **docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md**。
 
 * 2026-11-12（文档整理：审查报告与交接归档）：
   * 现行审查报告统一为 **`docs/reviews/CODE_REVIEW_4ROUND.md`**（第一至四轮完整版，BUG-25~BUG-48，含报告 §六基线 BUG-20~24 与第一/二轮全文（该编号与本文件 2026-11-11 台账 BUG-20~24 同号不同义））；第一、二轮单行本（`imouto_life_deep_code_review_report.md`）已归档为 `docs/archive/reviews/CODE_REVIEW_1_2ROUND_superseded.md`，仅作证据链。
   * 已完成交接 `docs/HANDOFF_NEXT_AGENT.md` 移入 `docs/archive/HANDOFF_NEXT_AGENT.md`；新增 `docs/reviews/README.md`（轮次/编号对照）与 `docs/archive/README.md`（归档规则与替代文档）。
-  * `docs/README.md` 索引、`docs/HANDOFF_DEEP_REVIEW_FIX.md` 的来源/范围说明同步：后者只覆盖 BUG-25..40，第三/四轮 BUG-41..48 尚未开始。本次只动文档，未改代码、未跑测试。
+  * `docs/README.md` 索引、`docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md` 的来源/范围说明同步：后者只覆盖 BUG-25..40，第三/四轮 BUG-41..48 尚未开始。本次只动文档，未改代码、未跑测试。
 
 * 2026-11-12（剩余缺陷修复任务编排）：
-  * 新增 **`docs/TASKS_REMAINING_BUGS.md`**：按实测把未解决项拆成 T0–T11（编译恢复、BUG-35/43、BUG-42、BUG-44、BUG-32、BUG-47、BUG-46、BUG-48、BUG-41、BUG-45/34、m16 回归、全量验收），含写作用域、依赖、验收命令、并行轨道与回归红线。
+  * 新增 **`docs/reviews/TASKS_REMAINING_BUGS.md`**：按实测把未解决项拆成 T0–T11（编译恢复、BUG-35/43、BUG-42、BUG-44、BUG-32、BUG-47、BUG-46、BUG-48、BUG-41、BUG-45/34、m16 回归、全量验收），含写作用域、依赖、验收命令、并行轨道与回归红线。
   * 实测确认的“只落地一半”项：`pending_sounds` 只入队未 flush；`engine_state(10)` 仍为 0；`character_state` 仍返回 None；`picture_state` field 2/3 仍为 scale；`Erase` 仍立即删除；`wolf-gdext` 未调用 `tile_quads`；`return_to_title`/`reserve` 仍为 stub；`wants_text` 仍只判 `STR_BASE`。
   * 仅新增编排文档，未改代码、未跑测试；执行顺序以该文档 §8 为准（先修 7 个编译错误）。
 
@@ -1076,7 +1076,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **Godot 性能**：`audio_cache` 增至 64 上限并按插入序淘汰（BGM/BGS/SE 正在引用的流不淘汰）；`wolf-gdext` 新增 `key_config_revision`（FNV-1a），`GameView._key_bits` 仅在 revision 变化时重建数组；`WolfText.gd` 新增 256 项 `TextParagraph` 缓存（临时 headless 重绘探针通过后删除）。
   * **验证**：`cargo fmt --all -- --check` 0；m14 5/5（day_command 533187/24/23/76/23，hud 554890/15/14/44/14）、m16 4、m17 21、m18 6、m1_title_load 4、m3_mouse_menu 14 全过；`cargo test -q --workspace -- --skip font_lookup_prefers...` 只余既有 `m3_manual_rules::late_night_bedtime_skips_to_next_evening`（04:30→实测 17:00 vs 期望 19:00）。Godot 重建 DLL 后 smoke/mouse_title/key_map(98)/mouse_latch/title_wheel/gameview_title_wheel/load_save/load_menu/save_roundtrip 全绿（save→load 38/38）。
   * **环境**：Godot console stub 报 error 193，仍用主 exe；误写到 `work/Data/godot_roundtrip.sav` 的文件已删除；本机 agent shell 无 git/bash，冒烟步骤按脚本逐条 PowerShell 复现。
-  * **报告**：两轮目标/逐项修复/验证/未处理项见 `docs/AUDIT_REBUILD_FIX_REPORT.md`。
+  * **报告**：两轮目标/逐项修复/验证/未处理项见 `docs/reviews/AUDIT_REBUILD_FIX_REPORT.md`。
   * **提交**：`b2b6998` 已 push `origin/master`（2026-11-13）。
   * **清理**：删除 `work/out/audit_round_notes.md`、`work/out/bar_measure.py` 与 `target/debug/incremental`；仓库合计 **7.99 GiB**（work 1.07 / target 6.64 / work/out 0.90，其中 `m14_visual` 与 `m14_ab` 作为证据保留）。
 
@@ -1087,7 +1087,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **保留项**：`Opcode 125` 单协程同帧第二次 `123` 仍会读到 0（`auto_keys_delivered` 按 instance id 粒度），本作未触达，未改。
   * **验证**：`cargo fmt --all -- --check`、`git diff --check`、`cargo check -q --workspace` 均 exit 0；m14 5、m17 21、m18 6、m15 1、m17_text_layer 5、m3_hud_numeric 5、m4_load_resume 2、m4_hud_status 2、m3_hud_layout 3 全过。`m4_load_resume` 原断言单个 `行动力60/65` quad 已改为去空白后 `compact.contains(...)`，适配 T12 的 label/value 拆分。
   * **额外发现**：`m3_status_panel::ce238_relative_panel_lands_at_the_left_edge` 失败（隐藏分支 -305 后，显示分支仍停在 -305，期望 0）；本轮未触碰 `picture.rs` 相对绘制路径，待单独排查；该套件其余 5 项通过。
-  * **报告**：`docs/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`；本地提交 `112ed76`（含 `game.rs`、`m4_load_resume.rs`、`GameView.gd`、本报告与交接文档），尚未 push。
+  * **报告**：`docs/reviews/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`；本地提交 `112ed76`（含 `game.rs`、`m4_load_resume.rs`、`GameView.gd`、本报告与交接文档），尚未 push。
 
 * 2026-11-14（实机截图二轮复核：开场空槽、茶摊乱码、格子条）：
   * **开场孤立行动力空槽**：根因是槽位 `230` 同时承载旁白和 `WindowString` 窗口皮肤，`split_action_readout()` 只找数字就误判为读数。`game.rs` 增加 `messagetext::strip(prefix)` 的“行动力/行動力”语义校验；`picture_quads()` 在 `hud_action_points().is_none()` 时剔除 230 的窗口皮肤；`text_quads()` 对 230 拆分失败直接跳过。新增 `m4_hud_status::prologue_text_in_slot_230_is_not_mistaken_for_the_gauge`，真实数据 3 passed；`work/out/prologue_fixed360.png` 已无孤立空槽。
@@ -1169,7 +1169,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
 * 2026-11-15（实机报告 `live_play_issues_and_fixes_report.md` 剩余 9 项收口 + 三条裁定补回归）：
   * **本轮范围**：上一轮已落地 #5a（BAD/GOOD 粗细统一为 8）、#6（GBK 标点否决）、#9（侧拉栏补间）
     三条裁定并提交 `2bd0463`；本轮收掉报告里剩下的 9 项，并给三条裁定补上集成回归。
-    逐条结论与改法见 `docs/LIVE_PLAY_FIX_REPORT.md`。
+    逐条结论与改法见 `docs/reviews/LIVE_PLAY_FIX_REPORT.md`。
   * **#1 气泡闪脸**：`picture_quads()` 的屏蔽条件从瞬态的 `balloon_owns_message()`
     改成 `balloon_picture_mode_enabled() || balloon_picture_text_is_visible()`——
     原生 `19500..=19503` 在气泡淡出后要晚一两帧才被 CE63 擦掉，那个空档里 `19502`
@@ -1207,7 +1207,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **三条裁定补回归**（`m24_live_play_rulings.rs`）：BAD/GOOD 外框同高同顶边（8 px）；
     侧拉栏**拉出与收回都有位移动画**——逐帧采样 x，两侧都必须出现中间位置，
     任一侧瞬移就红（拉出 20 帧、收回 10 帧，与零售一致）。
-  * **#6 文档口径订正**：`docs/M3_STRING_DECODE.md` 里那条启发式决定的 98 个 unique 串
+  * **#6 文档口径订正**：`docs/milestones/M3_STRING_DECODE.md` 里那条启发式决定的 98 个 unique 串
     改写为「**wolf 引擎通用的日文标签**（引擎自带数据库列名）」，不是本作画面上的日文正文。
   * **m14 基线**：`saveui` non-black `576_221` → `576_228`。该场景长期因 `Save/` 里多出
     玩家的存档槽（SaveData03/04）而被跳过，旧数字已陈旧。这三个像素是**真实渲染变化**
@@ -1233,12 +1233,12 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   `picture.rs`/`atlas.rs`/`game.rs` 并挪了存档格面板的锚点）起一律 576_228。
   真实原因是**这个场景长期因 `Save/` 里多出玩家的 `SaveData03/04` 被跳过**，
   旧数字早就陈旧，没人发现。已改 `crates/wolf-cli/tests/m14_visual_regression.rs`
-  的注释、`docs/LIVE_PLAY_FIX_REPORT.md`、`docs/HANDOFF_M0.md` §11.1 与本文件。
+  的注释、`docs/reviews/LIVE_PLAY_FIX_REPORT.md`、`docs/HANDOFF_M0.md` §11.1 与本文件。
 * **回退残留清理（`b23a1e1` 留下的文档矛盾）**：独立复核发现
-  `docs/OPCODE_122.md` 正文仍写 `operation = mode & 0xFFF0`、分支 `0x0010`，
+  `docs/engine/OPCODE_122.md` 正文仍写 `operation = mode & 0xFFF0`、分支 `0x0010`，
   而 `crates/wolf-vm/src/exec.rs:2661` 实际是 `mode & 0xFF00`、分支 `0x0200`
   （`f52db44` 改的、`b23a1e1` 回退的）。已按**当前代码**订正文档，并把这条
-  仍开放的差异写在文件开头。`docs/REVIEW_9a817e4_FIX_REPORT.md` 的状态横幅
+  仍开放的差异写在文件开头。`docs/reviews/REVIEW_9a817e4_FIX_REPORT.md` 的状态横幅
   同步细化：Godot 脚本文件还在（只是新增内容被回退）、`\img` 内联贴图支持一直
   存在（被回退的是分层/锚点/alpha 那部分）、动作键名单仍是 `5|21|22|28|30|35`、
   `150 Move` 仍逐整数遍历；§2 各小节补「当前现状」，§0 表格标「已回退」，
@@ -1302,7 +1302,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   用户拍板：**1（2999 光标）→ 2（删 `pose == 5` 早退 + `alpha` 命中优先，不加 `item_icon`）
   → 3（方案 B：前端「返回标题」入口）→ 4（可选 `WOLF_LIVE_RNG=1`）
   → 5（先解决 `_input` 顶部拦截与 `SaveRequest` 入队安全，再做存单弹窗与晚饭后槽 1 自动存档）**。
-  详细核实与落地见 **`docs/M25_LIVE_UX.md`**。
+  详细核实与落地见 **`docs/milestones/M25_LIVE_UX.md`**。
 * **§二 光标 —— 核实结论：引擎本来就是对的，本轮不改引擎**：
   * 零售的手型指针 = **Picture 2999**，`SampleMapA.mps` **Ev 14「マウス追従」**
     （parallel，条件 `var120 == 1`）画 `150 [4096, 2999, 0, 6, 4, 1, 255, 1100000, 1100001,
@@ -1526,7 +1526,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
 
 * **F-01 判定误报，不改引擎**：`0x0010` 是“代入先を変数で指定”标志，不是
   “上1行切り取り”；`0xFFF0` 曾在实机清空 CE270 名牌。只订正
-  `docs/OPCODE_122.md`，保留 `0xFF00` / `0x0200`。
+  `docs/engine/OPCODE_122.md`，保留 `0xFF00` / `0x0200`。
 * **F-02/F-03 Godot 正式发布**：新增 `godot/export_presets.cfg` 与
   `tools/package-godot.sh`；Windows Desktop release、PCK 内嵌、排除
   `addons/godot_ai/*`、`tests/*`、`bin/~*`。子代理实跑 `--export-pack`，
@@ -1555,7 +1555,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
 * **环境限制**：本机仍无 Godot 4.7.2 导出模板
   （`%APPDATA%\Godot\export_templates\4.7.2.stable` 不存在），未生成最终 exe；
   安装模板后运行 `bash tools/package-godot.sh`。
-* 报告：`docs/AUDIT_2411996_FIX_REPORT.md`。
+* 报告：`docs/reviews/AUDIT_2411996_FIX_REPORT.md`。
 
 * **追加：新游戏标题闪回（2026-11-17）**：逐帧探针确认旧 `switch_map()` 在
   `130 Teleport` 当帧清负号层，提前删掉标题背景 `-2`；Map003 随后把同一标题画到
@@ -1809,7 +1809,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     仓库根现在只剩 `README.md` 与 `AGENTS.md`。
   * **索引**：`docs/README.md` 新增 §0 状态约定、§1.2 云端审查轮次、§1.3 归档区、
     §5.1 opcode 契约；原先 **27 份未登记文档全部登记**（现为 0 孤儿）。
-    新建 `docs/re/README.md`、`docs/攻略/README.md` 两个子目录索引；
+    新建 `docs/re/README.md`、`docs/wiki/README.md` 两个子目录索引；
     `docs/research/README.md` 补 gpt-reports 逐篇对照表。
   * **行号漂移**：`ENGINE_BEHAVIOR.md` 与 `docs/re/*` 里 60 余处 `file.rs:NNN`
     引用经逐条核对（20 余处失准，其中 `game.rs:1290`、`exec.rs:1540`、
@@ -1845,7 +1845,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     smoke、gameview_title_wheel 均 exit 0。
   * 新增 `tools/package/KEYBOARD_GUIDE.txt`，打包时以 CRLF 写为
     `按键功能指引.txt`，进入 checksums 与便携 ZIP/NSIS 安装包；NSIS 卸载器
-    同步删除该文件。`docs/PACKAGING.md` 补充素材加密/ICO/SVG 边界说明。
+    同步删除该文件。`docs/release/PACKAGING.md` 补充素材加密/ICO/SVG 边界说明。
   * 素材保护结论：当前 `Data/` 不进入 PCK，打开 `encrypt_pck` 不能保护素材，
     且官方模板不支持 PCK 加密；如后续需要，应采用 Rust 侧自定义加密归档。
     `inusuku.png` 为 400×400 位图，转 SVG 不会增加清晰度；Windows 窗口图标
@@ -2214,9 +2214,9 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `System.sav`、release 签名材料与 `_archive/` 历史证据/报告。
     清理后工作区 **0.66 GB / 2,794 个文件**，其中 `work` 619.43 MB
     （`work/Data` 175.47 MB、`work/out` 443.91 MB），`target/` 已不存在。
-  * **文档**：更新 `docs/PACKAGING.md` §8.6、本文件、`docs/HANDOFF_M0.md`
-    §11.1、`README.md`、`docs/GODOT_DEBUGGING.md` §5 与
-    `docs/PROJECT_ASSETS.md` 的清理补记。依赖旧玩家编号存档的视觉/夜间测试
+  * **文档**：更新 `docs/release/PACKAGING.md` §8.6、本文件、`docs/HANDOFF_M0.md`
+    §11.1、`README.md`、`docs/frontend/GODOT_DEBUGGING.md` §5 与
+    `docs/release/PROJECT_ASSETS.md` 的清理补记。依赖旧玩家编号存档的视觉/夜间测试
     今后需重新生成夹具，不得再引用已删除的快照目录。
   * **状态**：已随 0.1.0 发布提交完成。
 
@@ -2243,4 +2243,21 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **文档链接与死链清零**：
     * 更新 `docs/README.md`，登记新规划目录 `docs/plans/`、`tools/README.md`、`CONTRIBUTING.md`、`CHANGELOG.md`、`DISCLAIMER.md` 等核心文件。
     * 排查全库 Markdown 相对链接，修复了由于空格与括号导致的 11 处历史坏链，实现全库文档坏链 100% 清零。
+  * **状态**：已随提交 `a3ef142` 与 `8c899cc` 推送。
+
+* 2026-11-19（docs/ 全量文档深度整合与专题化分类重构）：
+  * **顶层文件精简与模块化专题收归**：
+    * 将原先堆叠在 `docs/` 顶层的 47 个文件全面系统化梳理，顶层仅保留 5 个核心全局文件（总索引 `README.md`、主交接 `HANDOFF_M0.md`、全量进度 `HANDOFF_PROGRESS.md`、测试基线 `BASELINE.json`、参考样本 `REFERENCE.md`）。
+    * **创建 `docs/engine/`**：收拢字节码解释器底层规范（`ENGINE_BEHAVIOR.md`、`RE_GAME_EXE.md`、`OPCODE_122.md`、`OPCODE_220_SAVE.md`，新建 `README.md` 导航）。
+    * **创建 `docs/frontend/`**：收拢 Godot 4 混合前端架构专题（`GODOT_MIGRATION.md`、`GODOT_DEBUGGING.md`、`MCP_AUDIT_PROBE.md`，新建 `README.md`）。
+    * **创建 `docs/release/`**：收拢多平台打包、素材导出与资产盘点规范（`PACKAGING.md`、`ASSETS.md`、`PROJECT_ASSETS.md`，新建 `README.md`）。
+    * **创建 `docs/milestones/`**：收拢历次研发攻坚专题记录共 21 篇（`M2_SLICE.md`、`M25_LIVE_UX.md`、`M3_*` 11 篇、`M4_*` 5 篇、`M5_BEYOND.md`、`M6_INPUT.md`、`M7_*` 3 篇，新建 `README.md`）。
+    * **整合 `docs/reviews/`**：收拢顶层分散的 8 篇审查与修复报告（`HANDOFF_DEEP_REVIEW_FIX.md`、`TASKS_REMAINING_BUGS.md`、`GEMINI_FULL_AUDIT_GUIDE.md`、`AUDIT_2411996_FIX_REPORT.md` 等），更新 `README.md` 缺陷台账。
+    * **中文目录英文字符规范化**：将 `docs/攻略/` 规范化为 `docs/wiki/`，增强跨平台与 CI 友好性。
+    * 建立 `docs/guide/README.md` 与 `docs/archive/reviews/README.md`，补齐子目录导航索引。
+  * **智能相对路径计算与死链 100% 清零**：
+    * 采用自动化相对路径推导算法，同步更新全库（跨 105 个文件）所有的 Markdown 链接、代码注释与脚本引用。
+    * 经全库递归死链扫描，文档内部所有链接及根目录引用均通过验证，**坏链保持为 0**。
+  * **重塑 `docs/README.md` 全局导航中心**：
+    * 引入 Mermaid 架构树、状态标签矩阵、分块结构清晰展示 10 大专题目录。
   * **状态**：准备提交。

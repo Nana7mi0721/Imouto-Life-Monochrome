@@ -10,7 +10,7 @@
 > `_archive/` 历史证据/报告；`re_all/`、`re_anchor/`、`wolfmanual/`、
 > `event_reach/`、`shot_metrics/`、`m14_visual/` 等可重建材料已删除。
 > 项目内 `SaveData*.sav` 也已经删除，`work/Data/Save/System.sav` 已重置为
-> 干净零售模板。发布细节见 `docs/PACKAGING.md` §8.6。
+> 干净零售模板。发布细节见 `docs/release/PACKAGING.md` §8.6。
 
 ---
 
@@ -75,8 +75,8 @@
 ### 3.2 文档 `docs/` — 1.4 MB，68 个文件（48 个 Markdown）
 关键文档：
 - 交接：`docs/HANDOFF_M0.md`、`docs/HANDOFF_PROGRESS.md`
-- 引擎规范：`docs/ENGINE_BEHAVIOR.md`（六类核心行为 + 12 项常量）
-- 逆向方法：`docs/RE_GAME_EXE.md`（Ghidra 12.2 + JDK 25、二进制身份、函数地图、复现步骤）
+- 引擎规范：`docs/engine/ENGINE_BEHAVIOR.md`（六类核心行为 + 12 项常量）
+- 逆向方法：`docs/engine/RE_GAME_EXE.md`（Ghidra 12.2 + JDK 25、二进制身份、函数地图、复现步骤）
 - 逆向证据：`docs/re/RUNTIME_CONSTANTS.md`、`TEXT_METRICS.md`、`LAYOUT_METRICS.md`、`TRANSITION.md`、`SCREENSHOT_METRICS.md`、`EVENT_REACHABILITY.md`
 - 里程碑/审计：`M2_SLICE.md`、`M3_*.md`（事件图、地图事件、文本解码、结局、手册对照等 10+ 篇）、`M4_*.md`、`M5_BEYOND.md`、`M6_INPUT.md`、`M7_*.md`
 - 翻译：`docs/translations/en.full.tsv`（116 KB，完整英文本地化目录）、`en.tsv`、`ja.tsv`

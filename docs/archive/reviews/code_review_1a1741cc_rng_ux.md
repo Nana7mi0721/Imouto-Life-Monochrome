@@ -1,6 +1,6 @@
 # 《妹！生活 ～単色～》GitHub 仓库（`1a1741cc`）代码审核：随机机制核验与交互/存档增强方案
 
-> **归档说明（2026-11-18）**：本文为`1a1741cc` 的 GitHub 仓库随机机制核验与交互/存档增强方案，内容已被 [`docs/reviews/CODE_REVIEW_4ROUND.md`](../../reviews/CODE_REVIEW_4ROUND.md) 与 [`docs/LIVE_PLAY_FIX_REPORT.md`](../../LIVE_PLAY_FIX_REPORT.md) 取代，
+> **归档说明（2026-11-18）**：本文为`1a1741cc` 的 GitHub 仓库随机机制核验与交互/存档增强方案，内容已被 [`docs/reviews/CODE_REVIEW_4ROUND.md`](../../reviews/CODE_REVIEW_4ROUND.md) 与 [`docs/reviews/LIVE_PLAY_FIX_REPORT.md`](../../reviews/LIVE_PLAY_FIX_REPORT.md) 取代，
 > 仅作证据链追溯，**不再代表当前工程事实**。文中行号、计数与结论可能已过时，
 > 引用前请先核对现行文档。
 

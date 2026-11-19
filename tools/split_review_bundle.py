@@ -155,7 +155,7 @@ GODOT
   Windows-only executable, useless on a Linux sandbox, and the frontend needs
   a native GDExtension built for the host platform anyway. The Rust side
   covers the same ground (`wolf-cli capture` renders 1024x576 without Godot).
-  See docs/GODOT_MIGRATION.md if you want to drive the frontend locally.
+  See docs/frontend/GODOT_MIGRATION.md if you want to drive the frontend locally.
 """
 
 

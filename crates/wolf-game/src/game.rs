@@ -1286,7 +1286,7 @@ impl Game {
             .and_then(|bytes| TileSetData::parse(&bytes).ok());
         // System.sav is a complete save file in this game: use it as the template so a
         // brand-new game can write its first save without inventing part1/part4. Its
-        // variable database is empty, though (docs/M3_VARDB_BUG.md), so seed the
+        // variable database is empty, though (docs/milestones/M3_VARDB_BUG.md), so seed the
         // CDataBase schema from the static table before any save can use it.
         // Prefer the writable `save_dir/System.sav`; fall back to the read-only
         // template under `<root>/Save/System.sav`.
@@ -5339,7 +5339,7 @@ impl Game {
         }
         // The title menu is a one-shot op102 inside CE42. Cancelling CE131 unwinds
         // CE14 -> CE42 -> the TitleMap event 2 page, leaving a menu-less title
-        // background with nothing running (docs/M3_TITLE_UX.md section 2.5). Re-enter
+        // background with nothing running (docs/milestones/M3_TITLE_UX.md section 2.5). Re-enter
         // CE42 once the whole title stack has drained, so CANCEL really means "back to
         // the title" instead of a soft lock. A successful load clears
         // `boot_map_active`, so this only fires on the cancel path.
@@ -6662,7 +6662,7 @@ impl Host for GameHost<'_> {
                 match loaded {
                     Ok(save) => save_address(&save, op).or(Some(DbValue::Num(0))),
                     // A missing slot is the normal "no save here" answer: 221 is used for
-                    // existence probes (docs/OPCODE_220_SAVE.md section 3.3).
+                    // existence probes (docs/engine/OPCODE_220_SAVE.md section 3.3).
                     Err(_) => Some(DbValue::Num(0)),
                 }
             }

@@ -1,12 +1,12 @@
 # RUNTIME_CONSTANTS.md — 原版运行期常量：帧节奏 / 窗口尺寸、过渡掩膜、窗口皮肤
 
-本文件是 `docs/ENGINE_BEHAVIOR.md` §3 清单里**不依赖反编译器**就能定案的那几条的取证记录：
+本文件是 `docs/engine/ENGINE_BEHAVIOR.md` §3 清单里**不依赖反编译器**就能定案的那几条的取证记录：
 
 * **§3-12** 原版帧率锁与窗口初始尺寸（Game.ini / Config.exe / Game.exe 常量与调用点）
 * **§3-10** 过渡掩膜 `SystemFile/[Transition]Fade.png` 的实际图案
 * **§3-1 / §3-2** 九宫格内边距与"盒小于帧"退化可用的资源证据
 
-配套文档：清单在 `docs/ENGINE_BEHAVIOR.md` §3，其它二进制结论在 `docs/RE_GAME_EXE.md`。本文只做只读静态分析，**不执行 Game.exe**，也不修改上述两份文档或 `crates/`。
+配套文档：清单在 `docs/engine/ENGINE_BEHAVIOR.md` §3，其它二进制结论在 `docs/engine/RE_GAME_EXE.md`。本文只做只读静态分析，**不执行 Game.exe**，也不修改上述两份文档或 `crates/`。
 
 > 内容安全：全文只做二进制/资源层与数值层描述。
 

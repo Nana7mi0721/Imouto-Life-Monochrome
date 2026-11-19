@@ -263,13 +263,15 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-19）
 
-* **2026-11-19 仓库文件结构、工程规范与文档体系全面规范化（当前最新）**：
+* **2026-11-19 仓库文件结构、工程规范与全量文档体系深度整合规范化（当前最新）**：
   对齐顶级开源仓库（如 AstrBot、yetone/magpie）规范：
-  将根目录散落的技术方案收纳至 `docs/plans/`；落地 `.editorconfig`、`.gitattributes`、
-  `.github/`（CI、Issue 与 PR 模板）、`CHANGELOG.md`、`CONTRIBUTING.md`、`DISCLAIMER.md`；
-  全新重构并落地中英双语门面 `README.md` 与 `README_EN.md`（含架构 Mermaid 图、双端特性、
-  玩家安装与开发者构建指引）；输出 `tools/README.md` 手册，并将环境脚本路径改为动态推导；
-  排查修复全库 Markdown 链接，死链 100% 清零。详见 `docs/HANDOFF_PROGRESS.md` 末条。
+  * **根目录与工程基建**：收纳散落技术案至 `docs/plans/`；落地 `.editorconfig`、`.gitattributes`、
+    `.github/`（CI、Issue 与 PR 模板）、`CHANGELOG.md`、`CONTRIBUTING.md`、`DISCLAIMER.md`；
+    落地中英双语门面 `README.md` 与 `README_EN.md`，输出 `tools/README.md` 手册并将环境脚本改为动态推导。
+  * **docs/ 深度专题化整合**：将顶层 47 个散乱文件精简收拢为 5 个核心通用入口；新建 `docs/engine/`（引擎行为与指令集）、
+    `docs/frontend/`（Godot 4 混合前端架构）、`docs/release/`（发包与资产规范）、`docs/milestones/`（M0~M7 历次研发记录 21 篇）；
+    整合 `docs/reviews/`（收拢 8 篇修复报告与任务卡）；规范中文字符目录 `docs/攻略/` 为 `docs/wiki/`；
+    全库 100+ 文档相对链接通过自动化算法重构，实现**坏链 100% 清零**。详见 `docs/HANDOFF_PROGRESS.md` 末条。
 
 * **2026-11-19 0.1.0 Windows/Android 发布、存档清理与工作区整理**：
   Windows NSIS 安装版、便携 ZIP 与 Android arm64 release APK 已交付到
@@ -288,7 +290,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `aaf62fc54c1df1ee63f3e5338b05ec349476346ec1a42b532c8cba0e3b3d888d`。
   依赖旧玩家编号存档的视觉/夜间夹具测试需重新生成存档，不能再引用已删除的
   `player_saves_*`、`save_analysis` 或 `review/save_backup`。
-  详见 `docs/PACKAGING.md` §8.6 与 `docs/HANDOFF_PROGRESS.md` 末条。
+  详见 `docs/release/PACKAGING.md` §8.6 与 `docs/HANDOFF_PROGRESS.md` 末条。
 
 * **2026-11-19 MCP/Godot 运行时审计探针 v3（实机验证）**：
   通过 Godot MCP 实际启动游戏并挂载探针/驱动，走通
@@ -458,7 +460,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   移入 `docs/archive/`，21 份归档件顶部加「归档说明」块，登记表见
   `docs/archive/README.md`。③ `docs/README.md` 重写：新增 §0 状态约定、
   §1.2 云端审查轮次、§1.3 归档区、§5.1 opcode 契约；原先 27 份未登记文档
-  全部登记。④ 新建 `docs/re/README.md` 与 `docs/攻略/README.md` 两个子目录索引；
+  全部登记。④ 新建 `docs/re/README.md` 与 `docs/wiki/README.md` 两个子目录索引；
   `docs/research/README.md` 补 gpt-reports 逐篇对照表（文件名的 `(1)..(5)`
   是下载批次序号，**不是**问题组编号）。⑤ `ENGINE_BEHAVIOR.md` 与 `docs/re/*`
   的源码行号引用**全部改为 `文件::符号` 引用**（原先 20 余处失准、3 处指到
@@ -591,7 +593,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `9c9e32812cfe5ea371b560d571ab8de0d6bbef6c76561d7b965a901e87cde635`。
 
 * **2026-11-17 全量审查 `2411996` 收口（当前状态）**：`F-01` 判定误报
-  （`0x0010` 是间接目标标志，不是首行截取），只订正 `docs/OPCODE_122.md`；
+  （`0x0010` 是间接目标标志，不是首行截取），只订正 `docs/engine/OPCODE_122.md`；
   `F-02/F-03` 新增 Godot Windows Desktop 导出预设与 `tools/package-godot.sh`，
   导出排除 `godot_ai`/`tests`/`bin/~*`，`--export-pack` 已实跑验证；
   `F-04/F-12` 启动失败面板与 headless `quit(1)`、模态 F11 已落地；
@@ -605,7 +607,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   4.7.2 导出模板，最终 exe 未生成。另修开始新游戏标题闪回：`130 Teleport` 不再
   提前清负号层，Map003 自己用黑幕覆盖并擦除标题；新增 `m3_title_transition`，
   标题链回归全过，DLL 重建为 `bc6d931e...`，`smoke-godot.sh` exit 0。
-  详见 `docs/AUDIT_2411996_FIX_REPORT.md`。
+  详见 `docs/reviews/AUDIT_2411996_FIX_REPORT.md`。
 
 * **2026-11-17 `review_a2a618d_report.md` 收口（当前状态）**：报告前 6 项已核实
   落地；两项遗留已修。存档栏鼠标悬停现在把 CE94 的 `290 type 5` 闪烁从旧行迁移到
@@ -649,7 +651,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     `bash tools/smoke-godot.sh` exit 0（`pictures=4 sprites=4`）。用户实机存档已被
     覆盖为第 2 天 19:00，依赖出厂 `SaveData01` 的旧用例会漂移，**不得回滚玩家存档**。
 
-* **实机报告 11 项全部收口（2026-11-15，当前状态）**：详见 `docs/LIVE_PLAY_FIX_REPORT.md`。
+* **实机报告 11 项全部收口（2026-11-15，当前状态）**：详见 `docs/reviews/LIVE_PLAY_FIX_REPORT.md`。
   - 核实结论：`live_play_issues_and_fixes_report.md` 的 11 项断言里 **7 项是宿主 bug**
     （#1 气泡闪脸、#2 对话框过高、#3 进度条残留、#5b 睡眠呼吸、#6 中文乱码、#7 顶栏行动力条、
     #8 转场渐变）、**3 项按用户裁定统一**（#4 光标回落、#5a BAD/GOOD 粗细统一为 8、#9 侧拉栏双向补间）、
@@ -682,9 +684,9 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     指纹守卫，画面结构数字未动）。
   - **文档订正（2026-11-15 晚）**：`m14` 那三个像素的成因改写为「真实渲染变化」
     （`1a9fafe` 改了存档格面板锚点），不再是「夹具漂移」；
-    `docs/OPCODE_122.md` 按当前代码订正为 `mode & 0xFF00` / 分支 `0x0200`
+    `docs/engine/OPCODE_122.md` 按当前代码订正为 `mode & 0xFF00` / 分支 `0x0200`
     （`f52db44` 改的 `0xFFF0` / `0x0010` 已随 `b23a1e1` 回退），并在开头记了这条
-    仍开放的差异；`docs/REVIEW_9a817e4_FIX_REPORT.md` 的状态横幅细化为逐条现状，
+    仍开放的差异；`docs/reviews/REVIEW_9a817e4_FIX_REPORT.md` 的状态横幅细化为逐条现状，
     §0 表格标「已回退」，§2 各节补「当前现状」，§4 标注数字是 `f52db44` 那轮的快照，
     §5 列出因回退重新开放的五项（Opcode 122 掩码 / `\img` 贴图分层 /
     动作键范围收窄 / `150 Move` 活跃槽位遍历 / Godot 回归脚本接入 smoke）。
@@ -699,7 +701,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     `work/Data/Save/` 已是出厂存档。
 
 * **M25 实机 UX 四项收口（2026-11-15 深夜，当前状态）**：输入 `github_audit_rng_and_ux_report.md`
-  + `ux方案.md`（外部只读产物），用户拍板顺序 1→5。详见 **`docs/M25_LIVE_UX.md`**。
+  + `ux方案.md`（外部只读产物），用户拍板顺序 1→5。详见 **`docs/milestones/M25_LIVE_UX.md`**。
   - **§二 光标（第二轮，2026-11-15 深夜改写）**：上一条结论**作废**——用户实机复核后
     指出「零售白天那张是明显和 hand3 一模一样」。重新取证：零售有**两个**指针。
     **白天的手型光标是系统指针**（Windows 手型光标位图 = `CharaChip/hand3.png` 第 0 格，
@@ -802,8 +804,8 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
     T18 的稳定 `hover` 让 CE238/CE239 hide 页不再每帧重画，停靠侧栏从零售 0.2 alpha
     变成 1.0，已在 `game.rs` 用 `SIDE_PANEL_PARKED_ALPHA=0.2`（`x ≤ -300` 且无过渡）
     复原。细节见 `docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md` §4.1。
-* **审计修复轮（2026-11-13 晚，当前状态）**：`docs/archive/reviews/imouto_life_rebuild_fixes_and_full_audit.md` 的 §一 6 项截图与 §二 P1/P2 已落地。选项 `(0,0)` 回退居中 + 控制码剥离；失活 `choices` 由 `frame`/`install_map` 自动回收（`m3_mouse_menu` 14 passed）；行动力条在黑屏开场不再误出，宿主条改 100×12 深灰槽 + 亮边（`HUD_ACTION_VALUE_X=716`）；`36002` 底边钳到 576，`m17_ui_regressions` 21 passed；`message` 名牌按原版实机图保留，连续同人翻页瞬态仍待原版逐帧证据。RNG 读档按 `playtime_frames` 定位表游标（`.sav` 无字段，同存档重放仍同）；Godot `audio_cache` 上限 64、`key_config_revision` 缓存、`WolfText` 段落缓存。m14 仍 **5 passed**（533187/554890），workspace 只余既有 `m3_manual_rules::late_night_bedtime...`；Godot 9 个 headless 脚本全绿。两轮报告见 `docs/AUDIT_REBUILD_FIX_REPORT.md`；代码提交 `b2b6998` 已 push `origin/master`。
-* **Gemini 全量审查 `1c76dcc` 处理（2026-11-14，当前状态）**：`docs/archive/reviews/CODE_REVIEW_1c76dcc_superseded.md` 新 P1 成立并已修——`Game::text_quads` 现将 `balloon_frame_growth()` 提前计入 `TextQuadKey`，`36014` 人名牌在多行流式换行时随 `36008..=36012` 同步上移；新增 `a_streaming_balloon_lifts_the_nameplate_through_the_text_cache`（1 passed）。P3 行动力条按报告方案 2 右对齐：`HUD_ACTION_LABEL_X 560→545`、`HUD_ACTION_BAR [608,18,100,12]→[593,18,100,12]`、`HUD_ACTION_VALUE_X 716→750`，`GameView.gd` fallback 同步；新增三位数回归（1 passed），`m14_visual_regression` 仍 **5 passed**（533187/554890）。报告两条“待核对 `1a9fafe`”均已在当前代码闭环：`121` 不再对 `SelfVar` 强制 `batch_count=0`（`op121_self_range_updates_every_slot_in_the_range`），瞬时 `Move` 已清 `transition` 且 `move_cancels_an_erase_fade` 断言 `opacity==255`；`spawn_child` 也已继承 `is_parallel`。`125` 单协程同帧多次 `123` 只消费一次仍保留为已知边界项。额外发现 `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge` 失败（面板停在 -305），本轮未触碰相对绘制路径，待单独排查。详见 `docs/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`。
+* **审计修复轮（2026-11-13 晚，当前状态）**：`docs/archive/reviews/imouto_life_rebuild_fixes_and_full_audit.md` 的 §一 6 项截图与 §二 P1/P2 已落地。选项 `(0,0)` 回退居中 + 控制码剥离；失活 `choices` 由 `frame`/`install_map` 自动回收（`m3_mouse_menu` 14 passed）；行动力条在黑屏开场不再误出，宿主条改 100×12 深灰槽 + 亮边（`HUD_ACTION_VALUE_X=716`）；`36002` 底边钳到 576，`m17_ui_regressions` 21 passed；`message` 名牌按原版实机图保留，连续同人翻页瞬态仍待原版逐帧证据。RNG 读档按 `playtime_frames` 定位表游标（`.sav` 无字段，同存档重放仍同）；Godot `audio_cache` 上限 64、`key_config_revision` 缓存、`WolfText` 段落缓存。m14 仍 **5 passed**（533187/554890），workspace 只余既有 `m3_manual_rules::late_night_bedtime...`；Godot 9 个 headless 脚本全绿。两轮报告见 `docs/reviews/AUDIT_REBUILD_FIX_REPORT.md`；代码提交 `b2b6998` 已 push `origin/master`。
+* **Gemini 全量审查 `1c76dcc` 处理（2026-11-14，当前状态）**：`docs/archive/reviews/CODE_REVIEW_1c76dcc_superseded.md` 新 P1 成立并已修——`Game::text_quads` 现将 `balloon_frame_growth()` 提前计入 `TextQuadKey`，`36014` 人名牌在多行流式换行时随 `36008..=36012` 同步上移；新增 `a_streaming_balloon_lifts_the_nameplate_through_the_text_cache`（1 passed）。P3 行动力条按报告方案 2 右对齐：`HUD_ACTION_LABEL_X 560→545`、`HUD_ACTION_BAR [608,18,100,12]→[593,18,100,12]`、`HUD_ACTION_VALUE_X 716→750`，`GameView.gd` fallback 同步；新增三位数回归（1 passed），`m14_visual_regression` 仍 **5 passed**（533187/554890）。报告两条“待核对 `1a9fafe`”均已在当前代码闭环：`121` 不再对 `SelfVar` 强制 `batch_count=0`（`op121_self_range_updates_every_slot_in_the_range`），瞬时 `Move` 已清 `transition` 且 `move_cancels_an_erase_fade` 断言 `opacity==255`；`spawn_child` 也已继承 `is_parallel`。`125` 单协程同帧多次 `123` 只消费一次仍保留为已知边界项。额外发现 `m3_status_panel::ce238_relative_panel_lands_at_the_left_edge` 失败（面板停在 -305），本轮未触碰相对绘制路径，待单独排查。详见 `docs/reviews/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`。
 * **实机截图四轮复核与 5 项视觉/交互缺陷闭环（2026-11-15，当前状态）**：
   1. **名牌右半边残留彻底消除**：`exec.rs` 为 `PictureAction::Move` 解码 `head & 0x0100_0000` 标志位的 `span`；`picture.rs` 实现范围批量移动（`lo..=hi`），CE270 执行 `150 Move 36008..36012` 时所有名牌组件同步淡出至 0 透明度，右半圆角（36010）残留彻底消失。
   2. **妹妹对话框加高 136px & 头像完整容纳**：按原版实机视觉效果（`ptr_sc/卧室_点击妹妹_首句话.png`），妹妹说话出现半身头像（36002）时，气泡对话框统一定位加高至 136px（`BALLOON_FACE_FRAME_MIN_HEIGHT = 136`，y=428..564）；头像底边统一定位在 `BALLOON_FACE_BOTTOM_Y = 563.0`（发顶在 y>=444，距名牌底边 434 留出 10px 清晰空隙），头像完整容纳于对话框内，不超出底边亦不被名牌遮挡。
@@ -813,15 +815,15 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
      - 光标：`GameView.gd` 每帧监测，当 Picture 2999（手掌/注视/谈话等恶作剧光标）存在且可见时自动隐藏原生箭头（`Input.mouse_mode = Input.MOUSE_MODE_HIDDEN`），在光标销毁或窗口失焦时恢复 `MOUSE_MODE_VISIBLE`。
      - 按钮：`PICTURE_ACTION_CONTROLS` 补充 `(1109, 22, "Picture/pose_iconarea.png")`，`picture_action_event_at` 规范化 Windows 反斜杠路径，`Game::hover()` 补充 1109；在正常夜间互动下实机验证点击结束（1108）弹出确认选项 `["是", "否"]`，点击姿势（1110）弹出换姿势选项 `["是 ", "否 "]`，点击存档（-5）稳定唤起存档界面（CE14）。
   6. **验证**：`godot/tests/verify_ui_and_interaction_fixes.gd` 通过；`bash tools/smoke-godot.sh` 全套 100% 通过；`godot/bin/wolf_gdext.dll` 同步更新生效。
-* **深度审查 BUG-25..BUG-48 修复完成（2026-11-12 封板快照）**：现行审查报告为 `docs/reviews/CODE_REVIEW_4ROUND.md`（第一至四轮），T0–T11 已全部落地。`cargo fmt --all -- --check` / `git diff --check` 通过，`cargo check -q --workspace` 0 error，默认 `cargo test -q --workspace` exit 0；真实数据 workspace 仅剩 2 项既有 `db` 姊妹作期望差异，AutoEvents 与标题历史差异已消除。`verify` PASS 64 / 1 SKIP，`precompile` PASS 19 / 0（blocks 5416 / loops 881 / implicit_closes 0）；`m14_visual_regression` 最终 **5 passed**：saveui 的 101 像素差已归因为 `SaveData03.sav` 第四格 fixture 漂移，隔离 01/02 两格后 25/13、576227（差 6 像素光标/栅格相位），已加 `depends_on_save_grid` 守卫且未改基线。CE43 改为标题菜单进入沿一次性触发，CE94 曾恢复 9280x1152 tenths 几何与真实 `<TRI-RIGHT>`，saveui 回到 13 text pictures / 54 glyphs / 27728 textured / atlas 21。Godot build/smoke 通过，parity 600 帧 PASS；m16 三组回归共 17 项真实数据全过。清理后 `du -sh .` = **8.1 GB**（work 796 M / target 7.3 G）。实施细节见 `docs/HANDOFF_DEEP_REVIEW_FIX.md`，任务收口见 `docs/TASKS_REMAINING_BUGS.md` §0。**当前工作区已撤销 tenths 渲染补偿；2026-11-13 复核后默认全量测试仅剩既有的 `m3_manual_rules::late_night_bedtime_skips_to_next_evening`，真实数据下另有两项既有 `db` 文本差异，以 §0.1 的最新实况为准。**
+* **深度审查 BUG-25..BUG-48 修复完成（2026-11-12 封板快照）**：现行审查报告为 `docs/reviews/CODE_REVIEW_4ROUND.md`（第一至四轮），T0–T11 已全部落地。`cargo fmt --all -- --check` / `git diff --check` 通过，`cargo check -q --workspace` 0 error，默认 `cargo test -q --workspace` exit 0；真实数据 workspace 仅剩 2 项既有 `db` 姊妹作期望差异，AutoEvents 与标题历史差异已消除。`verify` PASS 64 / 1 SKIP，`precompile` PASS 19 / 0（blocks 5416 / loops 881 / implicit_closes 0）；`m14_visual_regression` 最终 **5 passed**：saveui 的 101 像素差已归因为 `SaveData03.sav` 第四格 fixture 漂移，隔离 01/02 两格后 25/13、576227（差 6 像素光标/栅格相位），已加 `depends_on_save_grid` 守卫且未改基线。CE43 改为标题菜单进入沿一次性触发，CE94 曾恢复 9280x1152 tenths 几何与真实 `<TRI-RIGHT>`，saveui 回到 13 text pictures / 54 glyphs / 27728 textured / atlas 21。Godot build/smoke 通过，parity 600 帧 PASS；m16 三组回归共 17 项真实数据全过。清理后 `du -sh .` = **8.1 GB**（work 796 M / target 7.3 G）。实施细节见 `docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md`，任务收口见 `docs/reviews/TASKS_REMAINING_BUGS.md` §0。**当前工作区已撤销 tenths 渲染补偿；2026-11-13 复核后默认全量测试仅剩既有的 `m3_manual_rules::late_night_bedtime_skips_to_next_evening`，真实数据下另有两项既有 `db` 文本差异，以 §0.1 的最新实况为准。**
 
-* **全量静态字节码深度审计沉淀与 5 项深水区系统缺陷归档（2026-11-11）**：编写并沉淀 `tools/audit_bytecode.py`，全量静态扫描 350 个 Common Event 与 8 张地图 102 个地图页面的 **63,506 条指令**，生成 `work/out/BYTECODE_AUDIT_REPORT.md`。审计引擎涵盖全量操作码覆盖、虚拟硬件状态差集、Picture 槽位主/并行协程竞争碰撞（定位 15 组交叉槽位）、循环无让步死循环风险、视口级演出特效等 5 大维度。新排查出 **BUG-20**（地图动态实体跟随气泡/图标坐标锚定缺失，`character_state` 字段 6/7 恒返回 None）、**BUG-21**（鼠标滚轮系统彻底瘫痪，`engine_state(10)` 滚轮移动量硬编码 0）、**BUG-22**（鼠标移出窗口检测失效，字段 11/12 走 `_ => None` 导致指针残留）、**BUG-23**（全屏闪烁与震动因无挂载 Picture 被抛弃）、**BUG-24**（按键连发延迟误绑定到 `sys(15/16)`）。已同步更新 `work/out/review/POST_DEEPSEEK_BUGS_INVESTIGATION_REPORT.md`，总缺陷台账扩充至 24 项，升级为五批次修复路线。消解各文档历史冲突：纠正 `docs/M3_EVENT_GRAPH.md` 的 `raw - 600_000` 错误公式为 `caller + (raw - 600_100)`；统一 BUG-02（人名牌）闭环口径（固定模式由 290 视口平移固定在 276,456 屏内，已由 op112 掩码剥离闭环并经 `m15` 验证，不依赖 `character_state`；消解与 BUG-20 的概念重叠）；统一 BUG-04 为 NOT-A-BUG。
+* **全量静态字节码深度审计沉淀与 5 项深水区系统缺陷归档（2026-11-11）**：编写并沉淀 `tools/audit_bytecode.py`，全量静态扫描 350 个 Common Event 与 8 张地图 102 个地图页面的 **63,506 条指令**，生成 `work/out/BYTECODE_AUDIT_REPORT.md`。审计引擎涵盖全量操作码覆盖、虚拟硬件状态差集、Picture 槽位主/并行协程竞争碰撞（定位 15 组交叉槽位）、循环无让步死循环风险、视口级演出特效等 5 大维度。新排查出 **BUG-20**（地图动态实体跟随气泡/图标坐标锚定缺失，`character_state` 字段 6/7 恒返回 None）、**BUG-21**（鼠标滚轮系统彻底瘫痪，`engine_state(10)` 滚轮移动量硬编码 0）、**BUG-22**（鼠标移出窗口检测失效，字段 11/12 走 `_ => None` 导致指针残留）、**BUG-23**（全屏闪烁与震动因无挂载 Picture 被抛弃）、**BUG-24**（按键连发延迟误绑定到 `sys(15/16)`）。已同步更新 `work/out/review/POST_DEEPSEEK_BUGS_INVESTIGATION_REPORT.md`，总缺陷台账扩充至 24 项，升级为五批次修复路线。消解各文档历史冲突：纠正 `docs/milestones/M3_EVENT_GRAPH.md` 的 `raw - 600_000` 错误公式为 `caller + (raw - 600_100)`；统一 BUG-02（人名牌）闭环口径（固定模式由 290 视口平移固定在 276,456 屏内，已由 op112 掩码剥离闭环并经 `m15` 验证，不依赖 `character_state`；消解与 BUG-20 的概念重叠）；统一 BUG-04 为 NOT-A-BUG。
 * **POST_DEEPSEEK 审查 19 项修复完成（2026-11-11）**：18 项修复、BUG-04 判为原版设计。VM 补 `250` 字符串写库、`210/211` 600_100 相对事件、跨事件公共 Self（15M+100*ev+slot）、`121/122` 间接代入、`213` 未命中不再杀协程、`125` 单帧清零、`123` 鼠标边沿广播；存档网格鼠标槽位与同帧刷新、负槽命中盒、地图换页不强杀父事件、UI 按槽位排序、BGS 独立总线 + 同曲跳过、EndGame 退出、op102 外部点击。**BUG-02 已闭环**：根因是 `CE270 pc92` 的 `112` 操作数 `0x11186A05` 把字符串变量类型标志放在 bit 24，低 24 位 `0x00186A05 = 1_600_005` 才是 CSelf5；旧解码保留 bit 24 后每帧误判“消息变化”，反复清 `self56` 并隐藏名字牌。`eval_string_condition` 左右操作数统一 `raw & 0x00FF_FFFF` 后，图 `36014` 在消息期间持续可见。`tests/m15_balloon_name.rs` 要求连续 60 帧可见、文本含“妹妹”、矩形非空且完全在 1024×576 内、`warnings == 0`。固定模式 `2002` 的屏幕位置由 `290` kind 2 对 `36000..36015` 的 `(512,536)` 平移得到，`36014` 约在 `(276,456)`，不需要 `character_state`；**不要伪造角色坐标**。验证：默认 workspace exit 0；数据套件仅 7 个既有姊妹作差异；verify PASS 64/1 SKIP；precompile PASS 19/0；m14 5/5（title peak=8）；smoke-godot exit 0；parity 600 帧 PASS。**复核收尾补充**：`Screen::picture_rect` 对 CE131 等 window 图改为使用窗口盒而不是 18x18 皮肤，修复真实鼠标点击可见槽位仍落到第 1 槽的问题；新增 `m3_menu_screens` 槽位中心命中、`m3_hud_buttons` 连续开关菜单、`m3_event_page_switch` 阻塞事件清理三组回归。`dynamic_labels` 基线由 51 修正为实测 3。工作区清理后 `du -sh .` = 7.5 GB。
 * **独立审查 17 项缺陷修复完成（2026-11-11）**：VM（op111 运算符掩码/位积、op121 溢出、op122 高级模式、op213 跳入/跳出循环上下文）、文本（`\cdb`/`\udb`/`\sdb` 展开 + numeric 回退、消息右边距 32 px）、图片（锚点 2..6、独立 X/Y 缩放与存档 `scale_y`、九宫格整体吸附）、输入（鼠标短按锁存、Enter 边沿、失焦首帧屏蔽）、存档（`mds1` 字符串、公共事件 Self 池、BGM）、Godot（跨平台字体、atlas 满时重打包）、parity（`--menu-only --prime`，600 帧 MAE **0.7529 PASS**）。CE63 空消息框、CE240/241 立绘、CE244 行动力等实机问题均已回归；测试对 Stateful 公共事件改为按需清空/播种 Self 池，`m3_visual_text` 的读档上下文改为真实 `prime_engine() → load_save()` 顺序。
-* **Godot 迁移 P0 + P1 核心 + P2 输入/文字/长程 parity 完成（2026-11-10）**：新增 `crates/wolf-gdext`（GDExtension 混合桥，gdext 0.5.5 + `api-4-7`）与 `godot/` 工程；Godot 4.7.2 负责窗口/渲染/输入/音频，Rust 保留格式/VM/存档/游戏层。标题菜单与 Rust `title.png` 基线 **99.779% 像素完全一致**。**输入**：`WolfKeys.gd` 镜像 `play.rs` 的 scancode+100 表与 `App::bits()`，`key_map.gd` 97 项全过；`GameView` 用 `_input` 跟踪物理键并通过 `WolfGame.key_config()` 实时吃 Sys52/54/56 改键。**读档界面**：`load_menu.gd` 从标题菜单用真实 Down/Enter 进入 CE14→CE131，两次 Down 落到空槽 3（确认不加载），Up 两次 + Enter 加载 `SaveData01`，退回卧室 **50 picture / 14 text**，含 `220 SaveLoad: loaded`。**文字**：`WolfText.gd` 按 cosmic-text 基线 `round(y)+round(size*1.023193)` 与 FreeType ascent 差做逐字号 shift，四份 ±2px 黑字复刻 `\E`；新游戏 600 帧 **MAE 0.769→0.368、±8 99.28→99.45%**，零售读档 **0.888→0.423**，消息 300 帧 **2.191→0.594、±8 98.48→99.14%**；标题不变，文字 rect 外零回归。**长程 parity**：`tools/parity-godot.sh` 在 600/1200/1800 帧逐项等于 Rust（16,038/43,938/71,838 指令；4,526/14,726/24,926 picture；15 message/3 choice/0 warning/3 sound），600 帧像素 MAE 0.3680。**冻结过渡审计**：161/162 只在未注册的 `SampleMapB.mps`（PlayerTouch 示例）出现，正式 5 张图没有，故本作不可达；实现与单测保留。**存档闭环**（同日已修）：`savegame::part1_from_map` 在模板 Part1 为空时写地图快照与 35 个对象，静态字段与零售 SaveData01 零差异，新游戏 save→load→resume 恢复 SampleMapA。**P2 补丁（同日）**：标题 CE43 是单次渲染器，光标变化时 `AutoEvents::restart(43)` 重放，深色 `menu*_a` 跟随方向键/滚轮/悬停；`Game::apply_wheel` 让 op102 选项直接移光标、CE131 存档网格滚轮=左右页键、其它 123 菜单=上下；`GameView` 用 `_input` 锁存鼠标按下/坐标，快速点击与右键不再丢；`--capture` 冻结物理帧；Godot 全局字体 fallback 实测会把文字度量改坏（600 帧 MAE 0.368→3.11）已回退，21,009 个静态字符只缺 5 个私用区/乱码码点。新增 `m6_title_wheel.rs`、`mouse_latch.gd`、`title_wheel.gd`、`gameview_title_wheel.gd`。**陷阱**：玩家保存会覆盖 `work/Data/Save/SaveData01/02.sav`，已备份到 `work/out/player_saves_2026-11-10/` 并按 50-picture 出货状态恢复；`m14_visual_regression` 增加 `depends_on_save` 守卫。**仍缺**：游戏内存档点（`SampleMapA ev5` 调 CE14）的脚本化写槽验证、weight 400 字重对照、真缺字时的逐字形 fallback、Part1 运行态字段、导出打包。排查流程见 `docs/GODOT_DEBUGGING.md`，迁移细节见 `docs/GODOT_MIGRATION.md` §4–6。
+* **Godot 迁移 P0 + P1 核心 + P2 输入/文字/长程 parity 完成（2026-11-10）**：新增 `crates/wolf-gdext`（GDExtension 混合桥，gdext 0.5.5 + `api-4-7`）与 `godot/` 工程；Godot 4.7.2 负责窗口/渲染/输入/音频，Rust 保留格式/VM/存档/游戏层。标题菜单与 Rust `title.png` 基线 **99.779% 像素完全一致**。**输入**：`WolfKeys.gd` 镜像 `play.rs` 的 scancode+100 表与 `App::bits()`，`key_map.gd` 97 项全过；`GameView` 用 `_input` 跟踪物理键并通过 `WolfGame.key_config()` 实时吃 Sys52/54/56 改键。**读档界面**：`load_menu.gd` 从标题菜单用真实 Down/Enter 进入 CE14→CE131，两次 Down 落到空槽 3（确认不加载），Up 两次 + Enter 加载 `SaveData01`，退回卧室 **50 picture / 14 text**，含 `220 SaveLoad: loaded`。**文字**：`WolfText.gd` 按 cosmic-text 基线 `round(y)+round(size*1.023193)` 与 FreeType ascent 差做逐字号 shift，四份 ±2px 黑字复刻 `\E`；新游戏 600 帧 **MAE 0.769→0.368、±8 99.28→99.45%**，零售读档 **0.888→0.423**，消息 300 帧 **2.191→0.594、±8 98.48→99.14%**；标题不变，文字 rect 外零回归。**长程 parity**：`tools/parity-godot.sh` 在 600/1200/1800 帧逐项等于 Rust（16,038/43,938/71,838 指令；4,526/14,726/24,926 picture；15 message/3 choice/0 warning/3 sound），600 帧像素 MAE 0.3680。**冻结过渡审计**：161/162 只在未注册的 `SampleMapB.mps`（PlayerTouch 示例）出现，正式 5 张图没有，故本作不可达；实现与单测保留。**存档闭环**（同日已修）：`savegame::part1_from_map` 在模板 Part1 为空时写地图快照与 35 个对象，静态字段与零售 SaveData01 零差异，新游戏 save→load→resume 恢复 SampleMapA。**P2 补丁（同日）**：标题 CE43 是单次渲染器，光标变化时 `AutoEvents::restart(43)` 重放，深色 `menu*_a` 跟随方向键/滚轮/悬停；`Game::apply_wheel` 让 op102 选项直接移光标、CE131 存档网格滚轮=左右页键、其它 123 菜单=上下；`GameView` 用 `_input` 锁存鼠标按下/坐标，快速点击与右键不再丢；`--capture` 冻结物理帧；Godot 全局字体 fallback 实测会把文字度量改坏（600 帧 MAE 0.368→3.11）已回退，21,009 个静态字符只缺 5 个私用区/乱码码点。新增 `m6_title_wheel.rs`、`mouse_latch.gd`、`title_wheel.gd`、`gameview_title_wheel.gd`。**陷阱**：玩家保存会覆盖 `work/Data/Save/SaveData01/02.sav`，已备份到 `work/out/player_saves_2026-11-10/` 并按 50-picture 出货状态恢复；`m14_visual_regression` 增加 `depends_on_save` 守卫。**仍缺**：游戏内存档点（`SampleMapA ev5` 调 CE14）的脚本化写槽验证、weight 400 字重对照、真缺字时的逐字形 fallback、Part1 运行态字段、导出打包。排查流程见 `docs/frontend/GODOT_DEBUGGING.md`，迁移细节见 `docs/frontend/GODOT_MIGRATION.md` §4–6。
 * 里程碑 **M0–M7 全部完成并推送**。
 * **C 任务**（原版 Game.exe 静态逆向，Ghidra 12.2 + JDK 25）已完成，结论见
-  `docs/ENGINE_BEHAVIOR.md` §3.2、`docs/RE_GAME_EXE.md` 与 `docs/re/*.md`；
+  `docs/engine/ENGINE_BEHAVIOR.md` §3.2、`docs/engine/RE_GAME_EXE.md` 与 `docs/re/*.md`；
   其中可落地部分**已改到 crates/**（提交 4ac380d）。
 * 验证基线：`cargo test -q --workspace` **exit 0**；本作数据套件
   `WOLF_DATA_ROOT=$PWD/work/Data cargo test -q --workspace --no-fail-fast` 仅 7 个

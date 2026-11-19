@@ -6,7 +6,7 @@
 //! This test parses every string-bearing container, asserts the decoder never
 //! emits U+FFFD, pins a few known-good Chinese strings, and documents the
 //! CE250 "first item name" data defect (a corrupt odd run of 0xA1 in the
-//! translation, not a decoder bug - see docs/M3_STRING_DECODE.md).
+//! translation, not a decoder bug - see docs/milestones/M3_STRING_DECODE.md).
 
 use std::path::{Path, PathBuf};
 

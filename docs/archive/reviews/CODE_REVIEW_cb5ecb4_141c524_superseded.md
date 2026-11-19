@@ -129,7 +129,7 @@
 - **文件与行号**：
   - `crates/wolf-game/src/game.rs:2952-2956`
 - **触发的具体代码路径**：
-  - 本轮在 `exec.rs:1343` 新增了 `Vm::set_instance_self_var(id, idx, value)` 以确保宿主修改实例 `self_vars` 时同步写穿至 `vm.vars.common_self`（且 `docs/HANDOFF_DEEP_REVIEW_FIX.md:111` 记录了需要将 `sync_save_grid_cursor` 改为调用该接口），但 `game.rs:2952-2956` 仍直接写入 `instance.self_vars.set(610, slot);`。
+  - 本轮在 `exec.rs:1343` 新增了 `Vm::set_instance_self_var(id, idx, value)` 以确保宿主修改实例 `self_vars` 时同步写穿至 `vm.vars.common_self`（且 `docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md:111` 记录了需要将 `sync_save_grid_cursor` 改为调用该接口），但 `game.rs:2952-2956` 仍直接写入 `instance.self_vars.set(610, slot);`。
 - **玩家可见或系统级影响**：
   - 在存读档界面（`CE 131`）切换光标槽位时，`vm.vars.common_self[&131]`（对应 `15_013_110`）仍保留旧值，并行事件或跨事件读取 `15_013_110` 会拿到过期槽位号。
 - **最小修复建议**：
@@ -224,13 +224,13 @@
 ## 4. 文档与实现冲突
 
 1. **`docs/README.md:145` 仍将 T12 已废弃的“地图瓦片 RGBA 纹理”写为当前 `wolf-gdext` 实现**：
-   - `docs/README.md:145` 仍写着 `WolfGame GDExtension 类：每帧返回动态 sprites/texts/overlays/sounds，以及缓存的地图瓦片 RGBA 纹理`，与 T13 移除瓦片桥接及 `docs/GODOT_MIGRATION.md:237-241`、`docs/HANDOFF_M0.md:277-281` 的明确要求冲突。
-2. **`docs/HANDOFF_DEEP_REVIEW_FIX.md` 两处描述与当前代码不一致**：
-   - `docs/HANDOFF_DEEP_REVIEW_FIX.md:111`（§4.1 第 5 条）声称 `sync_save_grid_cursor` 已改用 `Vm::set_instance_self_var(id, 610, slot)`，但 `crates/wolf-game/src/game.rs:2953-2955` 仍直接修改 `instance.self_vars`（见 **[P2-2]**）。
-   - `docs/HANDOFF_DEEP_REVIEW_FIX.md:26`（§0）仍将“Godot 瓦片层”列为最终回归覆盖项。
+   - `docs/README.md:145` 仍写着 `WolfGame GDExtension 类：每帧返回动态 sprites/texts/overlays/sounds，以及缓存的地图瓦片 RGBA 纹理`，与 T13 移除瓦片桥接及 `docs/frontend/GODOT_MIGRATION.md:237-241`、`docs/HANDOFF_M0.md:277-281` 的明确要求冲突。
+2. **`docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md` 两处描述与当前代码不一致**：
+   - `docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md:111`（§4.1 第 5 条）声称 `sync_save_grid_cursor` 已改用 `Vm::set_instance_self_var(id, 610, slot)`，但 `crates/wolf-game/src/game.rs:2953-2955` 仍直接修改 `instance.self_vars`（见 **[P2-2]**）。
+   - `docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md:26`（§0）仍将“Godot 瓦片层”列为最终回归覆盖项。
 3. **多处交接文档对侧栏命中热区的描述停留在 T13 中间态（`try_status_panel_strip`），与 T14 最终代码（`try_side_panel_handle`）冲突**：
-   - `docs/HANDOFF_M0.md:289-290`、`docs/HANDOFF_PROGRESS.md:978`、`docs/TASKS_REMAINING_BUGS.md:91-93` 均仍写着“侧栏现在整条 25px 可见滑条（物品栏 y 288..384 除外）可点击打开” / `try_status_panel_strip`。而 HEAD 代码（`crates/wolf-game/src/game.rs:164-169, 2475-2542`）已将其替换为 `try_side_panel_handle`，仅响应两个三角把手区 `STATUS_HANDLE_Y = (118.0, 157.0)` 与 `ITEM_HANDLE_Y = (260.0, 297.0)`（且 `m3_hud_buttons.rs:468` 明确断言点击 `(15, 192)` 空白滑条**不会**打开侧栏）。
-4. **`docs/TASKS_REMAINING_BUGS.md` 内部关于默认测试状态的表述自相矛盾**：
+   - `docs/HANDOFF_M0.md:289-290`、`docs/HANDOFF_PROGRESS.md:978`、`docs/reviews/TASKS_REMAINING_BUGS.md:91-93` 均仍写着“侧栏现在整条 25px 可见滑条（物品栏 y 288..384 除外）可点击打开” / `try_status_panel_strip`。而 HEAD 代码（`crates/wolf-game/src/game.rs:164-169, 2475-2542`）已将其替换为 `try_side_panel_handle`，仅响应两个三角把手区 `STATUS_HANDLE_Y = (118.0, 157.0)` 与 `ITEM_HANDLE_Y = (260.0, 297.0)`（且 `m3_hud_buttons.rs:468` 明确断言点击 `(15, 192)` 空白滑条**不会**打开侧栏）。
+4. **`docs/reviews/TASKS_REMAINING_BUGS.md` 内部关于默认测试状态的表述自相矛盾**：
    - 第 16 行（§0）写“当前仓库默认 `cargo test -q --workspace` 为 `exit 0`”，而第 146 行（§0.1）写“全量默认测试仍有既有 `m3_manual_rules::late_night_bedtime_skips_to_next_evening`（17:00 vs 19:00）失败”。
 
 ---

@@ -677,7 +677,7 @@ impl Databases {
     ///
     /// `Save/System.sav` is the template a brand-new game saves from, but this build's
     /// copy carries an **empty** variable database (0 types / 0 rows / 0 configs,
-    /// measured — see docs/M3_VARDB_BUG.md). [`Self::write_into`] can only overwrite
+    /// measured — see docs/milestones/M3_VARDB_BUG.md). [`Self::write_into`] can only overwrite
     /// types, rows and fields that already exist, so without a schema no 可変DB cell
     /// can reach the file and every runtime edit is lost on reload.
     ///

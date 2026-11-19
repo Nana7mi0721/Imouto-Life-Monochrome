@@ -48,7 +48,7 @@ denominator.
         --translation docs/translations/en.tsv --frames 90 --out work/out/night_en.png
 
 A complete English catalog is shipped at `en.full.tsv` (1218/1218 static strings, strict check
-passing); see docs/M7_I18N.md for the format, coverage and how to extend it to other
+passing); see docs/milestones/M7_I18N.md for the format, coverage and how to extend it to other
 languages. `en.tsv` and `ja.tsv` remain small night-menu samples. Missing entries fall back
 to the original script text.
 

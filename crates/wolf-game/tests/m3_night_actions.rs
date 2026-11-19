@@ -665,7 +665,7 @@ fn ce249_bath_menu_and_branches() {
 //
 // Which three rows the shop offers is branch/RNG-dependent (the script builds the
 // list from the current state; the retail random table decides which branch runs),
-// and one shipped row is a documented source-data corruption (docs/M3_STRING_DECODE.md
+// and one shipped row is a documented source-data corruption (docs/milestones/M3_STRING_DECODE.md
 // — an odd run of 0xA1 makes its "円" decode as a CP932 halfwidth glyph). The tests
 // therefore never pin names: they read each row's price and pick affordable /
 // unaffordable rows from the actual list.

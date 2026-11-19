@@ -181,7 +181,7 @@ impl TileMap {
     ) -> Vec<SpriteQuad> {
         // Pack (or look up) every layer image first. Both the UVs below and the autotile
         // frame counts need the art to already be in the atlas, so the cache is only
-        // built after this pass (docs/M4_PERF.md section 7, candidate 2).
+        // built after this pass (docs/milestones/M4_PERF.md section 7, candidate 2).
         let base = atlas.add_asset(assets, &self.base_image);
         let base_size = atlas.source_size(&self.base_image).unwrap_or([0, 0]);
         let auto_rects: Vec<Option<AtlasRect>> = self

@@ -14,7 +14,7 @@
 
 ```text
 请对云端拉取的 Imouto Life 仓库做只读全量审查。
-严格遵循仓库里的 docs/GEMINI_FULL_AUDIT_GUIDE.md。
+严格遵循仓库里的 docs/reviews/GEMINI_FULL_AUDIT_GUIDE.md。
 先记录 git rev-parse HEAD、分支、Rust 版本和运行环境，再按指南分阶段审查。
 不要修改源码，不要提交，不要覆盖或删除任何存档，不要用推测代替证据。
 最终必须交付需求闭环矩阵、缺陷清单、性能报告、素材/封包报告、死代码可达性报告、
@@ -174,20 +174,20 @@ head -n 20 ../imouto-life-assets/MANIFEST.tsv 2>/dev/null || true
 3. `docs/README.md`
 4. `docs/HANDOFF_M0.md`，重点是 §3、§4、§8、§9、§11
 5. `docs/HANDOFF_PROGRESS.md`，先读 2026-11-12 以后部分，再向前追溯
-6. `docs/TASKS_REMAINING_BUGS.md` 的 §0 和 §1 历史状态
+6. `docs/reviews/TASKS_REMAINING_BUGS.md` 的 §0 和 §1 历史状态
 7. `docs/reviews/CODE_REVIEW_4ROUND.md`
-8. `docs/HANDOFF_DEEP_REVIEW_FIX.md`
+8. `docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md`
 9. `docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md`
-10. `docs/LIVE_PLAY_FIX_REPORT.md`
-11. `docs/M25_LIVE_UX.md`
-12. `docs/REVIEW_9a817e4_FIX_REPORT.md`
-13. `docs/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`
-14. `docs/AUDIT_REBUILD_FIX_REPORT.md`
-15. `docs/M4_PERF.md`
-16. `docs/GODOT_MIGRATION.md`
-17. `docs/GODOT_DEBUGGING.md`
-18. `docs/ENGINE_BEHAVIOR.md` 与 `docs/re/*.md`
-19. `docs/ASSETS.md`、`docs/PACKAGING.md`、`docs/PROJECT_ASSETS.md`
+10. `docs/reviews/LIVE_PLAY_FIX_REPORT.md`
+11. `docs/milestones/M25_LIVE_UX.md`
+12. `docs/reviews/REVIEW_9a817e4_FIX_REPORT.md`
+13. `docs/reviews/GEMINI_REVIEW_1c76dcc_FIX_REPORT.md`
+14. `docs/reviews/AUDIT_REBUILD_FIX_REPORT.md`
+15. `docs/milestones/M4_PERF.md`
+16. `docs/frontend/GODOT_MIGRATION.md`
+17. `docs/frontend/GODOT_DEBUGGING.md`
+18. `docs/engine/ENGINE_BEHAVIOR.md` 与 `docs/re/*.md`
+19. `docs/release/ASSETS.md`、`docs/release/PACKAGING.md`、`docs/release/PROJECT_ASSETS.md`
 20. 相关 `docs/M3_*`、`docs/M4_*`、`docs/M6_*`、`docs/M7_*`
 
 ### 3.3 已知过期或容易误读的文档
@@ -198,21 +198,21 @@ head -n 20 ../imouto-life-assets/MANIFEST.tsv 2>/dev/null || true
   当前状态以 §11.1 为准。
 - `README.md` 对测试全绿的描述可能落后于当前基线；以实际运行和
   `HANDOFF_M0.md` §11.1 为准。
-- `docs/M4_PERF.md` 中旧机器的毫秒数据只作方法示例，不能跨机器比较。
-- `docs/M4_SETTINGS_UI.md` 的 tenths/1/10 UI 缩放段落属于历史；
+- `docs/milestones/M4_PERF.md` 中旧机器的毫秒数据只作方法示例，不能跨机器比较。
+- `docs/milestones/M4_SETTINGS_UI.md` 的 tenths/1/10 UI 缩放段落属于历史；
   当前实现已撤销相关补偿。
-- `docs/GODOT_MIGRATION.md` 的“已知缺口”和 P3 导出状态是阶段快照。
-- `docs/TASKS_REMAINING_BUGS.md` §1 之后是历史任务快照，§0 才是完成记录。
-- `docs/M25_LIVE_UX.md` 的测试计数是当时快照，后续继续增加了回归。
-- `docs/PROJECT_ASSETS.md` 的“停止重构”是历史决策，不代表当前项目目标。
-- `docs/M3_TITLE_UX.md` 的读档取消软锁等旧缺口可能已经修复。
+- `docs/frontend/GODOT_MIGRATION.md` 的“已知缺口”和 P3 导出状态是阶段快照。
+- `docs/reviews/TASKS_REMAINING_BUGS.md` §1 之后是历史任务快照，§0 才是完成记录。
+- `docs/milestones/M25_LIVE_UX.md` 的测试计数是当时快照，后续继续增加了回归。
+- `docs/release/PROJECT_ASSETS.md` 的“停止重构”是历史决策，不代表当前项目目标。
+- `docs/milestones/M3_TITLE_UX.md` 的读档取消软锁等旧缺口可能已经修复。
 - `docs/REFERENCE.md` 的截图数量和路径可能已变化。
-- `docs/GODOT_DEBUGGING.md` 对 `Esc` 的描述是简化版；应结合
+- `docs/frontend/GODOT_DEBUGGING.md` 对 `Esc` 的描述是简化版；应结合
   `GameView.gd` 与 `game.rs` 的当前分支。
 - 代码注释里引用的 `FORMAT_SPEC.md`、`TEXT_SPEC.md`、`HSCENE.md` 等文档
   可能并不存在，见 `docs/README.md` 的“缺失文档”章节。
 - 历史审查报告中的行号会漂移，应以函数名、符号名和当前 `rg` 结果定位。
-- `docs/M4_PERF.md` 示例使用相对 `work/Data`；当前数据测试应使用绝对路径。
+- `docs/milestones/M4_PERF.md` 示例使用相对 `work/Data`；当前数据测试应使用绝对路径。
 - `m14_visual_regression` 的像素/图集数字在历史报告里可能已重录，
   以当前测试源码中的基线为准。
 

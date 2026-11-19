@@ -1,6 +1,6 @@
 # 《妹！生活 ～単色～》只读静态代码审查报告（`1c76dcc..9a817e4`）
 
-> **归档说明（2026-11-18）**：本文为`1c76dcc..9a817e4` 区间的只读静态代码审查报告，内容已被 [`docs/REVIEW_9a817e4_FIX_REPORT.md`](../../REVIEW_9a817e4_FIX_REPORT.md) 与 [`docs/reviews/CODE_REVIEW_4ROUND.md`](../../reviews/CODE_REVIEW_4ROUND.md) 取代，
+> **归档说明（2026-11-18）**：本文为`1c76dcc..9a817e4` 区间的只读静态代码审查报告，内容已被 [`docs/reviews/REVIEW_9a817e4_FIX_REPORT.md`](../../reviews/REVIEW_9a817e4_FIX_REPORT.md) 与 [`docs/reviews/CODE_REVIEW_4ROUND.md`](../../reviews/CODE_REVIEW_4ROUND.md) 取代，
 > 仅作证据链追溯，**不再代表当前工程事实**。文中行号、计数与结论可能已过时，
 > 引用前请先核对现行文档。
 
@@ -127,7 +127,7 @@
 ## 6. 核实与勘误（2026-11-15，端口侧回执）
 
 本文件为外部只读审查产物，正文一字未改。端口侧已逐条核实并闭环，详见
-**[docs/REVIEW_9a817e4_FIX_REPORT.md](../../REVIEW_9a817e4_FIX_REPORT.md)**。要点：
+**[docs/reviews/REVIEW_9a817e4_FIX_REPORT.md](../../reviews/REVIEW_9a817e4_FIX_REPORT.md)**。要点：
 
 * **P0（Opcode 122）成立并已修**：掩码回 `mode & 0xFFF0`、分支回 `0x0010`，
   全作 `0x0200` 0 处；新增镜像 CE270 `pc2000` 的回归单测。

@@ -7,7 +7,7 @@
 
 ## 1. 结论
 
-- `F-01` 是误报，不回滚 Opcode 122 语义；只订正 `docs/OPCODE_122.md`。
+- `F-01` 是误报，不回滚 Opcode 122 语义；只订正 `docs/engine/OPCODE_122.md`。
 - `F-02/F-03` 已补齐 Godot Windows Desktop 导出预设与发布脚本，导出时排除
   `addons/godot_ai/*`、`tests/*` 和 `bin/~*`。
 - `F-04` 启动失败现在有可读中文错误面板与退出路径；headless 直接 `quit(1)`。
@@ -26,7 +26,7 @@
 
 | ID | 核实 | 处置 |
 |---|---|---|
-| `F-01` | **误报**：本地 WOLF 3.39 手册有“上1行切り取り”，但 `0x0010` 在实机证据中是“代入先を変数で指定”标志；改成 `0xFFF0` 会清空 CE270 名牌 | 不改引擎；订正 `docs/OPCODE_122.md` |
+| `F-01` | **误报**：本地 WOLF 3.39 手册有“上1行切り取り”，但 `0x0010` 在实机证据中是“代入先を変数で指定”标志；改成 `0xFFF0` 会清空 CE270 名牌 | 不改引擎；订正 `docs/engine/OPCODE_122.md` |
 | `F-02` | 属实 | 新增 `godot/export_presets.cfg` 与 `tools/package-godot.sh` |
 | `F-03` | 属实 | 导出预设排除 `godot_ai` 插件与测试脚本；子代理实跑 `--export-pack` 验证 `project.binary` 无 `_mcp_game_helper` |
 | `F-04` | 属实 | `GameView.gd` 统一 `_fail_startup()`：GUI 显示错误面板，headless `quit(1)` |
@@ -52,7 +52,7 @@
 - `godot/scripts/GameView.gd`、`godot/tests/startup_error_and_f11.gd`：错误面板与 F11。
 - `godot/export_presets.cfg`、`tools/package-godot.sh`：Godot 正式导出。
 - `tools/package-playable.sh`、`tools/package/PLAYABLE_README.txt`、
-  `docs/PACKAGING.md`：F-06 与发行说明。
+  `docs/release/PACKAGING.md`：F-06 与发行说明。
 
 ### 3.1 追加修复：开始新游戏时标题闪回
 

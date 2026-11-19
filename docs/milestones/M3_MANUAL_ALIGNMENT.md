@@ -6,7 +6,7 @@
 
 - 六页均以 read_image 读取成功，原始 1000x1415 px（汉化版 JPG，约 127–359 KB）；简体中文正文清晰可读，无坏图/缺页。
 - 页码：manual01=−1（概述/操作/职业）、manual02=−2（流程/妹妹状态）、manual03=−3（哥哥状态/道具）、manual04=−4（夜间互动界面）、manual05=−5（游戏数据/收集）、manual06=−6（截图与致谢，无规则信息）。
-- 「当前实现位置」优先给源码 文件:行，或本作事件号（CE=CommonEvent，ev=SampleMapA 地图事件）；依据来自 docs/HANDOFF_M0.md、docs/M3_EVENT_MAP.md、docs/M3_MAP_EVENTS.md 及 crates/wolf-game/tests/m3_*.rs 实测。
+- 「当前实现位置」优先给源码 文件:行，或本作事件号（CE=CommonEvent，ev=SampleMapA 地图事件）；依据来自 docs/HANDOFF_M0.md、docs/milestones/M3_EVENT_MAP.md、docs/milestones/M3_MAP_EVENTS.md 及 crates/wolf-game/tests/m3_*.rs 实测。
 - 说明：本作是引擎重写，玩法数值/流程由游戏自带事件脚本驱动，引擎负责忠实执行；因此「已实现（脚本）」表示引擎能运行对应事件且已有测试覆盖其可观测输出，但脚本内部具体数值不在 Rust 侧硬编码。
 
 ## 1. manual01（−1）：操作方法与四职业
@@ -15,7 +15,7 @@
 |---|---|---|---|---|
 | manual01 操作方法 | 本作以鼠标控制为主；决定=Enter / Z / 鼠标左键；取消=Backspace / X / 鼠标右键 | crates/wolf-cli/src/play.rs:503-519（wolf_bit 键盘映射）、:407-420（左键=1/右键=2/中键=4）、crates/wolf-game/src/game.rs:980-986（左键选中并确认）、key.rs:37-86（键码模型 10/11/12） | 已实现 | 键盘 Enter/Space/Z/Y→OK、Esc/Backspace/X→CANCEL；鼠标与键盘两条路径都在（m2_input.rs 断言鼠标不替代键盘） |
 | manual01 操作方法 | 重启 = F12 | crates/wolf-cli/src/play.rs:384-387 | 待实现 | 目前只把 F10 绑为退出（event_loop.exit），F12 未绑定；见 gap #1 |
-| manual01 关于玩家 | 四种职业：学生（财力低/行动力优/工作日可熬到 24 点）、自由人（财力与行动力平均/白天自由行动 1 次/23 点睡）、上班族（财力优/行动力偏低/工作日 23 点睡）、废柴（财力与行动力都低/白天自由行动 3 次/24 点睡） | 新游戏问卷 SampleMapA ev0 ニューゲーム処理（docs/M3_MAP_EVENTS.md:44）；日中处理 CE252 学生 / CE253 フリーター / CE254 社会人 / CE255 ダメ人間；CE256 日中メニュー | 已实现（脚本） | 引擎执行脚本事件；职业初始数值写在事件脚本内（HANDOFF_M0.md:202 记录的报告值与 2.03 原版待核对），Rust 侧无硬编码 |
+| manual01 关于玩家 | 四种职业：学生（财力低/行动力优/工作日可熬到 24 点）、自由人（财力与行动力平均/白天自由行动 1 次/23 点睡）、上班族（财力优/行动力偏低/工作日 23 点睡）、废柴（财力与行动力都低/白天自由行动 3 次/24 点睡） | 新游戏问卷 SampleMapA ev0 ニューゲーム処理（docs/milestones/M3_MAP_EVENTS.md:44）；日中处理 CE252 学生 / CE253 フリーター / CE254 社会人 / CE255 ダメ人間；CE256 日中メニュー | 已实现（脚本） | 引擎执行脚本事件；职业初始数值写在事件脚本内（HANDOFF_M0.md:202 记录的报告值与 2.03 原版待核对），Rust 侧无硬编码 |
 
 ## 2. manual02（−2）：游戏流程与妹妹状态
 
@@ -49,7 +49,7 @@
 |---|---|---|---|---|
 | manual04 顶栏 | 时刻·星期·姓名（身份）·行动力 x/y·精力 x/y·所持金 | CE243 時刻表示（#200 HH:MM + #210 星期）/ CE242 ステータス表示；crates/wolf-game/src/game.rs:870 顶栏排版注释 | 已实现 | m3_ui_screens.rs:13-14 断言 5 项读数与时钟/星期 |
 | manual04 ① 妹妹的状态 | GOOD/BAD 表示愉悦感/不快感；GOOD 满→绝顶，BAD 满→强制结束、信赖下降；睡眠 6 状态；深眠抑制 GOOD/BAD 上升但行动不被拒绝 | CE237 Hステータス（GOOD/BAD 标签 + sleeping_staus.png 睡眠状态圆标，槽 1992..2000）；v18/19 睡眠深さ·最大、v24 快感、v25 不愉快、v26 媚薬効果 | 已实现（脚本，标签层已断言；数值逻辑未端到端） | m3_ui_screens.rs:8 断言 GOOD/BAD 标签与睡眠圆标；睡眠状态机与 BAD 结算在脚本内 |
-| manual04 ②③ 左右手动作 | 左右手各可执行动作图标，可同时进行，组合产生追加行动 | SampleMapA ev15 コマンドリスト表示 / ev16 コマンド選択判定（458 槽）/ ev17 コマンド実行（4980 槽）/ ev26 アイテムクリック監視（docs/M3_MAP_EVENTS.md:59-70） | 已实现（脚本）/ 未端到端 | 大型 UI 状态机，冒烟可启动；组合逻辑在脚本内，无端到端测试（gap #5） |
+| manual04 ②③ 左右手动作 | 左右手各可执行动作图标，可同时进行，组合产生追加行动 | SampleMapA ev15 コマンドリスト表示 / ev16 コマンド選択判定（458 槽）/ ev17 コマンド実行（4980 槽）/ ev26 アイテムクリック監視（docs/milestones/M3_MAP_EVENTS.md:59-70） | 已实现（脚本）/ 未端到端 | 大型 UI 状态机，冒烟可启动；组合逻辑在脚本内，无端到端测试（gap #5） |
 | manual04 ④ 姿势·道具列表 | 可改变体位与使用道具 | SampleMapA ev22 ポーズ変更1 / ev28 ポーズ変更2；CE239 アイテムリスト | 已实现（脚本）/ 未端到端 | 姿势切换事件已冒烟（M3_MAP_EVENTS.md:66,72） |
 | manual04 ⑤ 射精感 | 射精前积累，100% 以上可射精，120% 强制射精 | v66 射精感（HANDOFF_M0.md:129）；夜间互动脚本 | 已实现（脚本）/ 未端到端 | 进度由脚本维护；无专项断言（gap #5） |
 | manual04 ⑥ 妹妹 | 点击妹妹可按部位执行动作，可与其他动作同时进行 | SampleMapA ev16 コマンド選択判定 / ev26 アイテムクリック監視 | 已实现（脚本） | 命中/点击判定为脚本状态机 |
@@ -89,7 +89,7 @@
 1. **F12「重启」：已实现**。`wolf-cli/src/play.rs` 绑定 F12（新按下沿）重建成新 `Game` 并重新 boot；F10 仍退出；含单测 `f12_is_the_restart_key`。
 2. **CE242 数字渲染：已实现**。`textpic::Cells::{cdb,udb}` 在字符串单元不存在时回退数字（game.rs），m3_status_panel 通过。
 3. **系统设置 API：本轮实现**（`Game::settings/set_settings/apply_settings/save_system_settings` + System.sav 原子写回）。Config.exe 等价的窗口内设置界面留 M4。
-4. **未建模诊断：已收敛**。本作出现的 290 特效 kind 0/1/2/3/4/5/7/8/9/10 全部实现；行名列 -3（CE265/CE267）已建模；106 是脚本 debug 打印（良性）。剩余 290 诊断均表示作用范围内没有活动图片，属真实 no-op。详见 docs/M3_EVENT_MAP.md。
+4. **未建模诊断：已收敛**。本作出现的 290 特效 kind 0/1/2/3/4/5/7/8/9/10 全部实现；行名列 -3（CE265/CE267）已建模；106 是脚本 debug 打印（良性）。剩余 290 诊断均表示作用范围内没有活动图片，属真实 no-op。详见 docs/milestones/M3_EVENT_MAP.md。
 5. **manual04 夜间互动端到端：本轮补齐**（m3_night_interaction_e2e.rs：GOOD/BAD、射精感阈值、睡眠/道具子菜单的可观测输出）。未覆盖的组合仍由脚本承载。
 6. **妹妹面板与统计联动：已有专项**。m3_status_panel（5）与 m3_stats_collection（4）覆盖面板数值/收集进度；感度%/キゲン逐档文本仍建议 M4 逐条核对。
 7. **v8 语义：实测澄清**。CE243 在周五/周六写 `2000008 = 25`，CE245 对其 ±1/±2，CE251 读 23/24；它不是行动力，也不是单纯的「就寝時間」——暂按「深夜/就寝日代码」记，HANDOFF §3.7 的命名保留问号。

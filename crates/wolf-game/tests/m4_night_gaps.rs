@@ -1,4 +1,4 @@
-//! M4 night-interface gap coverage (docs/M3_RUNTIME.md §5, gap #5).
+//! M4 night-interface gap coverage (docs/milestones/M3_RUNTIME.md §5, gap #5).
 //!
 //! This file closes the two recorded end-to-end gaps:
 //!

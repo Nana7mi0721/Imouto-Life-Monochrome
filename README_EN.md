@@ -56,7 +56,7 @@ Powered by a **Rust bytecode VM core** combined with a **Godot 4 GDExtension hyb
 
 ### 1. Download Release Packages
 
-Head to the [Releases page](../../releases) to grab the latest build (current version: `v0.1.0`):
+Head to the [Releases page](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) to grab the latest build (current version: `v0.1.0`):
 
 - **Windows**:
   - `Imouto Life setup.exe`: NSIS installer with desktop shortcuts and uninstaller integration.
@@ -167,7 +167,7 @@ graph TD
 
 ## 📦 Packaging & Distribution
 
-See [docs/PACKAGING.md](docs/PACKAGING.md) for full delivery pipelines:
+See [docs/release/PACKAGING.md](docs/release/PACKAGING.md) for full delivery pipelines:
 
 - **Windows Distribution**:
   ```bash
@@ -189,8 +189,8 @@ See [docs/PACKAGING.md](docs/PACKAGING.md) for full delivery pipelines:
 - **[AGENTS.md](AGENTS.md)**: Automation and multi-agent development guidelines.
 - **[CHANGELOG.md](CHANGELOG.md)**: Release history and version updates.
 - **[tools/README.md](tools/README.md)**: Tooling and script reference manual.
-- **[docs/plans/](docs/plans/)**: Architectural plans and touch optimization RFCs.
-- **[docs/ENGINE_BEHAVIOR.md](docs/ENGINE_BEHAVIOR.md)**: WOLF engine behavioral specification.
+- **[docs/plans/](docs/plans)**: Architectural plans and touch optimization RFCs.
+- **[docs/engine/ENGINE_BEHAVIOR.md](docs/engine/ENGINE_BEHAVIOR.md)**: WOLF engine behavioral specification.
 
 ---
 

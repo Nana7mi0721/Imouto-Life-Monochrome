@@ -100,15 +100,15 @@ wolf-cli capture --load-save work/Data/Save/SaveData01.sav --event 245 --frames 
   `db.rs` 改用 decode_wolf_str 读回。SavePart5 数字字段也已用「保留原始记录」补齐，
   `Game::load_save → save_to` 对官方 SaveData01/02 现在 **0 个差异字节**（含
   header checksum），二次往返稳定。
-- **性能基线**：m3_perf_baseline + docs/M4_PERF.md（5 场景，非门限）。
+- **性能基线**：m3_perf_baseline + docs/milestones/M4_PERF.md（5 场景，非门限）。
 
 ## 8. 2026-10-31 M4 状态（更新）
 
 - **已完成**：tile quad 缓存（task-44）、SoundCmd.frames 淡入/延迟（task-45）、
-  100 日长链永久测试（m4_long_chain）、v8 语义审计（docs/M4_V8_AUDIT.md）、
-  发布打包（tools/package.*、docs/PACKAGING.md）、负号图片固定屏修复、
+  100 日长链永久测试（m4_long_chain）、v8 语义审计（docs/milestones/M4_V8_AUDIT.md）、
+  发布打包（tools/package.*、docs/release/PACKAGING.md）、负号图片固定屏修复、
   decode_wolf_str GBK/UTF-8 冲突修复、读档前 CE48 初始化（prime_engine）、
-  数据库值 magic/op121 DB 写入（详见 docs/M4_HUD.md）。
+  数据库值 magic/op121 DB 写入（详见 docs/milestones/M4_HUD.md）。
 - **读档恢复地图 Runtime**：`play/capture --load-save` 以前只 prime+load，停在静态卧室；
   现由 `Game::resume_loaded_map` 用 SavePart1 的 64x36、35 个 event id 唯一识别
   SampleMapA，`start_pages_loaded` + `MapRuntime::start_pending_loaded` 装入 tilemap/
@@ -121,7 +121,7 @@ wolf-cli capture --load-save work/Data/Save/SaveData01.sav --event 245 --frames 
   --pointer 100,200` 可直接触发 ev10 的状态入口（v15==99 为该页的显式门槛，正常流程不可达，
   是数据怪癖），得到房间+HUD+左侧状态面板（work/out/shots/status_panel8.png）。
   关键是实现了 op150 的 head bit 0x10000 相对坐标：CE238 隐藏时面板在 x=-305，显示时
-  相对 +305 落到 x=0，五个动态文本也相对 +(305,0) 移到各标签旁（见 docs/M4_HUD.md §6）。
+  相对 +305 落到 x=0，五个动态文本也相对 +(305,0) 移到各标签旁（见 docs/milestones/M4_HUD.md §6）。
 - **夜菜单截图已收口**：`capture --load-save ... --event 245` 过去会丢掉 event（Entry::Save
   优先级高于 --event）；现在 `run_capture` 增加 `save_event`，读档恢复地图后再启动指定
   common event，得到房间+HUD+夜菜单六项的 work/out/shots/night_menu4.png。
@@ -131,6 +131,6 @@ wolf-cli capture --load-save work/Data/Save/SaveData01.sav --event 245 --frames 
   "Segoe UI Symbol" 正好命中）；text stats 由 `1 substituted` 变为
   `0 substituted`，截图中的 ▶ 正确显示。单元测试
   `text::tests::a_named_fallback_covers_a_glyph_the_primary_lacks` 覆盖。
-- **仍需实机核验**：可视设置界面已完成 CE132/CE95 排版（`docs/M4_SETTINGS_UI.md`、
+- **仍需实机核验**：可视设置界面已完成 CE132/CE95 排版（`docs/milestones/M4_SETTINGS_UI.md`、
   `m4_settings_ui`），键位重绑定、设置交互与音量听感仍需用户在 `wolf-cli play` 里截图/
   操作确认；msyhbd.ttc TTC 字体加载已实测可用。

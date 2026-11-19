@@ -1,15 +1,15 @@
 # T12 性能补丁与 BUG-20..24 双台账收口 —— 会话存档（2026-11-13）
 
-> **归档说明（2026-11-18）**：本文为2026-11-13 的 T12 性能补丁与双台账收口会话存档，内容已被 [`docs/HANDOFF_M0.md`](../HANDOFF_M0.md) 与 [`docs/AUDIT_REBUILD_FIX_REPORT.md`](../AUDIT_REBUILD_FIX_REPORT.md) 取代，
+> **归档说明（2026-11-18）**：本文为2026-11-13 的 T12 性能补丁与双台账收口会话存档，内容已被 [`docs/HANDOFF_M0.md`](../HANDOFF_M0.md) 与 [`docs/reviews/AUDIT_REBUILD_FIX_REPORT.md`](../reviews/AUDIT_REBUILD_FIX_REPORT.md) 取代，
 > 仅作证据链追溯，**不再代表当前工程事实**。文中行号、计数与结论可能已过时，
 > 引用前请先核对现行文档。
 
 
 > **状态**：代码与文档改动均已落地，**未 commit**。本文件只记录本会话的判断与证据，
 > 便于下次会话不经回溯对话即可接手。
-> **关联文档**：`docs/TASKS_REMAINING_BUGS.md` §0、`docs/HANDOFF_M0.md` §11.1/§11.3、
+> **关联文档**：`docs/reviews/TASKS_REMAINING_BUGS.md` §0、`docs/HANDOFF_M0.md` §11.1/§11.3、
 > `docs/HANDOFF_PROGRESS.md` 2026-11-13「T12 性能补丁与两套 BUG-20..24 口径收口」条目。
-> 紧随其后的审计轮（截图 6 项 + P1/P2）见 `docs/AUDIT_REBUILD_FIX_REPORT.md`。
+> 紧随其后的审计轮（截图 6 项 + P1/P2）见 `docs/reviews/AUDIT_REBUILD_FIX_REPORT.md`。
 
 ## 1. 结论摘要
 
@@ -89,7 +89,7 @@ runtime.stop_all(&mut vm)
 | :--- | :--- |
 | `docs/reviews/README.md` | 编号表拆成「报告 §六基线 BUG-20..24」与「旧台账（2026-11-11）BUG-20..24」两行 |
 | `docs/reviews/CODE_REVIEW_4ROUND.md` | §1.1 第 2 条改为「同号不同义的两套基线」；第六章标题加「本报告 §六」，章首加互不套用警示；§5.4 的 `Field 11/12` 由「窗口内坐标 / 移出窗口 −1」修正为**帧间位移 `dx/dy`**；§六 BUG-21 行标注已实现 |
-| `docs/HANDOFF_DEEP_REVIEW_FIX.md` | 来源行补注「报告 §六编号，与 2026-11-11 台账同号不同义」 |
+| `docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md` | 来源行补注「报告 §六编号，与 2026-11-11 台账同号不同义」 |
 | `docs/README.md` | 索引行同步为「报告 §六基线 BUG-20..24（与旧台账同号不同义）」 |
 | `docs/HANDOFF_PROGRESS.md` | 2026-11-12 文档整理条目补注同号不同义 |
 | `docs/HANDOFF_M0.md` §11.1 | 旧编号条目改为分源表述，并记录 §六 BUG-21 于 2026-11-13 闭环、m16 变为 4/0 |
@@ -201,7 +201,7 @@ crates/wolf-game/src/game.rs                   +31（T12）+ 停靠侧栏 alpha 
 crates/wolf-game/tests/m16_old_bug_review.rs    59 行改写
 crates/wolf-gdext/src/lib.rs                   choice_options 双 clone 合并
 crates/wolf-cli/tests/m14_visual_regression.rs  文本计数重钉 + 溯源注释
-docs/HANDOFF_DEEP_REVIEW_FIX.md                +4/-…
+docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md                +4/-…
 docs/HANDOFF_M0.md                             §11.1
 docs/HANDOFF_PROGRESS.md                       2026-11-13 条目
 docs/README.md                                 索引行

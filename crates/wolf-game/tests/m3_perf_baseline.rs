@@ -34,7 +34,7 @@
 //! ```
 //!
 //! Without data the test prints a skip line and returns, so the default workspace
-//! suite keeps exiting 0. The measured table and method live in docs/M4_PERF.md.
+//! suite keeps exiting 0. The measured table and method live in docs/milestones/M4_PERF.md.
 //!
 //! This file deliberately contains one `#[test]` so cargo runs the scenarios on a
 //! single thread; parallel test threads would contend for the same core and make
@@ -507,7 +507,7 @@ fn m4_perf_baseline() {
         return;
     }
 
-    // Machine-readable-ish table; docs/M4_PERF.md is filled from this output.
+    // Machine-readable-ish table; docs/milestones/M4_PERF.md is filled from this output.
     // The render columns are per-call costs, not part of the frame-loop time:
     // a host that draws pays them on top of `med ms/frame`.
     println!();

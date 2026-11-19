@@ -28,7 +28,7 @@
 //! [`crate::game::Game::frame`] replays it on a cursor change so the highlight tracks
 //! the player's selection. The previous port excluded it as a "dead title variant" and
 //! painted an inferred text panel instead, which is why the title menu looked wrong;
-//! see docs/M3_TITLE_UX.md.
+//! see docs/milestones/M3_TITLE_UX.md.
 
 use std::collections::BTreeMap;
 

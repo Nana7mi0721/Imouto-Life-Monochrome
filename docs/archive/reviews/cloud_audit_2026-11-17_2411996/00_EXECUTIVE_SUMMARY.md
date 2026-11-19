@@ -1,6 +1,6 @@
 # Imouto Life 只读全量审查执行摘要 (`00_EXECUTIVE_SUMMARY.md`)
 
-> **归档说明（2026-11-18）**：本文为2026-11-17 云端只读全量审查（基线 `2411996`）的组成部分，内容已被 [`docs/reviews/cloud_audit_2026-11-18_e716f08/`](../../../reviews/cloud_audit_2026-11-18_e716f08/) 取代，
+> **归档说明（2026-11-18）**：本文为2026-11-17 云端只读全量审查（基线 `2411996`）的组成部分，内容已被 [`docs/reviews/cloud_audit_2026-11-18_e716f08/`](../../../reviews/cloud_audit_2026-11-18_e716f08) 取代，
 > 仅作证据链追溯，**不再代表当前工程事实**。文中行号、计数与结论可能已过时，
 > 引用前请先核对现行文档。
 >
@@ -16,7 +16,7 @@
 
 > 审查日期：2026-11-17
 > 审查范围：`nana7mi0721/imouto-life` 源码快照（只读审计，未修改源码、未提交、未创建 PR）
-> 依据指南：`docs/GEMINI_FULL_AUDIT_GUIDE.md`
+> 依据指南：`docs/reviews/GEMINI_FULL_AUDIT_GUIDE.md`
 
 ---
 
@@ -65,7 +65,7 @@
 - **必须立即修（发版前）**：`F-01`（恢复 `0xFFF0` / `0x0010`）、`F-02`（补齐 `export_presets.cfg` 与正式 Godot 导出验证）、`F-03`（导出时剥离或禁用 `godot_ai` / `_mcp_game_helper`）、`F-04`（启动失败可见弹窗 + 安全退出）、`F-06`（`package-playable.sh` 资源白名单/排除测试存档与模板）。
 - **可在后续版本修**：`F-05`（损坏存档提示而非静默解析）、`F-07`（模态期间冻结/暂停 VM 帧推进）、`F-08`（收窄动作键绕过并保留非交互模式门控）、`F-09`（`Move` 改用 `BTreeMap::range`）、`F-10`（`Assets::clear()` 接入 `reset_to_title` / `load_save` 或加 LRU 预算）、`F-11`（`\img` 混排保护）、`F-12`（模态下 `F11` 全屏不被 `_input` 拦截）。
 - **旧报告应撤回或更新的结论**：
-  - `docs/REVIEW_9a817e4_FIX_REPORT.md` 表格正文记录的 5 项“已修”在 `b23a1e1` 已回退，当前源码仅落地 `.mps` 后缀与本地时钟两项（报告顶部横幅已声明，但引用时不可再将表格误当现状）。
+  - `docs/reviews/REVIEW_9a817e4_FIX_REPORT.md` 表格正文记录的 5 项“已修”在 `b23a1e1` 已回退，当前源码仅落地 `.mps` 后缀与本地时钟两项（报告顶部横幅已声明，但引用时不可再将表格误当现状）。
   - `AGENTS.md:49` 仍写“8 个 crate”，实际 `Cargo.toml` 为 **9 个 crate**（含 `wolf-launcher` / `imouto-launcher`）。
 
 ### 2.4 下一步最小验证集（需在有 Rust + Godot + `work/Data` 的 Windows/本机环境执行）

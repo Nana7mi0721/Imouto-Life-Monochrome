@@ -1,6 +1,6 @@
 # TEXT_METRICS.md — 原版文本度量逆向（§3-2/§3-3/§3-4/§3-5/§3-7）
 
-本文用 Ghidra 12.2 全量反编译 dump（`work/out/re_all/all/*.c`，4375 个 ≥64B 函数；`work/out/re_all/index.tsv` 为清单）核对 `docs/ENGINE_BEHAVIOR.md` §3 中五项文本度量，并逐项给出：
+本文用 Ghidra 12.2 全量反编译 dump（`work/out/re_all/all/*.c`，4375 个 ≥64B 函数；`work/out/re_all/index.tsv` 为清单）核对 `docs/engine/ENGINE_BEHAVIOR.md` §3 中五项文本度量，并逐项给出：
 **原版行为 / 仓内实现 / 差异 / 证据（函数 VA + 行号）**。
 
 > 内容安全：只做二进制/资源层技术描述。
@@ -17,7 +17,7 @@
 - 文本渲染主函数 `work/out/re_anchor/00494480_FUN_00494480.c`（行号引用此文件；`work/out/re_all/all/` 的同名副本只在开头少一行注释，行号 −1）。
 - 其余函数引用 `work/out/re_all/all/<VA>_FUN_<VA>.c`。
 
-本次未修改任何 `crates/`、`docs/ENGINE_BEHAVIOR.md`、`docs/RE_GAME_EXE.md`；未执行 Game.exe；未跑 Ghidra（只用现成 dump）。
+本次未修改任何 `crates/`、`docs/engine/ENGINE_BEHAVIOR.md`、`docs/engine/RE_GAME_EXE.md`；未执行 Game.exe；未跑 Ghidra（只用现成 dump）。
 
 ### 0.1 三个必须先分清的量
 
@@ -91,7 +91,7 @@ line_pitch = max_font_on_line * S + trunc(line_spacing_cfg * min(base_font_cfg, 
 
 **结论：不能用它推导 101 消息窗的 +6；真正管行距的是 FUN_00494480 §1 的公式。**（已定案）
 
-> 交叉印证：`docs/RE_GAME_EXE.md:252` §9.2.4 独立得出“文本渲染器里没有 +6 这类常数、行推进 = 本行最大字号 × 倍率”，与本节的“基础步进”一致；本节补上了它没有展开的**额外行距项**（`:456-525`）。
+> 交叉印证：`docs/engine/RE_GAME_EXE.md:252` §9.2.4 独立得出“文本渲染器里没有 +6 这类常数、行推进 = 本行最大字号 × 倍率”，与本节的“基础步进”一致；本节补上了它没有展开的**额外行距项**（`:456-525`）。
 
 ---
 

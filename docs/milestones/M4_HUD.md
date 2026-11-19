@@ -118,7 +118,7 @@ HUD = 19:30 周一 / 早泄 强壮 哥哥（学生） / 行动力60/65 / 精力 
   失败只警告不致命。测试 `text::tests::a_named_fallback_covers_a_glyph_the_primary_lacks`
   验证 primary 单独缺 ▶、加入 fallback 后无缺失。
 - 设置 UI：CE132/CE95 的可视排版已在 M4 设置屏修复中完成（详见
-  `docs/M4_SETTINGS_UI.md`：1/10 字符格坐标、\f[0] 字号、290 位移、keep_shift、
+  `docs/milestones/M4_SETTINGS_UI.md`：1/10 字符格坐标、\f[0] 字号、290 位移、keep_shift、
   CursorBase）；音量/键位持久化 API 与通用输入路由已就绪，实机键位重绑定仍待
   用户截图后再核验。
 - 字体优先 `C:/Windows/Fonts/msyhbd.ttc`：capture 实测已输出

@@ -1,7 +1,7 @@
 # Godot 前端：操作 / 显示 / 对话问题的排查手册
 
 > 适用：`godot/` 前端 + `crates/wolf-gdext` 桥。WOLF 语义仍以
-> `docs/HANDOFF_M0.md`、`docs/ENGINE_BEHAVIOR.md` 为准；本文只讲怎么定位
+> `docs/HANDOFF_M0.md`、`docs/engine/ENGINE_BEHAVIOR.md` 为准；本文只讲怎么定位
 > “按键没反应 / 画面不对 / 对话不见了”。
 
 ## 1. 操作契约（本作实机口径）

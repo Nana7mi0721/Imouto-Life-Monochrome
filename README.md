@@ -56,7 +56,7 @@
 
 ### 1. 获取发行包
 
-请前往 [Releases 页面](../../releases) 下载对应平台的最新正式版本（当前最新版本：`v0.1.0`）：
+请前往 [Releases 页面](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) 下载对应平台的最新正式版本（当前最新版本：`v0.1.0`）：
 
 - **Windows 用户**：
   - `Imouto Life setup.exe`：一键安装程序（包含桌面快捷方式与控制面板卸载集成）。
@@ -167,7 +167,7 @@ graph TD
 
 ## 📦 发布与打包脚本
 
-详细打包参数与发布标准请查阅 [docs/PACKAGING.md](docs/PACKAGING.md)：
+详细打包参数与发布标准请查阅 [docs/release/PACKAGING.md](docs/release/PACKAGING.md)：
 
 - **Windows 发行包打包**：
   ```bash
@@ -189,8 +189,8 @@ graph TD
 - **[AGENTS.md](AGENTS.md)**：自动化开发与多代理协同契约。
 - **[CHANGELOG.md](CHANGELOG.md)**：版本演进与发布历史。
 - **[tools/README.md](tools/README.md)**：自动化构建、测试与逆向工具手册。
-- **[docs/plans/](docs/plans/)**：系统演进与移动端优化规划方案。
-- **[docs/ENGINE_BEHAVIOR.md](docs/ENGINE_BEHAVIOR.md)**：WOLF 引擎底层行为与事件契约。
+- **[docs/plans/](docs/plans)**：系统演进与移动端优化规划方案。
+- **[docs/engine/ENGINE_BEHAVIOR.md](docs/engine/ENGINE_BEHAVIOR.md)**：WOLF 引擎底层行为与事件契约。
 
 ---
 

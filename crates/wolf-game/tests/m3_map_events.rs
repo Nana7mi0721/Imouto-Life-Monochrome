@@ -59,7 +59,7 @@ const MISSING_ZOOM_EVENT: &str =
 
 fn assert_no_unexpected_warnings(game: &Game) {
     // Retail calls a zoom helper absent from CommonEvent.dat; see
-    // docs/M3_EVENT_GRAPH.md section 6. Every other warning remains fatal.
+    // docs/milestones/M3_EVENT_GRAPH.md section 6. Every other warning remains fatal.
     let known = game
         .diagnostics
         .get(MISSING_ZOOM_EVENT)
@@ -212,7 +212,7 @@ fn samplemapa_event_pages_run_bounded_without_warnings() {
     // isolation are the ones that need live context (a player key press, a menu that
     // is open, or a common-event subroutine with arguments). We do not try to force
     // those; the smoke test just proves they can be started and tick without a
-    // warning. The list is recorded in docs/M3_MAP_EVENTS.md so drift is visible.
+    // warning. The list is recorded in docs/milestones/M3_MAP_EVENTS.md so drift is visible.
     let context_dependent: &[u32] = &[8, 11, 16, 17, 18, 20, 24, 26, 34, 35];
 
     let mut failures: Vec<String> = Vec::new();

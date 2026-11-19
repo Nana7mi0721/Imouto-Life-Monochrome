@@ -23,6 +23,6 @@ fn help_documents_the_hotkeys_flag() {
     );
     assert!(
         text.contains("M7_HOTKEYS"),
-        "help should point at docs/M7_HOTKEYS.md:\n{text}"
+        "help should point at docs/milestones/M7_HOTKEYS.md:\n{text}"
     );
 }

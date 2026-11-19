@@ -3,7 +3,7 @@
 //! 两段覆盖：
 //! 1) 从标题菜单新游戏（cursor 0 + auto_choice）真实 boot 到 SampleMapA，记录初始
 //!    日计数 v99、星期 v6、时钟 v4/v5、金钱 v7、妹位置 v14、屏幕几何与 DB 快照。
-//! 2) 用「干净事件态」的 Game::new 驱动日循环（docs/M2_SLICE.md §4：CE251 就寝必须用
+//! 2) 用「干净事件态」的 Game::new 驱动日循环（docs/milestones/M2_SLICE.md §4：CE251 就寝必须用
 //!    干净 Game::new 状态；新游戏/读档的 19:30 直接 start_event(251) 只吐「…………」并
 //!    停在 00:00）。每天推进到 19:30 后跑 CE251 就寝到次日 08:30；连续 3 日。
 //!    CE245 夜菜单仅在 boot 的真实地图事件态可打开，由 test1 断言含「今天就这样
@@ -60,7 +60,7 @@ const MISSING_ZOOM_EVENT: &str =
 
 fn assert_no_unexpected_warnings(game: &Game) {
     // Retail calls a zoom helper absent from CommonEvent.dat; see
-    // docs/M3_EVENT_GRAPH.md section 6. Every other warning remains fatal.
+    // docs/milestones/M3_EVENT_GRAPH.md section 6. Every other warning remains fatal.
     let known = game
         .diagnostics
         .get(MISSING_ZOOM_EVENT)
@@ -465,7 +465,7 @@ fn three_days_round_trip_through_save_slots() {
         );
         assert!(game.choices.is_none(), "19:30 应无待选菜单");
 
-        // 纯事件态的日循环按 docs/M2_SLICE.md 走 CE251 就寝推进到次日 08:30；
+        // 纯事件态的日循环按 docs/milestones/M2_SLICE.md 走 CE251 就寝推进到次日 08:30；
         // CE245 夜菜单只能在 boot 的真实地图事件态打开（test1 已验证），此处不重复。
         sleep_to_morning(&mut game);
 

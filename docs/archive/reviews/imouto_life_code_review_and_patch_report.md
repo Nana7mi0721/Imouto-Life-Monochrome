@@ -131,7 +131,7 @@
 | :--- | :--- | :--- |
 | `docs/reviews/README.md:10, 22` | 第 10 行“历史基线 BUG-20..24”指报告 §六，第 22 行却写成旧台账主题，内部冲突 | 拆分为：**历史台账（2026-11-11）BUG-20..24**（坐标/滚轮/鼠标帧差/全屏特效/连发）与 **四轮审查 §六 BUG-20..24**（ActionKey/map-self/选项外点击/CSelf5..9/Op300） |
 | `docs/reviews/CODE_REVIEW_4ROUND.md:9-14, 710`（及 `Field 11/12` 旧描述） | 统称“历史台账/基线 BUG-20..24”，未与 `HANDOFF_PROGRESS.md` 区分；`Field 11/12` 仍写“移出窗口 -1” | 在 `:14` 与 `:710` 注明仅指本报告 §六；将 `Field 11/12` 修正为“帧间鼠标位移 `dx/dy`” |
-| `docs/HANDOFF_DEEP_REVIEW_FIX.md:3-4` | 仅写“历史基线 BUG-20..24 见报告第六章” | 补注“（报告 §六 BUG-20..24，区别于 `HANDOFF_PROGRESS.md` 2026-11-11 历史台账同名编号）” |
+| `docs/reviews/HANDOFF_DEEP_REVIEW_FIX.md:3-4` | 仅写“历史基线 BUG-20..24 见报告第六章” | 补注“（报告 §六 BUG-20..24，区别于 `HANDOFF_PROGRESS.md` 2026-11-11 历史台账同名编号）” |
 | `docs/README.md:21` | 简表仅写“历史基线 BUG-20..24” | 改为“报告 §六基线 BUG-20..24（与 `HANDOFF_PROGRESS.md` 旧台账区分）” |
 | `docs/HANDOFF_PROGRESS.md:917` | 写“含历史 BUG-20~24”，与同文件 `:899-903` 编号冲突 | 改为“含报告 §六基线 BUG-20~24（与本文件 2026-11-11 台账 BUG-20~24 异义）” |
 

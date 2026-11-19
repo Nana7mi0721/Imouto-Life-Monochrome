@@ -1,7 +1,7 @@
 # docs/re — 逆向与实机证据
 
 本目录是**原版行为的证据层**：每篇都写明取证方法（只读 Ghidra 反编译 / 只读解析
-`work/Data` / 实机截图度量）、置信度，以及与 [../ENGINE_BEHAVIOR.md](../ENGINE_BEHAVIOR.md)
+`work/Data` / 实机截图度量）、置信度，以及与 [../ENGINE_BEHAVIOR.md](../engine/ENGINE_BEHAVIOR.md)
 §3 清单的对应关系。
 
 > **取证约定**：不执行原版 `Game.exe`。反编译结论附函数 VA 与伪码行号，资源层结论附

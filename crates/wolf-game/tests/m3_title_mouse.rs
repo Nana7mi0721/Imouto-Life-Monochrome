@@ -7,7 +7,7 @@
 //!     opens the 102-choice prompt it hard-sets system vars 3/4 to -1000
 //!     (CE42 op121 [9000003,-1000] / [9000004,-1000]), i.e. it deliberately parks
 //!     the choice window completely off screen; its background picture
-//!     Picture/title2.jpg does not exist in this build (docs/M3_ASSET_REFS.md). So
+//!     Picture/title2.jpg does not exist in this build (docs/milestones/M3_ASSET_REFS.md). So
 //!     the real title prompt has no on-screen rows at all and cannot be clicked
 //!     with the mouse until it is relocated. The first test pins that real,
 //!     off-screen placeholder state.

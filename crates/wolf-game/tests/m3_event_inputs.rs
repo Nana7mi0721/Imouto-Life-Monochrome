@@ -119,7 +119,7 @@ fn key_for_frame(frame: u32) -> u32 {
         .unwrap_or(0)
 }
 
-/// 事件标题：优先从 docs/M3_EVENT_MAP.md 的逐事件表解析，缺失时退回 CE<id>。
+/// 事件标题：优先从 docs/milestones/M3_EVENT_MAP.md 的逐事件表解析，缺失时退回 CE<id>。
 fn titles() -> BTreeMap<u32, String> {
     let mut map = BTreeMap::new();
     let doc = repo_root().join("docs").join("M3_EVENT_MAP.md");

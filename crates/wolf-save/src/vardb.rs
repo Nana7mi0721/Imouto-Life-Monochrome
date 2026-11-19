@@ -504,7 +504,7 @@ impl VariableDatabase {
     /// untouched cells.
     ///
     /// A genuinely new or changed non-ASCII string is encoded as **GBK**, the
-    /// code page of this release's display text (see `docs/M3_STRING_DECODE.md`),
+    /// code page of this release's display text (see `docs/milestones/M3_STRING_DECODE.md`),
     /// with a UTF-8 fallback when GBK cannot round-trip the string (a character
     /// GBK does not map, or GBK bytes that [decode_wolf_str](wolf_format::bytes::decode_wolf_str)
     /// would read as valid UTF-8 and therefore mis-decode). ASCII is byte-identical

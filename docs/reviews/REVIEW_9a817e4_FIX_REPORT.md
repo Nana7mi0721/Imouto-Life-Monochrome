@@ -13,14 +13,14 @@
 > **状态说明（2026-11-15 晚）**：本报告对应的实现提交 `f52db44` 已按用户要求在 `b23a1e1`
 > 被整体回退，因此下表「已修」一栏里**除下列两项外均未落地**：
 > * 「读档后 `current_map_path` 缺 `.mps` 后缀」——已在 live-play 轮以 `map_data_path()`
->   重新落地（见 `docs/LIVE_PLAY_FIX_REPORT.md` 的 F 项与 `crates/wolf-game/tests/m23_map_path.rs`）。
+>   重新落地（见 `docs/reviews/LIVE_PLAY_FIX_REPORT.md` 的 F 项与 `crates/wolf-game/tests/m23_map_path.rs`）。
 > * 「`Sys77..Sys82` 逐帧写 UTC」——已以另一实现重新落地：宿主读 Win32 `GetLocalTime`
 >   并通过 `install_local_clock` 注入，`wolf-cli --clock` 可钉住（见 live-play 轮的 E 项）。
 >
 > 其余各项**当前代码里没有**，请勿把本报告当作它们的现状说明。逐条说明：
 > * **Opcode 122 掩码**——`crates/wolf-vm/src/exec.rs` 仍用 `mode & 0xFF00`，
 >   分支仍是 `0x0200`；`f52db44` 改成的 `0xFFF0` / `0x0010` 没有留下。
->   `docs/OPCODE_122.md` 已按当前代码订正，并在开头记了这个仍开放的差异。
+>   `docs/engine/OPCODE_122.md` 已按当前代码订正，并在开头记了这个仍开放的差异。
 > * **`\img` 内联贴图**——**内联贴图支持一直存在**（分词在
 >   `crates/wolf-format/src/messagetext.rs`，文字 pass 早就跳过图片，见
 >   `crates/wolf-game/src/message.rs` 的 `inline_images_are_omitted_from_the_text_pass`）。
@@ -104,10 +104,10 @@
   由 `resolve_string_target` 解析）；把被改成 `0x0201` 的单测还原为 `0x0011`。
 * **新增回归**：`op122_first_line_cut_moves_the_head_out_of_a_numbered_source`
   （镜像 CE270 `pc2000` 的跨事件 bank 形态，断言整行搬运 + 源行被消费）。
-* **文档**：`docs/OPCODE_122.md` 末尾追加回归说明，正文未动。
+* **文档**：`docs/engine/OPCODE_122.md` 末尾追加回归说明，正文未动。
 * **当前现状（2026-11-15）**：**已回退**。`crates/wolf-vm/src/exec.rs` 仍是
   `mode & 0xFF00` 与分支 `0x0200`，`op122_first_line_cut_moves_the_head_out_of_a_numbered_source`
-  不存在；`docs/OPCODE_122.md` 已按当前代码订正，并在开头记了这条仍开放的差异。
+  不存在；`docs/engine/OPCODE_122.md` 已按当前代码订正，并在开头记了这条仍开放的差异。
 
 ### 2.2 [P2] `\img` 内联贴图分层（`crates/wolf-game/src/{textpic,atlas,game,message}.rs`）
 
@@ -256,7 +256,7 @@
 > **8 红 0 新增**（choice×3 / db×2 / textpic×1 / m18 `hidden_and_transparent...` /
 > m3_manual_rules `late_night_bedtime...`，全是长期基线），
 > `m14_visual_regression` 5/5 全绿，`wolf-cli verify` PASS 64 / 1 SKIP，
-> `tools/smoke-godot.sh` exit 0。详见 `docs/LIVE_PLAY_FIX_REPORT.md`。
+> `tools/smoke-godot.sh` exit 0。详见 `docs/reviews/LIVE_PLAY_FIX_REPORT.md`。
 
 * `cargo fmt --all -- --check`：0 差异。
 * **HEAD（`9a817e4`）基线对照**（`git stash` 取出原树实测）：

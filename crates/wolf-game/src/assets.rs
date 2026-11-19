@@ -269,14 +269,14 @@ pub struct Assets {
     /// Names that are not files (built-in `<SHAPE>` system graphics) or whose
     /// resolution failed. The picture layer asks for a size on every draw, and a
     /// repeated miss costs a case-insensitive directory walk each time; remembering
-    /// it turns the per-frame probe into a hash lookup (see docs/M4_PERF.md §6.1).
+    /// it turns the per-frame probe into a hash lookup (see docs/milestones/M4_PERF.md §6.1).
     missing: HashSet<String>,
     /// Asset names that were resolved through a fallback alias (currently the
     /// `Picture/word_effect* -> hword/` author typo). The game layer drains these into
     /// its diagnostics so a silent path fix stays visible.
     fallbacks: Vec<String>,
     /// Byte-range patches declared by the mod overlays, applied to raw file bytes
-    /// before decoding (see [`crate::patch`] and `docs/M7_PATCH.md`).
+    /// before decoding (see [`crate::patch`] and `docs/milestones/M7_PATCH.md`).
     patches: PatchSet,
     /// Memoised alpha bounding boxes: asset name, then `(source rectangle,
     /// threshold)`. The picture hit test asks for the same box every frame and
@@ -651,7 +651,7 @@ impl Assets {
             return None;
         }
         // Built-in system graphics are never files; answering here avoids the
-        // directory walk below on every draw (docs/M4_PERF.md §6.1).
+        // directory walk below on every draw (docs/milestones/M4_PERF.md §6.1).
         if crate::sysgraphic::parse(name).is_some() {
             return None;
         }

@@ -1,6 +1,6 @@
 # RE_GAME_EXE.md — 原版 Game.exe 定点逆向记录（C 任务）
 
-本文件记录对原版运行时 `Game.exe` 的**只读静态逆向**结果，用于核对 `docs/ENGINE_BEHAVIOR.md` §3 中"数据外部、只能靠逆向后实测确认"的引擎常量。与 `ENGINE_BEHAVIOR.md` 配套：那边是清单，这边是逆向证据与结论。
+本文件记录对原版运行时 `Game.exe` 的**只读静态逆向**结果，用于核对 `docs/engine/ENGINE_BEHAVIOR.md` §3 中"数据外部、只能靠逆向后实测确认"的引擎常量。与 `ENGINE_BEHAVIOR.md` 配套：那边是清单，这边是逆向证据与结论。
 
 > 内容安全：本文只做二进制/资源层的技术描述，不涉及游戏内容。
 

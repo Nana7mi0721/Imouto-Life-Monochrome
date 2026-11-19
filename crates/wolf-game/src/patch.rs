@@ -26,7 +26,7 @@
 //!   shrinks the target. (Growing a database string is what record patches are
 //!   for: the serializer re-encodes the length word.)
 //!
-//! The format is documented for players in docs/M7_PATCH.md.
+//! The format is documented for players in docs/milestones/M7_PATCH.md.
 
 use std::fmt;
 use std::fs;
