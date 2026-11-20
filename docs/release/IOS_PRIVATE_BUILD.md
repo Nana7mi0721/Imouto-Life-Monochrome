@@ -227,3 +227,16 @@ certutil -hashfile "work\out\dist\ios\0.1.1\ImoutoLife-0.1.1-ios-arm64-unsigned-
 
 发布检查只需确认最终 IPA 文件名、SHA-256、注入后的 `Payload/*.app/Data/BasicData`
 存在；不要把 `work/out/`、IPA 或数据加入 git。
+
+## 10. 已构建产物（2026-11-21）
+
+GitHub Actions `iOS Unsigned IPA` run `44770540312` 已成功完成：
+
+| 产物 | 大小 | SHA-256 |
+| --- | ---: | --- |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 32,216,634 B | `cf2f011cadc7cb3b9e49feddbc70f0f0d69e6cfe9561fbf6df2eec52be83828c` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` | 153,216,224 B | `5a390ca61bb3ffaeb0ab8fb38abeab0e38e288e91ffe599b5cf511220e330d2e` |
+
+两个文件位于 `work/out/dist/ios/0.1.1/`，同目录 `SHA256SUMS.txt` 覆盖两者。
+full IPA 已包含 `Payload/ImoutoLife.app/Data/BasicData` 与
+`Data/NotoSansCJKsc-Bold.otf`；尚未在 iPhone XR 上完成 Sideloadly 安装验证。

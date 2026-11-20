@@ -278,7 +278,9 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   iOS 脚本语法与注入器 `py_compile` 通过；标题存档页 1024×576 实机截图
   已核对按钮位置/样式，无旧“结束”贴图。Android OnePlus PJZ110 真机已验证
   系统导入/导出、单档目标槽与导出 ZIP 字节一致；iPhone 真机尚未验证。
-  尚未 commit/push，也未发布新包。
+  代码已提交并 push（`9e95d45`）；GitHub Actions `iOS Unsigned IPA`
+  run `44770540312` 成功，engine-only IPA 31 MiB，Windows 注入数据后
+  full IPA 147 MiB 已通过 ZIP/plist/权限校验。尚未发布新包。
 
 * **2026-11-20 0.1.1 六包发布与 Android 真机验证**：在 OnePlus
   PJZ110（Android 15 / SDK 35 / arm64-v8a）完成标准与 slim APK 的覆盖安装、

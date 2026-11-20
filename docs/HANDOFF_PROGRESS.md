@@ -2392,7 +2392,13 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     同一 release keystore 覆盖安装 0.1.1 后数据保留；DocumentsUI 导入/导出
     均实际打开，单 `.sav` 选择目标槽、覆盖确认、导入成功；导出 ZIP
     352380 B、CRC 正常，`SaveData02.sav` 与源文件逐字节一致且其他槽位保留。
-  * **未做**：未 commit/push；未触发 iOS CI、未产出 IPA、未发布；
-    iPhone 真机尚未验证（当前无本地 Mac，需先跑 `ios-unsigned.yml`）。
+  * **提交与 iOS 构建**：`9e95d45` 已 push `origin/master`；GitHub Actions
+    `iOS Unsigned IPA`（run `44770540312`）成功，engine-only IPA
+    32,216,634 B、SHA-256 `cf2f011c…3828c`；Windows 侧注入 `Data` 与
+    `NotoSansCJKsc-Bold.otf` 后得到 full IPA 153,216,224 B、
+    SHA-256 `5a390ca6…30d2e`，ZIP CRC、`Info.plist`（0.1.1/build 2、
+    landscape、Files 共享）与可执行权限校验通过，产物在
+    `work/out/dist/ios/0.1.1/`。
+  * **未做**：iPhone 真机尚未安装验证；未发布 iOS Release。
     临时探针与 `work/out/save_transfer_test` 已清理；
     当前工作区仍含 `work/` 数据与 `work/out/dist` 构建产物（未删除）。
