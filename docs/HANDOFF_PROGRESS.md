@@ -2402,3 +2402,26 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **未做**：iPhone 真机尚未安装验证；未发布 iOS Release。
     临时探针与 `work/out/save_transfer_test` 已清理；
     当前工作区仍含 `work/` 数据与 `work/out/dist` 构建产物（未删除）。
+
+* 2026-11-21（iOS 系统 Files 面板、应用名/图标修正，未发布）：
+  * **原生文件面板**：Godot 4.7.2 的 Apple Embedded DisplayServer 明确把
+    `FEATURE_NATIVE_DIALOG_FILE` 注释掉，不能只开
+    `FileDialog.use_native_dialog`。在 `wolf-gdext` 中新增
+    `ios_file_picker.mm`/`ios_file_picker.rs`，通过
+    `UIDocumentPickerViewController` 桥接导入/导出；GDScript 用
+    `ios_pick_import_file`/`ios_export_file` 调用，导入仍复用现有 ZIP/单档
+    校验、目标槽与二次确认，导出先写 `user://` 临时 ZIP 再交给 Files。
+  * **应用信息**：`config/name` 改为“妹！生活 ～单色～”；iOS 预设
+    `icons/icon_1024x1024` 改为 `res://icon_android.png`，并新增
+    `godot/icon_android.png` 与 `.import`。`package-ios.sh` 增加图标配置检查。
+  * **验证**：`cargo check -q --workspace`、`cargo fmt --all -- --check`、
+    `save_transfer` 无头用例与 `smoke-godot.sh` 全过。GitHub Actions
+    `iOS Unsigned IPA` run `44780044994` 成功；`Info.plist` 的
+    `CFBundleDisplayName` 为“妹！生活 ～单色～”，`CFBundleName` 为
+    `ImoutoLife`，`CFBundleIcons` 指向 `AppIcon`，Files/iTunes 共享开启；
+    可执行文件中确认包含 `WolfFilePickerDelegate` 与
+    `wolf_ios_present_import_picker` 符号。
+  * **产物**：engine-only IPA 32,407,545 B、SHA-256 `a147ee0c…562326`；
+    注入 `Data`/字体后的 full IPA 153,407,135 B、SHA-256
+    `d7e63748…3e5b48`，均位于 `work/out/dist/ios/0.1.1/`。
+  * **未做**：尚未在 iPhone XR 上重新安装验证 Files 面板；未发布新包。

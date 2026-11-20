@@ -13,10 +13,6 @@ thread_local! {
     static PENDING_CALLBACK: RefCell<Option<Callable>> = const { RefCell::new(None) };
 }
 
-pub fn available() -> bool {
-    true
-}
-
 pub fn pick_import(callback: Callable) -> bool {
     if PENDING_CALLBACK.with(|slot| slot.borrow().is_some()) {
         return false;

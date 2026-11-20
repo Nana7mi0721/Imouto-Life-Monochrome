@@ -268,8 +268,9 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `tools/package-ios.sh`、`tools/inject-ios-data.sh`、
   `.github/workflows/ios-unsigned.yml` 与 `docs/release/IOS_PRIVATE_BUILD.md`。
   标题存档页新增 90×70 横排“导入/导出”按钮；Android 优先调用系统文档选择器，
-  并处理 SAF `content://` URI；iOS 4.7.2 无原生文件对话框后端，自动回退到
-  应用内选择器，`user://` 通过 Files/iTunes 共享可见。导入支持 ZIP 或单个
+  并处理 SAF `content://` URI；iOS 通过 `wolf-gdext` 的
+  `UIDocumentPickerViewController` 桥接直接打开系统 Files 面板，
+  `user://` 通过 Files/iTunes 共享可见。导入支持 ZIP 或单个
   `.sav`：单个文件先选系统/槽 1–4，再弹覆盖确认；ZIP 只接受直接 `.sav`
   与 `manifest.txt`，拒绝路径穿越。所有导入都会先备份 `Save/`。iOS 解码
   缓存上限为 64 MiB。验证：Godot smoke 全绿（含 `save_transfer` ZIP/单档
@@ -278,9 +279,12 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   iOS 脚本语法与注入器 `py_compile` 通过；标题存档页 1024×576 实机截图
   已核对按钮位置/样式，无旧“结束”贴图。Android OnePlus PJZ110 真机已验证
   系统导入/导出、单档目标槽与导出 ZIP 字节一致；iPhone 真机尚未验证。
-  代码已提交并 push（`9e95d45`）；GitHub Actions `iOS Unsigned IPA`
-  run `44770540312` 成功，engine-only IPA 31 MiB，Windows 注入数据后
-  full IPA 147 MiB 已通过 ZIP/plist/权限校验。尚未发布新包。
+  iOS 端已改为 `wolf-gdext` 的 UIKit `UIDocumentPickerViewController`
+  桥接，使用系统 Files 导入/导出；应用显示名修正为“妹！生活 ～单色～”，
+  iOS 图标使用 `icon_android.png`。GitHub Actions `iOS Unsigned IPA`
+  run `44780044994` 成功（commit `bf2742b`），engine-only IPA 32,407,545 B，
+  Windows 注入数据后 full IPA 153,407,135 B，`Info.plist`/图标/可执行权限/
+  ZIP CRC 校验通过。iPhone 真机尚未安装验证；尚未发布新包。
 
 * **2026-11-20 0.1.1 六包发布与 Android 真机验证**：在 OnePlus
   PJZ110（Android 15 / SDK 35 / arm64-v8a）完成标准与 slim APK 的覆盖安装、

@@ -183,12 +183,12 @@ App”下选择对应 Apple ID/开发者证书 → 信任。随后重新启动�
 - 游戏存档位于 App 的 `user://Save`；预设已开启 Files App/iTunes 文件共享，
   可在 Files 的“我的 iPhone/iPad”中查看并复制 `Save/` 做备份。
 - 标题画面的存档页提供“导入”“导出”按钮。Android 调用系统文档选择器；
-  iOS 4.7.2 没有原生文件对话框后端，会自动回退到应用内选择器，但 iOS 的
-  `user://` 就是 Files App 中可见的应用 Documents 目录：
-  - 导入：先在 Files 中把 `.zip` 或 `.sav` 复制到游戏目录，再点“导入”
-    选择。单个 `.sav` 会先要求选择系统存档或槽 1–4，再弹覆盖确认；
-    ZIP 会说明将替换/移除哪些存档并提示自动备份；
-  - 导出：备份写入同一目录，完成后可在 Files 中复制到 iCloud/其他位置。
+  iOS 通过 `wolf-gdext` 的 UIKit 桥接打开系统 Files 面板：
+  - 导入：点“导入”后直接在 Files 中选择 `.zip` 或 `.sav`。单个 `.sav`
+    会先要求选择系统存档或槽 1–4，再弹覆盖确认；ZIP 会说明将替换/移除
+    哪些存档并提示自动备份；
+  - 导出：游戏先生成 ZIP，再打开系统“存储到文件”面板，可选择 iCloud
+    Drive 或“我的 iPhone/iPad”中的目标位置。
 - 覆盖安装时保持相同 Bundle ID (`com.inusuku.imoutolife`) 和同一 Apple ID，通常可
   保留沙盒数据；升级前仍应先复制 `Save/`。
 - 7 天签名过期后不要先删除 App；直接重新签名覆盖安装通常能保留数据。若必须卸载，
@@ -230,13 +230,16 @@ certutil -hashfile "work\out\dist\ios\0.1.1\ImoutoLife-0.1.1-ios-arm64-unsigned-
 
 ## 10. 已构建产物（2026-11-21）
 
-GitHub Actions `iOS Unsigned IPA` run `44770540312` 已成功完成：
+GitHub Actions `iOS Unsigned IPA` run `44780044994` 已成功完成：
 
 | 产物 | 大小 | SHA-256 |
 | --- | ---: | --- |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 32,216,634 B | `cf2f011cadc7cb3b9e49feddbc70f0f0d69e6cfe9561fbf6df2eec52be83828c` |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` | 153,216,224 B | `5a390ca61bb3ffaeb0ab8fb38abeab0e38e288e91ffe599b5cf511220e330d2e` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 32,407,545 B | `a147ee0c95a199cb9540ab524fcbc6a9dd514b8d7c9a8652647bfd7574562326` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` | 153,407,135 B | `d7e63748f4308f909e81d72de45702982415e9aa555f3af35433f822543e5b48` |
 
 两个文件位于 `work/out/dist/ios/0.1.1/`，同目录 `SHA256SUMS.txt` 覆盖两者。
 full IPA 已包含 `Payload/ImoutoLife.app/Data/BasicData` 与
-`Data/NotoSansCJKsc-Bold.otf`；尚未在 iPhone XR 上完成 Sideloadly 安装验证。
+`Data/NotoSansCJKsc-Bold.otf`。应用显示名为“妹！生活 ～单色～”，图标来自
+`icon_android.png`；导入/导出通过 `wolf-gdext` 的 UIKit 桥接直接打开 iOS
+「文件」App，不再走 Godot 内嵌文件对话框。尚未在 iPhone XR 上完成
+Sideloadly 安装验证。

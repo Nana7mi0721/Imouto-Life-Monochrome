@@ -15,6 +15,11 @@
   ZIP（`System.sav`、`SaveDataNN.sav`、`manifest.txt`）；导入同时接受 ZIP
   和单个 `.sav`，单个文件先选择系统/槽 1–4，再显示覆盖确认。导入前校验
   路径/格式、自动备份 `Save/`、原子写入并在完成后提示重启。
+  - **iOS 系统文件面板**：通过 `wolf-gdext` 的 UIKit 桥接调用
+    `UIDocumentPickerViewController`，导入/导出直接进入 iOS「文件」App；
+    不再使用 Godot 的应用内文件对话框回退。
+  - **iOS 应用信息**：显示名改为“妹！生活 ～单色～”，应用图标改用
+    `icon_android.png` 同款素材。
 - **Android 系统文件选择器**：导入/导出优先调用系统文档选择器，并增加
   `content://` URI 到 ZIP 构建/读取的桥接；iOS 4.7.2 无原生文件对话框时
   自动回退到应用内选择器，`user://` 仍通过 Files/iTunes 文件共享可见。
