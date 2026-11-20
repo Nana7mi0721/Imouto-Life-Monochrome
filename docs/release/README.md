@@ -23,5 +23,6 @@
   首次启动不再复制第二份到应用数据目录。
 - **iOS 私有 IPA**：`work/out/dist/ios/<version>/`，engine-only 文件名为
   `ImoutoLife-<version>-ios-arm64-unsigned.ipa`；在 Windows 注入数据后为
-  `ImoutoLife-<version>-ios-arm64-unsigned-full.ipa`。完整 IPA 只能私有使用，
-  不上传 Release、不提交仓库。
+  `ImoutoLife-<version>-ios-arm64-unsigned-full.ipa`（标准）或
+  `ImoutoLife-<version>-ios-arm64-unsigned-full-slim.ipa`（slim）。完整 IPA
+  只能私有使用，不上传 Release、不提交仓库。
