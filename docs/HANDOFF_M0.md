@@ -274,8 +274,13 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `m3_title_visibility` 4 条、Godot smoke 全绿；Windows 标准/slim 成品
   headless 冒烟 `exit=0`，四个 Windows ZIP/APK 内 GDExtension 哈希与构建
   产物一致。六个 Windows/Android 0.1.1 包已重打到
-  `work/out/dist/release-assets/0.1.1/`；iOS full IPA 尚未用本次源码重打。
-  详见 `docs/release/PACKAGING.md` §8.9。
+  `work/out/dist/release-assets/0.1.1/`，并已替换 GitHub Release `v0.1.1`
+  的六个资产与 `SHA256SUMS.txt`。iOS Actions run `44794833504`
+  （commit `fab1413`）成功，engine-only IPA 32,405,233 B；注入标准/slim
+  Data 后得到 full IPA 153,404,823 B / full-slim IPA 125,346,535 B，
+  `Info.plist`、Data 内容、媒体包哈希与 SHA 校验均通过；私有 IPA 不上传
+  Release。详见 `docs/release/PACKAGING.md` §8.9 与
+  `docs/release/IOS_PRIVATE_BUILD.md` §10。
 
 * **2026-11-20 iOS 私有构建与移动端存档传输（未发布）**：新增 iOS export
   preset、`wolf-gdext` iOS arm64 静态库配置、`tools/build-ios.sh`、

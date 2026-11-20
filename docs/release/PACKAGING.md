@@ -608,3 +608,23 @@ iOS 不允许应用主动终止进程；标题页第三项“退出游戏”触�
 各失败 1 条，均不在本次标题退出过滤路径上；本轮相关测试
 `m1_title_load` 5 条中除上述既有加载夹具用例外均通过。
 
+iOS 私有链路同步用提交 `fab1413` 重建（Actions run `44794833504`，6m04s），
+产物位于 `work/out/dist/ios/0.1.1/`：
+
+| 产物 | 字节数 | SHA-256 |
+|---|---:|---|
+| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 32,405,233 | `17224984a19e29ea82822a0fe2d5ba00e55eec90e2b08b25de1ac9086fec29ff` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` | 153,404,823 | `c742d0f4dfff48eda40ed749859e1b67bb66eeb32685e14706a89cf483e12ff6` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa` | 125,346,535 | `f44487f7af9ad4f127e9397570e3e8443c0238c7d0298dbae0d6e354a995759e` |
+
+标准 full 注入 `dist/godot/0.1.1/Data`（`media.pak` SHA-256
+`69cedce1b07e024f1856bbecd6a6a324eab316a3fd5646ffa8128152bc7e329c`），
+slim full 注入 `dist/godot-slim/0.1.1/Data`（`media.pak` SHA-256
+`36e7ab21c9b3826bf1807fb8cdebb6d3989c2b9e765bcf821e65ec4111b7edc9`）。
+两者均带 `NotoSansCJKsc-Bold.otf`，`Info.plist` 的显示名为
+“妹！生活 ～单色～”、Bundle ID 为 `com.inusuku.imoutolife`，Data/BasicData
+与 ZIP CRC 校验通过。iOS 私有 IPA 不上传公共 Release。
+
+GitHub Release `v0.1.1` 的六个 Windows/Android 资产与 `SHA256SUMS.txt`
+已替换为上述新文件；GitHub API 返回的 `sha256:` 摘要与本地表逐项一致。
+

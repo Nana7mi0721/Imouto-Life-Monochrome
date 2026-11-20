@@ -144,6 +144,20 @@ bash tools/inject-ios-data.sh \
 work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa
 ```
 
+标准与 slim 同时私有构建时，使用同一份 engine-only IPA，分别注入对应 Data：
+
+```text
+ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa
+  源 Data: work/out/dist/godot/0.1.1/Data
+
+ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa
+  源 Data: work/out/dist/godot-slim/0.1.1/Data
+```
+
+slim 后缀保持在文件名末尾，符合
+`名字-版本-平台-指令集-额外性质说明[-slim]` 的命名规则。两个 IPA 的 Bundle ID、
+版本、签名流程与存档位置相同，同一设备只安装其中一个变体即可。
+
 也可以直接使用位置参数，省略显式 `--out`：
 
 ```bash
@@ -236,16 +250,20 @@ certutil -hashfile "work\out\dist\ios\0.1.1\ImoutoLife-0.1.1-ios-arm64-unsigned-
 
 ## 10. 已构建产物（2026-11-21）
 
-GitHub Actions `iOS Unsigned IPA` run `44780044994` 已成功完成：
+GitHub Actions `iOS Unsigned IPA` run `44794833504`（提交 `fab1413`）已成功完成：
 
 | 产物 | 大小 | SHA-256 |
 | --- | ---: | --- |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 32,407,545 B | `a147ee0c95a199cb9540ab524fcbc6a9dd514b8d7c9a8652647bfd7574562326` |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` | 153,407,135 B | `d7e63748f4308f909e81d72de45702982415e9aa555f3af35433f822543e5b48` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 32,405,233 B | `17224984a19e29ea82822a0fe2d5ba00e55eec90e2b08b25de1ac9086fec29ff` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` | 153,404,823 B | `c742d0f4dfff48eda40ed749859e1b67bb66eeb32685e14706a89cf483e12ff6` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa` | 125,346,535 B | `f44487f7af9ad4f127e9397570e3e8443c0238c7d0298dbae0d6e354a995759e` |
 
-两个文件位于 `work/out/dist/ios/0.1.1/`，同目录 `SHA256SUMS.txt` 覆盖两者。
-full IPA 已包含 `Payload/ImoutoLife.app/Data/BasicData` 与
-`Data/NotoSansCJKsc-Bold.otf`。应用显示名为“妹！生活 ～单色～”，图标来自
-`icon_android.png`；导入/导出通过 `wolf-gdext` 的 UIKit 桥接直接打开 iOS
-「文件」App，不再走 Godot 内嵌文件对话框。尚未在 iPhone XR 上完成
-Sideloadly 安装验证。
+三个文件位于 `work/out/dist/ios/0.1.1/`，同目录 `SHA256SUMS.txt` 覆盖全部。
+两个 full IPA 均包含 `Payload/ImoutoLife.app/Data/BasicData` 与
+`Data/NotoSansCJKsc-Bold.otf`，分别对应标准/slim 媒体包。应用显示名为
+“妹！生活 ～单色～”，图标来自 `icon_android.png`；导入/导出通过
+`wolf-gdext` 的 UIKit 桥接直接打开 iOS「文件」App。iOS 标题菜单只剩
+“开始游戏/读取存档”，不再出现会卡住应用的退出项。
+
+本轮 IPA 尚未由 Sideloadly 重新签名安装到 iPhone XR；重新签名安装后即可
+验证标题菜单与系统 Files 面板。

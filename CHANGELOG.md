@@ -29,7 +29,11 @@
   读取存档”，隐藏第三张按钮与命中区，避免选择“退出游戏”后停在最后一帧；
   Windows/Android 仍保留三行菜单与原退出行为。
 - **0.1.1 双版本重打**：Windows 标准/slim setup+zip 与 Android 标准/slim
-  APK 已用本次修复源码重建并重新生成聚合校验和，命名与既有规范一致。
+  APK 已用本次修复源码重建并重新生成聚合校验和，命名与既有规范一致；
+  GitHub Release `v0.1.1` 的六个资产与 `SHA256SUMS.txt` 已同步替换。
+- **iOS 私有双版本**：engine-only IPA、标准 full IPA 与 slim full IPA 已用
+  `fab1413` 重打；full IPA 包含 17 个发行 Data 文件与
+  `NotoSansCJKsc-Bold.otf`，slim 使用对应的 WebP 媒体树。
 - iOS 使用 64 MiB 解码纹理缓存上限，降低 3 GB 设备浏览大图时的后台终止风险。
 - iOS 优先使用注入的 `NotoSansCJKsc-Bold.otf`，缺失时回退 PingFang 等系统字体。
 - 修正 iOS Actions 模板检查为 Godot 4.7.2 实际产出的 `ios.zip`，并修正文档中的

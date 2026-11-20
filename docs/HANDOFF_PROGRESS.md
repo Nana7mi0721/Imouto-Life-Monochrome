@@ -2449,5 +2449,20 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     GDExtension 哈希与本次 release-dist 产物一致；Android 两包均通过
     `verify-apk`/release 签名检查。尺寸与哈希见
     `docs/release/PACKAGING.md` §8.9。
-  * **未做**：iOS engine-only/full IPA 尚未用本次源码重打（需要先推送并
-    触发 Actions）；未提交、未更新 Release。
+  * **提交与 iOS 构建**：提交 `fab1413` 已 push `origin/master`；
+    GitHub Actions `iOS Unsigned IPA` run `44794833504`（run #4）成功，
+    耗时 6m04s；engine-only IPA 32,405,233 B、SHA-256
+    `17224984…c29ff`。Windows 侧分别注入标准/slim Data 与
+    `NotoSansCJKsc-Bold.otf`，得到
+    `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` 153,404,823 B /
+    `c742d0f4…e12ff6`（标准）与
+    `ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa` 125,346,535 B /
+    `f44487f7…5759e`（slim）。
+  * **Release 替换**：GitHub Release `v0.1.1` 的 Windows/Android 六包与
+    `SHA256SUMS.txt` 已全部替换为本轮产物；API 返回的 `sha256:` digest 与
+    本地 `SHA256SUMS.txt` 逐项一致。iOS 私有 IPA 不上传公共 Release。
+  * **验证**：两个 iOS full IPA 的 `CFBundleDisplayName` 均为
+    “妹！生活 ～单色～”、Bundle ID 为 `com.inusuku.imoutolife`；标准/slim
+    的 `Data/media.pak` 分别与对应 Windows 包内媒体逐字节一致，ZIP CRC 与
+    字体存在性通过。尚未用 Sideloadly 重新签名安装到 iPhone XR。
+  * **未做**：iOS 真机安装复验；`m18` 与缺存档夹具的既有失败未处理。
