@@ -18,4 +18,8 @@ fn main() {
         .flag("-std=c++17")
         .flag("-mios-version-min=15.0")
         .compile("wolf_ios_file_picker");
+
+    println!("cargo:rustc-link-lib=framework=Foundation");
+    println!("cargo:rustc-link-lib=framework=UIKit");
+    println!("cargo:rustc-link-lib=framework=CoreFoundation");
 }
