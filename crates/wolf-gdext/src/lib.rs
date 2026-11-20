@@ -16,14 +16,17 @@
 //! handles it), audio playback (Godot's own decoders handle ogg/mp3/wav), and the
 //! engine-side debug overlays. Those arrive in later migration phases.
 
+use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use godot::builtin::VarDictionary;
-use godot::classes::{Image, RefCounted};
+use godot::classes::{FileAccess, Image, RefCounted};
 use godot::prelude::*;
 
 mod localclock;
 
+use wolf_format::media_pack::{MediaPack, PackSource};
 use wolf_game::atlas::{Atlas, SpriteQuad, TextQuad};
 use wolf_game::game::BOOT_MAP;
 use wolf_game::message::{self, Run as MessageRun};
@@ -34,6 +37,54 @@ struct WolfGdext;
 
 #[gdextension]
 unsafe impl ExtensionLibrary for WolfGdext {}
+
+/// Adapts Godot's random-access `FileAccess` to [`wolf_format::media_pack`].
+///
+/// `res://` paths on Android live inside the APK, so `std::fs::File` cannot
+/// open them. Godot's `FileAccess` can seek in exported files and is kept alive
+/// by the `Gd` handle for as long as the game session reads media.
+struct GodotFileSource {
+    file: Gd<FileAccess>,
+}
+
+impl PackSource for GodotFileSource {
+    fn len(&mut self) -> io::Result<u64> {
+        let length = self.file.get_length();
+        let error = self.file.get_error();
+        if error == godot::global::Error::OK {
+            Ok(length)
+        } else {
+            Err(io::Error::other(format!(
+                "Godot FileAccess length failed: {error:?}"
+            )))
+        }
+    }
+
+    fn read_exact_at(&mut self, offset: u64, buf: &mut [u8]) -> io::Result<()> {
+        self.file.seek(offset);
+        let seek_error = self.file.get_error();
+        if seek_error != godot::global::Error::OK {
+            return Err(io::Error::other(format!(
+                "Godot FileAccess seek to {offset} failed: {seek_error:?}"
+            )));
+        }
+        let requested = i64::try_from(buf.len())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "read is too large"))?;
+        let data = self.file.get_buffer(requested);
+        if data.len() != buf.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                format!(
+                    "Godot FileAccess returned {} bytes at {offset}, expected {}",
+                    data.len(),
+                    buf.len()
+                ),
+            ));
+        }
+        buf.copy_from_slice(data.as_slice());
+        Ok(())
+    }
+}
 
 /// One live WOLF session, exposed to GDScript as `WolfGame`.
 #[derive(GodotClass)]
@@ -62,12 +113,17 @@ impl IRefCounted for WolfGame {
 }
 
 impl WolfGame {
-    fn open_impl(&mut self, root: PathBuf, save_dir: PathBuf) -> bool {
+    fn open_impl(
+        &mut self,
+        root: PathBuf,
+        save_dir: PathBuf,
+        media: Option<Arc<MediaPack>>,
+    ) -> bool {
         // The retail engine reads the *local* wall clock; the game layer is
         // pure Rust, so the host hands it a reader before the game is built.
         localclock::install();
         let started = std::time::Instant::now();
-        match Game::with_overlays_and_save_dir(&root, Vec::new(), &save_dir) {
+        match Game::with_overlays_and_save_dir_and_media(&root, Vec::new(), &save_dir, media) {
             Ok(mut game) => {
                 let load_ms = started.elapsed().as_secs_f64() * 1000.0;
                 game.set_touch_mode(self.touch_mode);
@@ -79,7 +135,7 @@ impl WolfGame {
                 install_font_metrics(&mut game, &root);
                 let font_ms = font_started.elapsed().as_secs_f64() * 1000.0;
                 godot_print!(
-                    "wolf-gdext: open game={load_ms:.1}ms font={font_ms:.1}ms total={:.1}ms [build v0.1.0-fix-p0]",
+                    "wolf-gdext: open game={load_ms:.1}ms font={font_ms:.1}ms total={:.1}ms [build v0.1.1]",
                     started.elapsed().as_secs_f64() * 1000.0
                 );
                 self.root = Some(root);
@@ -141,7 +197,7 @@ impl WolfGame {
     fn open(&mut self, root: GString) -> bool {
         let root_path = PathBuf::from(root.to_string());
         let save_dir = root_path.join("Save");
-        self.open_impl(root_path, save_dir)
+        self.open_impl(root_path, save_dir, None)
     }
 
     /// Loads a read-only WOLF data root together with a separate writable `save_dir`.
@@ -156,7 +212,37 @@ impl WolfGame {
         } else {
             PathBuf::from(save_str)
         };
-        self.open_impl(root_path, save_path)
+        self.open_impl(root_path, save_path, None)
+    }
+
+    /// Loads a data root whose `media.pak` lives inside a host package.
+    ///
+    /// Android opens `res://android_data/media.pak.blob` with Godot's
+    /// random-access `FileAccess` and hands it here. The pack is read in place,
+    /// so first launch no longer copies ~100 MB into `user://data`.
+    #[func]
+    fn open_with_media_file(
+        &mut self,
+        root: GString,
+        save_dir: GString,
+        media: Gd<FileAccess>,
+    ) -> bool {
+        let root_path = PathBuf::from(root.to_string());
+        let save_str = save_dir.to_string();
+        let save_path = if save_str.is_empty() {
+            root_path.join("Save")
+        } else {
+            PathBuf::from(save_str)
+        };
+        let label = PathBuf::from(media.get_path().to_string());
+        let source = GodotFileSource { file: media };
+        match MediaPack::open_source(label, Box::new(source)) {
+            Ok(pack) => self.open_impl(root_path, save_path, Some(Arc::new(pack))),
+            Err(error) => {
+                godot_error!("wolf-gdext: cannot open package media pack: {error}");
+                false
+            }
+        }
     }
 
     /// Configures the decoded RGBA asset cache limit in bytes (ignores `<= 0`).
@@ -1357,6 +1443,25 @@ fn tint_colour(rgb: [f32; 3]) -> Color {
     Color::from_rgba(rgb[0], rgb[1], rgb[2], 1.0)
 }
 
+/// Android system CJK faces tried for text metrics, in preference order.
+///
+/// Godot paints ordinary text at weight 700, so a Bold face keeps the Rust
+/// anchor maths aligned with what the player sees. Every path is optional:
+/// a missing file simply falls through to the next candidate.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+const ANDROID_FONT_METRIC_CANDIDATES: [&str; 10] = [
+    "/system/fonts/NotoSansCJK-Bold.ttc",
+    "/system/fonts/NotoSansCJK-Regular.ttc",
+    "/system/fonts/NotoSansCJKsc-Bold.otf",
+    "/system/fonts/NotoSansCJKsc-Regular.otf",
+    "/system/fonts/NotoSansCJK.ttc",
+    "/system/fonts/NotoSansSC-Bold.otf",
+    "/system/fonts/NotoSansSC-Regular.otf",
+    "/system/fonts/SourceHanSansSC-Bold.otf",
+    "/system/fonts/SourceHanSansSC-Regular.otf",
+    "/system/fonts/DroidSansFallback.ttf",
+];
+
 /// Installs the game's real font metrics for text-picture anchor maths.
 ///
 /// The retail face is `Microsoft YaHei UI Bold` from `Game.dat`; the data root also
@@ -1370,14 +1475,7 @@ fn install_font_metrics(game: &mut Game, root: &Path) {
         // proportional subset with missing Simplified Chinese glyphs.  Use the
         // system CJK face when a vendor exposes it; otherwise keep the standard
         // em/half-em fallback instead of measuring with the wrong font.
-        for path in [
-            "/system/fonts/NotoSansCJK-Regular.ttc",
-            "/system/fonts/NotoSansCJKsc-Regular.otf",
-            "/system/fonts/NotoSansCJK.ttc",
-            "/system/fonts/NotoSansSC-Regular.otf",
-            "/system/fonts/SourceHanSansSC-Regular.otf",
-            "/system/fonts/DroidSansFallback.ttf",
-        ] {
+        for path in ANDROID_FONT_METRIC_CANDIDATES {
             let Ok(bytes) = std::fs::read(path) else {
                 continue;
             };
@@ -1413,7 +1511,7 @@ fn install_font_metrics(game: &mut Game, root: &Path) {
 
 #[cfg(test)]
 mod tests {
-    use super::{sprite_z, UI_Z};
+    use super::{sprite_z, ANDROID_FONT_METRIC_CANDIDATES, UI_Z};
 
     #[test]
     fn shared_status_frames_stay_below_the_sleeping_decoration() {
@@ -1427,5 +1525,26 @@ mod tests {
         assert!(sprite_z(2998) > UI_Z);
         assert!(sprite_z(2999) > UI_Z);
         assert_eq!(sprite_z(2998), sprite_z(2999));
+    }
+
+    #[test]
+    fn android_font_metrics_try_bold_before_regular() {
+        assert_eq!(
+            ANDROID_FONT_METRIC_CANDIDATES[0],
+            "/system/fonts/NotoSansCJK-Bold.ttc"
+        );
+        assert_eq!(
+            ANDROID_FONT_METRIC_CANDIDATES[1],
+            "/system/fonts/NotoSansCJK-Regular.ttc"
+        );
+        let bold = ANDROID_FONT_METRIC_CANDIDATES
+            .iter()
+            .position(|path| *path == "/system/fonts/NotoSansCJKsc-Bold.otf")
+            .expect("bold CJK fallback");
+        let regular = ANDROID_FONT_METRIC_CANDIDATES
+            .iter()
+            .position(|path| *path == "/system/fonts/NotoSansCJKsc-Regular.otf")
+            .expect("regular CJK fallback");
+        assert!(bold < regular);
     }
 }

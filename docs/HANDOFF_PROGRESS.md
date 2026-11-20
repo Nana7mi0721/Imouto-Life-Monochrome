@@ -120,7 +120,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     ActionKey 命中框细化、v8 命名审计、100 日长链与打包）。
 
 * 2026-10-31（M3 推送 + Lead 复验）：
-  * 模型额度恢复后重读交接；检查 `07ab89b`/`7c79d77` 两条本地提交：无 Claude/Anthropic 尾注，作者为 Nana7mi0721（`linxin070410@gmail.com`；历史提交已统一改写为仓库拥有者），按用户授权可推送。
+  * 模型额度恢复后重读交接；检查 `07ab89b`/`7c79d77` 两条本地提交：无 Claude/Anthropic 尾注，作者为仓库本地配置的维护者身份（历史提交已统一改写），按用户授权可推送。
   * Lead 复验：默认与 `WOLF_DATA_ROOT=work/Data` 的 `cargo test -q --workspace` 均 exit 0（各 **75 target**，0 failed）；`verify` **PASS 64 / 1 SKIP**；`verify --wolf` **PASS 72 / 0 pending**（1,361/1,361）。
   * 已推送 `origin/master`：`c167c85..7c79d77`，工作树干净。
   * **下一步**：按 `docs/milestones/M4_PARITY.md` / `docs/milestones/M4_PERF.md` 推进 M4（设置 UI、tile quad 缓存、SoundCmd.frames、ActionKey 命中框、v8 命名审计、100 日长链与打包）。
@@ -1064,7 +1064,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **重钉**：`crates/wolf-cli/tests/m14_visual_regression.rs` 只把 day_command / hud 的 `text_pictures` / `text_items` / `text_lines` 各 +1（23→24、22→23、22→23；14→15、13→14、13→14），逐处注释；`nonblack` 保持 533187 / 554890。复验 **5 passed**。
   * **gdext**：`crates/wolf-gdext/src/lib.rs` 的 `frame()` 不再对 `choice_options` 双 clone，改为直接借用 `game.choices`（`overlay_at_sized` 传 `game.choice_cursor()`）；`cargo check -q -p wolf-gdext` exit 0。`tools/build-godot.sh` 重建 `godot/bin/wolf_gdext.dll` 后 headless `smoke-godot.sh` **exit 0**（`load_save: pictures=50 texts=15`、save→load 往返 38/38）；本机 console 包装器报 `CreateProcess failed, error 193`，把 `GODOT_BIN` 指向 `Godot_v4.7.2-stable_win64.exe` 主程序即可。
   * **全量状态**：`cargo fmt --all -- --check` 通过；`cargo test -q --workspace` 只余既有的 `m3_manual_rules::late_night_bedtime_skips_to_next_evening`（04:30 就寝期望次日 19:00）。本机补充：`work/out` 下的 `std::fs::remove_dir_all` 会在 os error 145「目录不是空的」上无限重试，`font_lookup_prefers_the_games_face_and_scans_unexpected_names` 收尾清理因此挂死，workspace 全量用 `-- --skip` 跑过；该现象已用仓库外独立 `rustc` 小程序复现，与项目代码无关，PowerShell 手动删同一目录是瞬时的。
-  * **清理**：删除 `work/out/ee808fe_tree`（带探针的 detached worktree）、`work/out/target_ee808fe`（302.8 MB）、`C:\Users\REISEN\AppData\Local\Temp\t12_old_target`（1,324.8 MB），另按里程碑惯例清 `target/debug/incremental`、`target/release`、`target/ver6` 与 `work/out` 下的探针产物；清理后仓库合计 **7.96 GB**（target 仍占大头）。`work/out/m14_ab/` 保留作证据。
+  * **清理**：删除 `work/out/ee808fe_tree`（带探针的 detached worktree）、`work/out/target_ee808fe`（302.8 MB）、系统临时目录下的 `t12_old_target`（1,324.8 MB），另按里程碑惯例清 `target/debug/incremental`、`target/release`、`target/ver6` 与 `work/out` 下的探针产物；清理后仓库合计 **7.96 GB**（target 仍占大头）。`work/out/m14_ab/` 保留作证据。
   * **文档**：`docs/archive/HANDOFF_T12_PATCH_AND_LEDGER.md` §1 / §4 / §4.1 / §5 / §6 / §7 / §8 重写；`docs/HANDOFF_M0.md` §11.1 增补，§11.3 的 m14 项改为已收口。未 commit。
 
 * 2026-11-13（审计修复轮：截图 6 项 + 全量审查 P1/P2）：
@@ -1739,7 +1739,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `Data/Save` 仍仅含干净 `System.sav`，发行目录 235 MiB。
   * 因 `work/out` 的 Low Mandatory Level 完整性标签会让 Setup 继承低完整性、
     无法写普通 `%TEMP%`（表现为 NSIS temporary-file 错误或错误码 2），另复制了
-    一份可运行交付副本到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`；已在该目录
+    一份可运行交付副本到 `work/out/dist/release-assets/`；已在该目录
     完成静默安装、启动校验与哈希复核。
 
 * **2026-11-18（工作区空间清理，16 GB → 7.6 GB）**：
@@ -1897,7 +1897,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `Imouto Life setup.zip` **159,788,921 B** / SHA-256
     `fe4dea402cc29b5784bdaa2984ec021be332a93d48eb4164ba5710e4e9d088a4`。
     安装版、便携版及两个外部 `.sha256` 已复制到
-    `D:\REISEN\Downloads\Imouto Life 0.1.0\`。
+    `work/out/dist/release-assets/`。
   * **清理**：删除 `work/out/portable/0.1.0` 暂存（234 MB）、
     `target/release`（888 MB）、`target/debug/incremental`（626 MB）；
     仓库由 3.4 GB 降至 **1.9 GB**，其中 `work` 900 MB、`work/out` 718 MB、
@@ -1945,7 +1945,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **修复**：清单补入 `Picture/box01.png`（160 B）与 `Picture/box02.png`（148 B）；媒体包由 731 文件 / 113,002,329 B 增至 **733 文件 / 113,002,637 B**，容器 **113,039,230 B**。新增 `crates/wolf-game/tests/release_manifest_refs.rs`，遍历 CommonEvent 与已注册地图的 `\img[...]` 内联路径，断言全部在发行清单中。
   * **排查**：对 5 张注册地图、CommonEvent 与引擎/Godot 硬编码路径做了全量比对；除这两张外，没有其他“文件存在但未入发行清单”的现役图片/音频/字体依赖。未注册地图与战斗/示例模板的缺失引用不在游玩路径内。
   * **验证**：`WOLF_DATA_ROOT="$PWD/work/Data" cargo test -q -p wolf-game --test release_manifest_refs` 1 passed；`cargo test -q -p wolf-format --test m3_asset_refs` 2 passed；发行 Data 冒烟 `pictures=4 sprites=4 texts=0`。
-  * **产物**：Windows `Imouto Life setup.exe` **147,916,529 B** / SHA-256 `f246a5e2139bdba1a0e33bce51d497bd5a4199655b057df80eedefbd237f9873`；ZIP **159,648,990 B** / SHA-256 `7582eaeca6d917443e221cbd24b6e92359cb461862246f309f3ff666f21b0cdb`；Android APK **152,234,688 B** / SHA-256 `30b2579e3605ba86d46ab199e403d94387b8680e9820f204814efefd93a58a28`。均已重打并校验，Windows 两包同步到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`。
+  * **产物**：Windows `Imouto Life setup.exe` **147,916,529 B** / SHA-256 `f246a5e2139bdba1a0e33bce51d497bd5a4199655b057df80eedefbd237f9873`；ZIP **159,648,990 B** / SHA-256 `7582eaeca6d917443e221cbd24b6e92359cb461862246f309f3ff666f21b0cdb`；Android APK **152,234,688 B** / SHA-256 `30b2579e3605ba86d46ab199e403d94387b8680e9820f204814efefd93a58a28`。均已重打并校验，Windows 两包同步到 `work/out/dist/release-assets/`。
   * **清理**：删除 `work/out/media_test.pak`、`work/out/android_media_check.pak`、
     重复的 `work/out/portable`、`work/out/android/media.pak` 缓存、
     `target/release` 与 `target/debug/incremental`；`du -sh .` = **4.0 GB**
@@ -2130,7 +2130,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     U+FFFD/控制字符。文本检查默认每 6 帧一次，复用 WolfText 段落缓存。
   * **运行入口**：新增 `tools/audit-godot.sh`；`tools/smoke-godot.sh`
     末尾增加 audit smoke。`tools/env.sh` 优先使用
-    `/e/Study/tools/Godot_v4.7.2-stable/...`，并保留旧路径回退。
+    `GODOT_BIN` 或 `PATH` 中的 Godot 4.7.2。
   * **安全边界**：探针位于 `tests/`，不进入发行 PCK；只读游戏状态，
     不调用存档写入接口。场景夹具应复制到 `work/out/audit_fixtures/`，
     不能覆盖玩家 `Save/`。
@@ -2183,7 +2183,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
 
 * 2026-11-19（0.1.0 Windows/Android 发布、存档清理与工作区整理）：
   * **发布路径**：Windows NSIS 安装版、便携 ZIP 与 Android arm64 release APK
-    统一交付到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`。Setup 147,841,600 B
+    统一交付到 `work/out/dist/release-assets/`。Setup 147,841,600 B
     / `d3998c4a87858736f140f0ddec576d77221dbded2d59cbca42513a72119cd1a7`；
     ZIP 159,435,986 B /
     `d5cd573d3965e0a1a663ecb1d8b903913fca39b16454f15194da0fe51bc924a2`；
@@ -2214,7 +2214,7 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `System.sav`、release 签名材料与 `_archive/` 历史证据/报告。
     清理后工作区 **0.66 GB / 2,794 个文件**，其中 `work` 619.43 MB
     （`work/Data` 175.47 MB、`work/out` 443.91 MB），`target/` 已不存在。
-  * **文档**：更新 `docs/release/PACKAGING.md` §8.6、本文件、`docs/HANDOFF_M0.md`
+  * **文档**：更新 `docs/release/PACKAGING.md` §8.7、本文件、`docs/HANDOFF_M0.md`
     §11.1、`README.md`、`docs/frontend/GODOT_DEBUGGING.md` §5 与
     `docs/release/PROJECT_ASSETS.md` 的清理补记。依赖旧玩家编号存档的视觉/夜间测试
     今后需重新生成夹具，不得再引用已删除的快照目录。
@@ -2261,3 +2261,93 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **重塑 `docs/README.md` 全局导航中心**：
     * 引入 Mermaid 架构树、状态标签矩阵、分块结构清晰展示 10 大专题目录。
   * **状态**：准备提交。
+
+* 2026-11-20（公开发布审计 `4f77b128` 收口、媒体 v2/slim、Android 直读与定制模板）：
+  * **审计缺陷**：PUB-01 移除 9 个 crate 的失效 `license.workspace`；
+    PUB-02 存档改为同目录临时文件 + `sync_all` + `rename`；
+    PUB-03 补 `mouse_consumed` 入口检查、恶作剧态动作热区门控与
+    `CE219/220/283/284/290` 输入锁；PUB-04 Android 资源释放移入后台线程，
+    升级版本变化时才清理旧文件并保护 `Save/`；PUB-05 公开仓脱敏；
+    PUB-06 Android 测宽优先粗体字体。新增
+    `public_release_{save_atomic,input_guards,slim_media}.rs` 与
+    `godot/tests/android_staging_async.gd`；`m16_parallel_input` 5/5。
+  * **媒体包**：`media.pak` v2 支持逐条 zstd；标准 733 文件
+    / 113,002,637 B → 100,773,072 B；slim 源树 73,751,358 B（−34.7%，
+    671 文件重编码）→ pack 72,714,784 B。新增 `tools/package/slim_media.py`，
+    PNG→无损 WebP、JPEG→Q90 WebP，逻辑路径不变且不改 `work/Data`。
+  * **Android 直读**：媒体包改为 `android_data/media.pak.blob.cfb`（`.cfb`
+    命中 Godot APK 的不压缩扩展名，保证 `STORED`）；`MediaPack` 新增
+    `PackSource`/`open_source`，`wolf-gdext` 新增
+    `open_with_media_file()` 用 Godot `FileAccess` 直接随机读取。
+    Android 清单新增 `media_pak_in_apk` / `media_pak_blob`，首次启动不再复制
+    约 100 MB 媒体包。`android_data.py verify-apk` 拒绝被 deflate 的媒体包。
+  * **Rust 发布档**：新增 `[profile.release-dist]`（fat LTO / strip /
+    panic=abort），`build-godot.sh --dist`、`build-android.sh --dist` 与打包
+    脚本统一使用 `target/release-dist/`；启用 `lazy-function-tables` 后
+    `wolf_gdext.dll` 2,401,280 B、Android arm64 `.so` 2,231,160 B。
+  * **定制 Godot 模板**：新增 `tools/build-godot-template.sh`，固定
+    Godot 4.7.2 源码、SCons 与 JDK/SDK/NDK 探测。`wolf-gdext` 启用
+    `lazy-function-tables` 后，aggressive 档可安全删除 3D/XR/Navigation/
+    Physics3D 类：Windows 模板 52,120,576 B（官方约 105 MB），真实导出 +
+    无头 180 帧通过；Android arm64 模板 APK 21,775,866 B，其中
+    `libgodot_android.so` 56,326,888 B（官方 arm64 71,114,944 B，约 −14.8 MB）。
+    safe 档保留为回退（Windows 65,948,160 B / Android APK 27,043,886 B）。
+    `deprecated=no` 仍禁止（会删除 `get_godot_version` 等接口函数）。
+    打包脚本新增 `--template` 与 `GODOT_TEMPLATE_WINDOWS` /
+    `GODOT_TEMPLATE_ANDROID`，退出时恢复 `export_presets.cfg`。
+  * **验证**：`cargo fmt --all -- --check`、`cargo check -q --workspace` 通过；
+    `wolf-format` 35 passed、`wolf-gdext` 3 passed、
+    `public_release_*`/`m16` 16 passed；`wolf-cli verify` PASS 64 / 1 SKIP；
+    `smoke-godot.sh`、`android_staging_async.gd` 通过；定制 Windows 模板真实
+    导出并无头加载 `work/Data` 成功。`cargo test --workspace` 仍受
+    2026-11-19 删除 `SaveData01/02` 夹具影响（`m3_save_load` 2、
+    `m3_title_mouse` 1、`m3_week_loop` 3），另加既有
+    `m18 hidden_and_transparent...` 与 `late_night_bedtime...`，未新增代码回归。
+  * **未做**：未生成 Setup/ZIP/APK，未 commit；§5.2 的 FFI 扁平化、图集增量
+    上传与大图/音频异步解码仍为后续性能项；大文件模块拆分未执行。
+
+* 2026-11-20（0.1.1 六包发布、Android 标准/slim 真机验证）：
+  * **版本与构建**：workspace、Windows 版本资源、Android
+    `versionName=0.1.1` / `versionCode=2`、README 与 `wolf-gdext` 构建串统一
+    升到 0.1.1；`tools/build-godot.sh --dist` 与
+    `tools/build-android.sh --dist --api 24` 重新产出 release-dist 二进制。
+  * **签名校验**：release keystore 证书 SHA-256 仍为
+    `ea94042afd8ced39ddbd03137bfaeee4fdb74ae31220a1698fb368544a4dd653`，
+    与 0.1.0 完全一致；真机 `adb install -r` 覆盖升级成功，未卸载、
+    未 `pm clear`，玩家数据保留。
+  * **六个正式包**：`work/out/dist/release-assets/0.1.1/`
+    - `ImoutoLife-0.1.1-windows-amd64-setup.exe` 122,256,849 B
+      `b11550f2f59681a4f09695ea9c1a0157b52784d0d6c48121d737587577f05696`
+    - `ImoutoLife-0.1.1-windows-amd64.zip` 128,605,811 B
+      `9a065e5d1da24d57517e80e2706b0089461bd5d18711c29bcf02c55a4b0ea24e`
+    - `ImoutoLife-0.1.1-windows-amd64-setup-slim.exe` 93,822,449 B
+      `ecc9fbd44855972408a907af47cb8bbf2bac44e7fc150d65fc848c985fec4d0e`
+    - `ImoutoLife-0.1.1-windows-amd64-slim.zip` 100,538,746 B
+      `0e890bf0762a1442c492308fa2f1105ad843e41e207c7bc739fcab19c3d7150c`
+    - `ImoutoLife-0.1.1-android-arm64.apk` 125,675,650 B
+      `a4e39c4bc9b9c5088c406afbabd01e3a3c067b88be9af36417c04175a30f4a32`
+    - `ImoutoLife-0.1.1-android-arm64-slim.apk` 97,618,050 B
+      `70259de9942a46cd11aa5c0d7b5703f42d4762f5172ba90a7cf85c58db2971e3`
+    - 聚合 `SHA256SUMS.txt` 覆盖上述六个文件。
+  * **真机验证**：OnePlus PJZ110（Android 15 / SDK 35 / arm64-v8a，
+    adb `700a70e2`）上标准包与 slim 包均覆盖安装并冷启动成功；
+    logcat 确认 `Godot Engine v4.7.2.stable.custom_build`、
+    OpenGL ES 3.2 / Adreno 830、`wolf-gdext: open ... [build v0.1.1]`、
+    `startup: ready_ms`、首帧音效/画面命令。标准包与 slim 包均渲染标题
+    画面；标准包随后自动续读 slot 1 并显示剧情文本框，进程持续存活。
+    无 `non-existent interface function`、`Failed to load class method`、
+    panic、媒体包读取/CRC 错误或崩溃。
+  * **Android 直读确认**：标准包稳定启动日志为
+    `android: resource staging complete copied=0 removed=0 skipped=true`；
+    标准/slim 切换时仅复制 14 个明文负载文件（约 3.5 MB），
+    `media.pak` 不再复制到 `user://data`，始终从 APK 内
+    `android_data/media.pak.blob.cfb` 随机读取。
+  * **Windows 成品冒烟**：标准与 slim 目录均直接运行打包后的
+    `Imouto Life.exe --headless --quit-after 180`，加载包内
+    `Data/media.pak` 后 `exit=0`，GDExtension 构建串与首帧音效正常。
+  * **文档**：`CHANGELOG.md` 记为 `[0.1.1] - 2026-11-20`；
+    `docs/release/PACKAGING.md` 新增 §8.8（六包尺寸/哈希、构建来源、
+    真机验证）；`docs/reviews/PUBLIC_RELEASE_FIX_REPORT.md` 补发布验证；
+    `docs/HANDOFF_M0.md` §11.1 更新当前状态。
+  * **未做**：未 commit；§5.2 FFI 扁平化、图集增量上传、大图/音频异步解码
+    与大型模块拆分仍为后续项。

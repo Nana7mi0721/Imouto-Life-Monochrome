@@ -345,6 +345,23 @@ impl Assets {
         }
     }
 
+    /// Anchors the database at a base root plus a pack supplied by the host.
+    ///
+    /// This is used when the pack is not a loose `<root>/media.pak` file, for
+    /// example when Android reads it directly from the APK through Godot's
+    /// `FileAccess`. Loose files and mod overlays still take priority.
+    #[must_use]
+    pub fn with_overlays_and_media_pack(
+        root: impl Into<PathBuf>,
+        overlays: Vec<PathBuf>,
+        media: Arc<MediaPack>,
+    ) -> Self {
+        let mut assets = Self::with_overlays(root, overlays);
+        assets.media = Some(media);
+        assets.media_open_error = None;
+        assets
+    }
+
     /// The data root this database resolves against.
     #[must_use]
     pub fn root(&self) -> &Path {

@@ -46,11 +46,11 @@ tools/parity-godot.sh       # 600/1200/1800 帧统计 + 像素对照
 
 ## 3. 构建与运行
 
-前置：Rust stable（仓库 `rust-toolchain.toml`）、Godot 4.7.2（当前在
-`E:/Study/github program/Godot_v4.7.2-stable/`）。
+前置：Rust stable（仓库 `rust-toolchain.toml`）、Godot 4.7.2（通过
+`GODOT_BIN` 或 `PATH` 指向本机安装目录）。
 
 ```bash
-cd '/e/Study/github program/Imouto Life'
+cd '<repo>'
 source tools/env.sh
 bash tools/build-godot.sh          # 默认 profile "godot"（优化、无 debug info）
 bash tools/smoke-godot.sh          # headless：标题/键码/鼠标/滚轮/读档/存档往返
@@ -61,17 +61,17 @@ bash tools/parity-godot.sh --pixel-check=0   # 只比 VM 统计，不开窗口
 窗口运行（默认数据根 `godot/../work/Data`）：
 
 ```bash
-'/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64_console.exe' \
+"$GODOT_BIN" \
   --path godot
 ```
 
 显式数据根与自动截图（`--` 之后的参数由 `OS.get_cmdline_user_args()` 读取）：
 
 ```bash
-Godot_v4.7.2-stable_win64_console.exe --path godot -- \
-  --data-root='E:/Study/github program/Imouto Life/work/Data' \
+"$GODOT_BIN" --path godot -- \
+  --data-root="$PWD/work/Data" \
   --entry=menu \
-  --capture='E:/Study/github program/Imouto Life/work/out/godot_menu.png' \
+  --capture="$PWD/work/out/godot_menu.png" \
   --frames=120
 ```
 

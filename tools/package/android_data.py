@@ -28,7 +28,12 @@ import release_data  # noqa: E402
 
 MANIFEST_FILENAME = "android_data_manifest.json"
 BLOB_SUFFIX = ".blob"
+# Android's asset packer stores ".cfb" uncompressed. The media pack is already
+# zstd-compressed and will be read with random seeks from the APK, so keeping
+# that suffix avoids deflating 100+ MB just to inflate it again on every seek.
+MEDIA_BLOB_SUFFIX = ".blob.cfb"
 MEDIA_PAK_REL = "media.pak"
+MEDIA_BLOB_REL = MEDIA_PAK_REL + MEDIA_BLOB_SUFFIX
 SYSTEM_SAVE_REL = release_data.SYSTEM_SAVE_REL
 
 
@@ -40,7 +45,7 @@ def payload_digest(
 ) -> str:
     """Hash the logical payload so same-version rebuilds still restage.
 
-    The app version stays 0.1.0 across rebuilds, but media.pak and the
+    The app version can stay unchanged across rebuilds, but media.pak and the
     plaintext data can change without it. Android's ``.staged_version`` gate
     only compares the manifest string, so using the app version alone kept an
     old media.pak on devices after an update.
@@ -63,7 +68,7 @@ def payload_digest(
 
 REQUIRED_APK_ASSETS = (
     f"android_data/{MANIFEST_FILENAME}",
-    f"android_data/{MEDIA_PAK_REL}{BLOB_SUFFIX}",
+    f"android_data/{MEDIA_BLOB_REL}",
     f"android_data/{SYSTEM_SAVE_REL}{BLOB_SUFFIX}",
     "bin/wolf_gdext.gdextension",
 )
@@ -214,7 +219,7 @@ def stage_android_data(
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
 
-    media_target = safe_dest.joinpath(*release_data.path_parts(MEDIA_PAK_REL + BLOB_SUFFIX))
+    media_target = safe_dest.joinpath(*release_data.path_parts(MEDIA_BLOB_REL))
     shutil.copy2(resolved_media_pak, media_target)
 
     save_target = safe_dest.joinpath(*release_data.path_parts(SYSTEM_SAVE_REL + BLOB_SUFFIX))
@@ -223,7 +228,12 @@ def stage_android_data(
 
     staged_before_manifest = release_data.actual_stage_files(safe_dest)
     logical_payload = release_data.expected_for_stage(entries, extras=(MEDIA_PAK_REL,))
-    expected_payload = {f"{rel}{BLOB_SUFFIX}" for rel in logical_payload}
+    expected_payload = {
+        f"{rel}{BLOB_SUFFIX}"
+        for rel in logical_payload
+        if rel != MEDIA_PAK_REL
+    }
+    expected_payload.add(MEDIA_BLOB_REL)
     missing = sorted(expected_payload - staged_before_manifest)
     extra = sorted(staged_before_manifest - expected_payload)
     lingering_prefixes = sorted(
@@ -245,7 +255,11 @@ def stage_android_data(
 
     assert_no_savedata_files(logical_payload, "staged Android data")
 
-    sorted_files = sorted(logical_payload)
+    # media.pak stays in the APK and is opened through Godot's FileAccess.
+    # It deliberately does not appear in the staged-file manifest, so the
+    # Android runtime never copies it into user://data.
+    manifest_files = sorted(release_data.expected_for_stage(entries))
+    sorted_files = manifest_files
     total_bytes = sum(
         safe_dest.joinpath(*release_data.path_parts(rel + BLOB_SUFFIX)).stat().st_size
         for rel in sorted_files
@@ -257,6 +271,8 @@ def stage_android_data(
         "file_count": len(sorted_files),
         "total_bytes": total_bytes,
         "files": sorted_files,
+        "media_pak_in_apk": True,
+        "media_pak_blob": MEDIA_BLOB_REL,
     }
     manifest_path = safe_dest / MANIFEST_FILENAME
     atomic_write_text(
@@ -279,6 +295,8 @@ def stage_android_data(
         or written_manifest.get("file_count") != len(sorted_files)
         or written_manifest.get("total_bytes") != total_bytes
         or written_manifest.get("files") != sorted_files
+        or written_manifest.get("media_pak_in_apk") is not True
+        or written_manifest.get("media_pak_blob") != MEDIA_BLOB_REL
     ):
         fail(f"{MANIFEST_FILENAME} failed read-back verification")
 
@@ -483,6 +501,24 @@ def verify_apk(apk_path: Path, require_so: bool) -> None:
                         + preview
                         + extra_note
                     )
+                if manifest_doc.get("media_pak_in_apk") is True:
+                    media_blob = manifest_doc.get("media_pak_blob", MEDIA_BLOB_REL)
+                    if not isinstance(media_blob, str):
+                        fail(f"{manifest_zip_key} has invalid 'media_pak_blob'")
+                    media_asset = f"android_data/{media_blob}"
+                    if media_asset not in all_assets:
+                        fail(
+                            f"APK is missing package media asset: {media_asset}"
+                        )
+                    media_info = zip_entries.get(f"assets/{media_asset}")
+                    if (
+                        media_info is not None
+                        and media_info.compress_type != zipfile.ZIP_STORED
+                    ):
+                        fail(
+                            "package media must be stored uncompressed for random "
+                            f"access: {media_asset}"
+                        )
                 manifest_count = len(listed)
 
     except zipfile.BadZipFile as error:

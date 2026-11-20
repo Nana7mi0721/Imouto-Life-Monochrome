@@ -9,7 +9,7 @@
 msys / git-bash（推荐）：
 
 ```bash
-cd "/e/Study/github program/Imouto Life"
+cd "$(git rev-parse --show-toplevel)"
 source tools/env.sh >/dev/null 2>&1
 bash tools/package.sh                 # 构建 release 并打包到 work/out/dist/<version>/
 bash tools/package.sh --skip-build     # 复用已有 target/release/wolf-cli.exe
@@ -102,16 +102,16 @@ ls -l work/out/dist/<version>/   # 期望：wolf-cli.exe README.txt Play-ImoutoL
 不带游戏数据，适合开发验证。面向“像正常游戏一样双击 exe 就能玩”的交付使用：
 
 ```bash
-cd "/e/Study/github program/Imouto Life"
+cd "$(git rev-parse --show-toplevel)"
 bash tools/package-playable.sh \
-  --out-dir "/d/program/Imouto Life" \
+  --out-dir "work/out/playable/Imouto Life" \
   --zip-dir work/out/dist
 ```
 
 产物结构：
 
 ```text
-D:\program\Imouto Life\
+work/out/playable/Imouto Life\
   Imouto Life.exe        # GUI 启动器，双击即启动，无控制台黑窗
   runtime\wolf-cli.exe   # Rust 引擎（release 构建）
   Data\                  # 完整解包游戏数据（约 178 MB，不含本地编号存档）
@@ -126,7 +126,7 @@ D:\program\Imouto Life\
 `Imouto Life.exe --load-save "<你的存档路径>"`。
 
 脚本选项：`--skip-build`、`--no-zip`、`--force`（替换已有输出目录）、`--data-root`。
-`--force` 只会删除 `work/out/` 或 `D:\program/` 下的目录，避免误删。
+`--force` 只会删除 `work/out/` 下的目录，避免误删。
 
 递归复制 Data 时会剔除整个 `Save/` 子树，然后在包内重建 `Data/Save/`，只放入一个
 干净的 `System.sav`。来源优先为 `work/out/retail_saves/System.sav`；若不存在，再使用
@@ -143,7 +143,7 @@ Godot 前端使用独立的 Windows Desktop release 导出路径，不把 `wolf-
 Godot 发行版：
 
 ```bash
-cd "/e/Study/github program/Imouto Life"
+cd "$(git rev-parse --show-toplevel)"
 bash tools/package-godot.sh
 
 # 数据计划/过滤逻辑检查：不构建、不导出、不复制 Data
@@ -160,13 +160,12 @@ work/out/dist/godot/<version>/
   README.txt
   按键功能指引.txt        # F4/F11/F8/F5 等显示快捷键与游戏操作
   checksums.txt          # 包内所有文件的 SHA-256
-work/out/dist/godot/Imouto Life setup.zip
-work/out/dist/godot/Imouto Life setup.zip.sha256
-work/out/dist/godot/Imouto Life setup.exe
-work/out/dist/godot/Imouto Life setup.exe.sha256
+work/out/dist/godot/ImoutoLife-<version>-windows-amd64.zip
+work/out/dist/godot/ImoutoLife-<version>-windows-amd64-setup.exe
+work/out/dist/godot/SHA256SUMS.txt
 ```
 
-`Imouto Life setup.zip` 的顶层目录固定为
+便携 ZIP 的顶层目录固定为
 `妹！生活 ～单色～ Godot/`；解压后直接进入该文件夹运行。
 
 ### 8.1 发行 Data 结构与 media.pak
@@ -245,7 +244,7 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
   `icon_windows` ICO 的大帧；F4/F11 切换窗口模式后会重新应用。
   exe 文件图标仍由上面的 `application/icon` 单独控制；
 - Windows 资源字段从 `export_presets.cfg` 读取并同步给 NSIS 安装器：
-  `file_version` / `product_version` 为 Cargo 版本补足四段（当前 `0.1.0.0`），
+  `file_version` / `product_version` 为 Cargo 版本补足四段（当前 `0.1.1.0`），
   `product_name` 与 `file_description` 为 `妹！生活 ～单色～ Godot`，
   公司名和版权使用当前预设中的 `Inusuku` / `Copyright (c) 2026 Inusuku`；
 - Godot 4.7.2 仍会把 Windows 版本资源写成英语（美国，`0x0409`），且
@@ -287,7 +286,7 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
 3. 检查 `bin\wolf_gdext.dll` 与构建 DLL 的 SHA-256 相同；
 4. 以 `--exclude-prefix` 和 `--defer-verify` staging 15 个明文清单文件 +
    `Data/Save/System.sav`，并复核 `Data/Save/` 只能有 `System.sav`；
-5. 构建并调用 `target/release/media-pack.exe`，从源 `--data-root` 和同一个
+5. 构建并调用 `target/release-dist/media-pack.exe`，从源 `--data-root` 和同一个
    manifest 生成 `Data/media.pak`；
 6. 调用 `release_data.py verify --exclude-prefix ... --extra media.pak`，要求最终
    文件集合精确为 17 个文件，并额外检查 7 个媒体前缀目录/文件都不存在；
@@ -295,11 +294,13 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
    `tools/package/KEYBOARD_GUIDE.txt` 会以 CRLF 写为包内
    `按键功能指引.txt`，并同样进入校验和；
 8. 校验便携 zip 可读、顶层目录正确，并生成 zip 外部 `.sha256`；
-9. 如生成安装版，调用 NSIS 编译 `Imouto Life setup.exe` 并生成外部 `.sha256`。
+9. 如生成安装版，调用 NSIS 编译
+   `ImoutoLife-<version>-windows-amd64-setup.exe`（slim 为 `...-setup-slim.exe`），
+   并汇总到同目录 `SHA256SUMS.txt`。
 
 媒体打包器由 `tools/package-godot.sh` 构建：
-`cargo build -q --release -p wolf-format --bin media-pack`，产物固定为
-`target/release/media-pack.exe`。`--skip-build` 只表示复用现有
+`cargo build -q --profile release-dist -p wolf-format --bin media-pack`，产物固定为
+`target/release-dist/media-pack.exe`。`--skip-build` 只表示复用现有
 `godot/bin/wolf_gdext.dll`；如果 packer 尚不存在，脚本仍会单独构建它。
 调用接口为
 `media-pack --root DIR --manifest FILE --include-prefix PREFIX ... --output FILE`，
@@ -335,7 +336,7 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
 从该目录双击 `Setup.exe` 时，安装器会继承低完整性级别，无法写普通
 `%TEMP%`，表现为 `NSIS Error: Error writing temporary file` 或错误码 2。
 实机测试或交付前必须把 Setup/ZIP 复制到普通用户目录（例如
-`D:\REISEN\Downloads\...`）再运行。
+`work/out/dist/release-assets/`）再运行。
 
 `--dry-run` 只报告模板是否存在，并打印媒体包前缀、pack payload、明文 staging
 文件数/字节与最终 Data 文件数；它不构建、不导出、不打包、不复制数据。packer
@@ -354,14 +355,35 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
 `save_roundtrip.gd` 新游戏自动走到卧室并保存/重载均为 38 张图片，
 `System.sav` 哈希前后不变。
 
-其它选项：`--no-zip`、`--no-setup`、`--makensis PATH`、`--skip-build`、`--force`、
-`--out-dir`、`--zip-dir`、`--manifest`、`--system-save`、`--preset`。
+其它选项：`--slim`、`--no-zip`、`--no-setup`、`--makensis PATH`、`--skip-build`、
+`--force`、`--out-dir`、`--zip-dir`、`--manifest`、`--system-save`、`--preset`。
+
+GDExtension 与 media packer 默认使用 `[profile.release-dist]`：fat LTO、
+`codegen-units=1`、`strip="symbols"`、`panic="abort"`。测试仍使用默认 unwind
+档，不受影响；`tools/build-godot.sh --dist` 与
+`tools/build-android.sh --dist` 是发布专用入口。
+
+定制 2D/GLES3 导出模板见
+[GODOT_TEMPLATE.md](GODOT_TEMPLATE.md)。打包时可用
+`GODOT_TEMPLATE_WINDOWS=/abs/template.exe` 与
+`GODOT_TEMPLATE_ANDROID=/abs/android_release.apk`（或
+`--template PATH`）让脚本临时写入对应 preset 的
+`custom_template/release`，退出时自动恢复 `export_presets.cfg`。
 
 ### 8.5 media.pak 的格式边界与图标格式
 
 - `Data/media.pak` 是由 `media-pack` 从同一份 release manifest 中筛选 7 个媒体
   前缀生成的只读单文件包。包内只包含媒体条目；`BasicData`、`MapData`、`Save`
   和字体仍以明文散文件发布，Godot PCK 仍只包含脚本/场景/运行资源。
+- 当前格式为 v2：每个条目记录原始大小、存储大小、CRC-32 和编码方式。能显著
+  缩小的条目使用 zstd，已压缩或收益不足的条目保持直存；读取端仍兼容 v0.1.0
+  的 v1 包。打包器写完后会重新打开包并对每个条目执行解压/CRC 校验。
+- Android APK 内的媒体包命名为 `android_data/media.pak.blob.cfb`。`.cfb`
+  后缀让 Godot 的 APK 写入器按“已压缩/不可压缩”处理为 ZIP `STORED`，因此
+  Rust 侧可以通过 Godot `FileAccess` 随机 seek，而不必先解压/复制整包。
+  `wolf-gdext.open_with_media_file()` 接收这个只读句柄；首次启动只释放
+  `BasicData`、`MapData` 和初始 `System.sav`，不再把约 100 MB 的媒体包
+  复制到 `user://data`。
 - 该包使用固定密钥 XOR 混淆。**它是混淆，不是强加密，也不提供 DRM**：密钥在
   客户端中，能提高直接浏览/复制素材的门槛，但无法抵抗有意的逆向或提取。
 - Mod overlay 仍可用：玩家/Mod 可以继续按原 `Data/` 目录结构放置同名散文件覆盖；
@@ -378,13 +400,43 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
   `GameView.gd` 再按实际 DPI 选择标题栏尺寸，避免把 256×256 图交给
   Windows 标题栏现场缩小。
 
-### 8.6 0.1.0 最终发布与清理记录（2026-11-19）
+### 8.6 标准版与 slim 版命名
+
+公开发布的资产名固定为 `ImoutoLife-<version>-<platform>-<arch>-<kind>.exe|zip|apk`。
+`slim` 作为额外性质后缀，放在文件名末尾：
+
+```text
+ImoutoLife-<version>-windows-amd64-setup.exe
+ImoutoLife-<version>-windows-amd64.zip
+ImoutoLife-<version>-windows-amd64-setup-slim.exe
+ImoutoLife-<version>-windows-amd64-slim.zip
+ImoutoLife-<version>-android-arm64.apk
+ImoutoLife-<version>-android-arm64-slim.apk
+SHA256SUMS.txt
+```
+
+标准版直接打包原版媒体；slim 版先由
+`python tools/package/slim_media.py` 在 `work/out/slim/<version>/media-src/`
+生成逻辑路径不变的媒体树：PNG 转无损 WebP，JPEG 转 Q90 WebP，只有体积确实
+更小时才采用。随后标准版与 slim 版都经同一个 v2 `media-pack` 做逐条 zstd。
+`work/Data` 不会被修改。
+
+```bash
+bash tools/package-godot.sh --slim
+bash tools/package-android.sh --slim --release --keystore ... --ks-user ... --ks-pass ...
+```
+
+slim 默认输出到 `work/out/dist/godot-slim/<version>/` 与
+`work/out/dist/android-slim/<version>/`，避免覆盖标准版。GameView 对直接读缓冲
+的图片/音频按文件头识别 WebP/OGG，不依赖原文件扩展名。
+
+### 8.7 0.1.0 最终发布与清理记录（2026-11-19）
 
 本轮 Windows / Android 发布包已统一放到普通用户目录，避免从 `work/out`
 继承 Low Mandatory Level / 受限 ACL：
 
 ```text
-D:\REISEN\Downloads\Imouto Life 0.1.0\
+work/out/dist/release-assets/
   README.txt
   Windows\
     Imouto Life setup.exe
@@ -447,4 +499,73 @@ work/out/android/private/release-keystore.txt
 需要这些夹具时应从干净模板新建，而不是恢复已删除的旧快照。
 清理后工作区为 **0.66 GB / 2,794 个文件**（`work` 619.43 MB，
 `work/out` 443.91 MB），`target/` 已不存在。
+
+### 8.8 0.1.1 最终发布与真机验证记录（2026-11-20）
+
+0.1.1 在 0.1.0 基础上落地媒体包 v2、slim WebP 媒体、Android APK 内直读、
+`[profile.release-dist]` 与 aggressive 2D/GLES3 Godot 模板。六个正式产物
+汇总到：
+
+```text
+work/out/dist/release-assets/0.1.1/
+  ImoutoLife-0.1.1-windows-amd64-setup.exe
+  ImoutoLife-0.1.1-windows-amd64.zip
+  ImoutoLife-0.1.1-windows-amd64-setup-slim.exe
+  ImoutoLife-0.1.1-windows-amd64-slim.zip
+  ImoutoLife-0.1.1-android-arm64.apk
+  ImoutoLife-0.1.1-android-arm64-slim.apk
+  SHA256SUMS.txt
+```
+
+实际交付物与校验值：
+
+| 产物 | 字节数 | SHA-256 |
+|---|---:|---|
+| `ImoutoLife-0.1.1-windows-amd64-setup.exe` | 122,256,849 | `b11550f2f59681a4f09695ea9c1a0157b52784d0d6c48121d737587577f05696` |
+| `ImoutoLife-0.1.1-windows-amd64.zip` | 128,605,811 | `9a065e5d1da24d57517e80e2706b0089461bd5d18711c29bcf02c55a4b0ea24e` |
+| `ImoutoLife-0.1.1-windows-amd64-setup-slim.exe` | 93,822,449 | `ecc9fbd44855972408a907af47cb8bbf2bac44e7fc150d65fc848c985fec4d0e` |
+| `ImoutoLife-0.1.1-windows-amd64-slim.zip` | 100,538,746 | `0e890bf0762a1442c492308fa2f1105ad843e41e207c7bc739fcab19c3d7150c` |
+| `ImoutoLife-0.1.1-android-arm64.apk` | 125,675,650 | `a4e39c4bc9b9c5088c406afbabd01e3a3c067b88be9af36417c04175a30f4a32` |
+| `ImoutoLife-0.1.1-android-arm64-slim.apk` | 97,618,050 | `70259de9942a46cd11aa5c0d7b5703f42d4762f5172ba90a7cf85c58db2971e3` |
+
+与 0.1.0 相比，标准 Windows setup / zip / Android APK 分别减少约
+17.3% / 19.3% / 13.3%；slim 三件分别减少约 36.5% / 36.9% / 32.6%。
+标准与 slim 共用同一 `media.pak` 读取路径；标准包内为逐条 zstd，
+slim 包为 PNG→无损 WebP / JPEG→Q90 WebP 后的逐条 zstd。
+
+构建来源：
+
+- Windows 与 Android 均使用
+  `work/out/godot-template/out/4.7.2-aggressive/{windows,android}/` 下的
+  定制模板；打包脚本通过 `GODOT_TEMPLATE_WINDOWS` /
+  `GODOT_TEMPLATE_ANDROID` 或 `--template` 引入，退出后恢复
+  `godot/export_presets.cfg`。
+- Android 使用 `--release` + 现有 release keystore 签名，证书 SHA-256 仍为
+  `ea94042afd8ced39ddbd03137bfaeee4fdb74ae31220a1698fb368544a4dd653`，
+  与 0.1.0 一致，因此 `adb install -r` 覆盖安装保留玩家数据。
+- `dist/godot*/`、`dist/android*/0.1.1/` 下仍保留各自的 `README*`、
+  `checksums.txt` / `SHA256SUMS.txt` 与 APK `.idsig` 签名旁车文件；
+  `release-assets/0.1.1/SHA256SUMS.txt` 只覆盖上述六个主产物。
+
+真机验证（OnePlus PJZ110，Android 15 / SDK 35，arm64-v8a，adb serial
+`700a70e2`）：
+
+- 标准 APK 与 slim APK 均先行 `adb install -r` 覆盖安装；未执行
+  `pm clear`，`user://` 数据保留。
+- 冷启动日志确认 `Godot Engine v4.7.2.stable.custom_build`、
+  OpenGL ES 3.2 / Adreno 830、`wolf-gdext: open ... [build v0.1.1]`、
+  `startup: ready_ms` 与首帧音效/画面命令。
+- Android 资源释放日志确认媒体包不再复制：标准包稳定启动为
+  `copied=0 removed=0 skipped=true`；切换标准/slim 媒体清单时最多复制
+  14 个明文负载文件（约 3.5 MB），`media.pak` 始终从 APK 内
+  `android_data/media.pak.blob.cfb` 随机读取。
+- 标准包与 slim 包均能渲染标题画面；标准包随后自动续读 slot 1 存档并显示
+  剧情文本框，进程持续存活。`dumpsys package` 确认
+  `versionName=0.1.1`、`versionCode=2`。
+- 启动日志无 `non-existent interface function`、
+  `Failed to load class method`、panic、媒体包 CRC/读取错误或崩溃；
+  logcat 中的系统级 `panic` 字样来自无关厂商进程 `oiface`。
+- Windows 标准与 slim 目录均用打包后的 `Imouto Life.exe --headless
+  --quit-after 180` 直接加载包内 `Data/media.pak`，`exit=0`；
+  `wolf-gdext ... [build v0.1.1]`、字体、首帧音效命令均正常。
 

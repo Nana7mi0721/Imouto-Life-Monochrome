@@ -4,6 +4,40 @@
 
 ---
 
+## [0.1.1] - 2026-11-20
+
+### 发布（Release）
+- **六个 0.1.1 发行包**：Windows 标准/slim 的 setup 与 zip，Android 标准/slim 的
+  arm64 APK，统一放在 `work/out/dist/release-assets/0.1.1/`；命名统一为
+  `ImoutoLife-<version>-<platform>-<arch>[-setup][-slim]`。
+- **正式版本号**：Rust workspace 与 Windows 版本资源为 0.1.1，
+  Android `versionName=0.1.1`、`versionCode=2`；沿用 0.1.0 的 release 签名
+  证书（SHA-256 `ea94042a…4dd653`），支持覆盖升级且不丢存档。
+- **真机验证**：OnePlus PJZ110（Android 15 / SDK 35 / arm64-v8a）上完成
+  标准包与 slim 包的覆盖安装、冷启动、标题/剧情渲染、后台资源释放与日志检查；
+  `media.pak` 留在 APK 内直读，不再复制约 100 MB 到应用数据目录。
+  详见 `docs/release/PACKAGING.md` §8.8。
+
+### 新增（Added）
+- **公开发布审计收口**：修复 workspace license 继承、原子存档写入、并行输入热区穿透、
+  Android 首次启动后台释放与旧资源清理、公开仓个人路径脱敏、Android 粗体测宽回退。
+- **媒体包 v2**：`media.pak` 支持逐条 zstd；新增 WebP 重编码 slim 媒体树
+  `tools/package/slim_media.py`，标准版与 slim 版共用同一读取路径。
+- **Android 直读媒体包**：`media.pak` 以 `media.pak.blob.cfb` 未压缩留在 APK 内，
+  通过 Godot `FileAccess` 随机读取，消除约 100 MB 的第二份应用数据占用。
+- **发布档与命名**：新增 `[profile.release-dist]`（fat LTO、strip、panic=abort），
+  Windows/Android 产物统一为 `ImoutoLife-<version>-<platform>-<arch>[-slim]`。
+- **定制 Godot 模板**：新增 2D/GLES3 裁剪模板构建脚本；`lazy-function-tables`
+  使 aggressive 模板可删除 3D/XR 类。Windows 模板 52.1 MB，Android arm64
+  引擎库 56.3 MB（见 `docs/release/GODOT_TEMPLATE.md`）。
+
+### 优化与修复（Fixed）
+- 清理生产源码中的历史过程注释、内部审查编号与未入库本地路径。
+- Android 资源清单新增 `media_pak_in_apk` / `media_pak_blob` 字段，并校验媒体包
+  在 APK 内以 `STORED` 存放。
+
+---
+
 ## [0.1.0] - 2026-11-19
 
 ### 新增（Added）

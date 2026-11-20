@@ -8,7 +8,7 @@
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Language-Rust%202021-orange.svg" alt="Language"></a>
   <a href="https://godotengine.org/"><img src="https://img.shields.io/badge/Frontend-Godot%204.7.2-blue.svg" alt="Frontend"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-brightgreen.svg" alt="Platform"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.0-blueviolet.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.1-blueviolet.svg" alt="Version"></a>
 </p>
 
 A high-performance, modern cross-platform reimplementation of *Imouto! Life ~Monochrome~* (inusuku 2019, WOLF RPG Editor).
@@ -56,13 +56,16 @@ Powered by a **Rust bytecode VM core** combined with a **Godot 4 GDExtension hyb
 
 ### 1. Download Release Packages
 
-Head to the [Releases page](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) to grab the latest build (current version: `v0.1.0`):
+Head to the [Releases page](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) to grab the latest build (current version: `v0.1.1`):
 
 - **Windows**:
-  - `Imouto Life setup.exe`: NSIS installer with desktop shortcuts and uninstaller integration.
-  - `Imouto Life setup.zip`: Portable package (extract and double-click `Imouto Life.exe`).
+  - `ImoutoLife-0.1.1-windows-amd64-setup.exe`: NSIS installer with desktop shortcuts and uninstaller integration.
+  - `ImoutoLife-0.1.1-windows-amd64.zip`: Portable package (extract and double-click `Imouto Life.exe`).
+  - `ImoutoLife-0.1.1-windows-amd64-setup-slim.exe` / `ImoutoLife-0.1.1-windows-amd64-slim.zip`: Media-reencoded slim builds with the same save format.
 - **Android**:
-  - `ImoutoLife-release.apk`: Sideload directly to your Android device.
+  - `ImoutoLife-0.1.1-android-arm64.apk`: Sideload directly to your Android device.
+  - `ImoutoLife-0.1.1-android-arm64-slim.apk`: Slim-media build.
+- Each platform directory includes `SHA256SUMS.txt` covering the current release artifacts.
 
 ### 2. Prepare Game Data
 

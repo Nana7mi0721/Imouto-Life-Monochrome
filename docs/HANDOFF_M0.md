@@ -1,8 +1,8 @@
 # Imouto! Life ～単色～ Rust 重写 — 新会话交接
 
 本文件写给**下一个接手的会话**（agent 或人）。读完这一份就能继续，不需要翻聊天记录。
-仓库：`E:/Study/github program/Imouto Life`（**尚无 .git、无 Cargo.toml、无代码，只有 docs/**）。
-撰写时状态：2025-10-30；上一作（续作）仓库 `E:/Study/github program/imoto life` HEAD `c6d8ea7`，`wolf-cli verify` = PASS 70 checks。
+仓库：本仓库根目录（**撰写时仅有 docs/**，后续已完成 Rust workspace 与 Godot 前端）。
+撰写时状态：2025-10-30；上一作（续作）仓库使用独立工作目录，HEAD `c6d8ea7`，`wolf-cli verify` = PASS 70 checks。
 
 ---
 
@@ -10,8 +10,8 @@
 
 ```text
 接手一个进行中的项目：用 Rust 数据级重写《妹！生活 ～単色～》（いぬすく 2019，WOLF RPG Editor 制作，手上是 zh-CN 汉化 2.03）。
-仓库：E:/Study/github program/Imouto Life（目前只有 docs/，没有 .git、没有代码）。
-姊妹项目（已完成的续作重写，代码在这里复用）：E:/Study/github program/imoto life，HEAD c6d8ea7，wolf-cli verify PASS 70/70。
+仓库：本仓库根目录（撰写时只有 docs/，没有 .git、没有代码）。
+姊妹项目（已完成的续作重写，代码在这里复用）：独立仓库目录，HEAD c6d8ea7，wolf-cli verify PASS 70/70。
 
 第一步，按顺序读这些文件（都在 Imouto Life/docs/ 下）：
 1. HANDOFF_M0.md ← 本文件，全部结论与陷阱都在里面
@@ -46,12 +46,12 @@
 
 | 仓库 | 路径 | 状态 |
 | --- | --- | --- |
-| 本作（第二作，Imouto! Life ～単色～） | `E:/Study/github program/Imouto Life` | 只有 docs/（7 个 md + docs/vendor/uberwolf-ref/），**未 git init、无代码** |
-| 姊妹作（续作 Living With Sister: Monochrome Fantasy，已完成到 M6） | `E:/Study/github program/imoto life` | HEAD `c6d8ea7`；`verify` PASS 70/70；507 个 #[test]；7 个 crate 共 47,417 行 |
+| 本作（第二作，Imouto! Life ～単色～） | 本仓库根目录 | 撰写时只有 docs/（7 个 md + docs/vendor/uberwolf-ref/） |
+| 姊妹作（续作 Living With Sister: Monochrome Fantasy，已完成到 M6） | 独立仓库目录 | HEAD `c6d8ea7`；`verify` PASS 70/70；507 个 #[test]；7 个 crate 共 47,417 行 |
 
 上一作的未跟踪 scratch（**不要提交**）：`crates/wolf-format/examples/opscan.rs`、`crates/wolf-format/tests/_scratch_cdata.rs`、`crates/wolf-format/tests/_scratch_event.rs`。
 
-本作安装目录：`E:/EROGAME/Imouto! Life ~Monochrome~ zh-CN Ver`（12 个文件：Config.exe 299,008 B / **Data.wolf 176,347,260 B** / Game.exe 6,365,184 B / Game.ini 156 B / GuruguruSMF4.dll 147,456 B / manual01..06.jpg 1000x1415 / readme.txt 1,142 B）。
+本作安装目录：合法的本地零售安装根目录（12 个文件：Config.exe 299,008 B / **Data.wolf 176,347,260 B** / Game.exe 6,365,184 B / Game.ini 156 B / GuruguruSMF4.dll 147,456 B / manual01..06.jpg 1000x1415 / readme.txt 1,142 B）。
 
 `readme.txt`（UTF-16LE）要点：(C) いぬすく《妹！生活 ～単色～》2019/8/11；inusuku@inusuku.dojin.com；<https://ci-en.jp/creator/64>；「本作品使用 SmokingWOLF 的 WOLF RPG Editor 制作」<http://www.silversecond.net/>；**需要鼠标**；Z/ENTER/左键=决定，X/BS/右键=取消；禁止二次发布与商业利用。
 `Game.ini`：`Start=0 SoftModeFlag=0 WindowModeFlag=1 SEandBGM=3 FrameSkip=0 Proxy= ProxyPort= ScreenShotFlag=1 F12_Reset=1 Display_Number=0 Old_DirectX_Use=0`（`ScreenShotFlag=1` ⇒ 游戏内 PrintScreen 会往安装目录写 1024x576 原生帧，这是唯一允许的截图取证方式）。
@@ -160,9 +160,9 @@ Sys 变量（type 6，135 行）中 row 104 = `Ｘスクロール値`、row 105 
 
 ## 5. M0 开工清单（按顺序，每步可验证）
 
-1. **建仓库**：`cd 'E:/Study/github program/Imouto Life' && git init`；复制上一作的 `.gitignore`（含 `/target`、`/work/`、`*.exe`、`/tools/{bin,cmake,ffmpeg}/`）、`rust-toolchain.toml`（channel stable + rustfmt + clippy）、`tools/env.sh`（改 `T` 与 `IMO` 两处绝对路径）、`tools/env.ps1`/`setpath.ps1`。
-2. **搬 crate**：`cp -r '/e/Study/github program/imoto life/crates' .` + 复制根 `Cargo.toml`（7 成员、resolver 2、`workspace.package` version 0.1.0 / edition 2021 / rust-version 1.87 / license MIT OR Apache-2.0 / publish false、profile.dev opt-level 1 debug 1、dev.package."*" opt-level 2、release opt-level 3 + lto thin + codegen-units 1）。`cargo build -q` 必须绿。
-3. **数据已就位**：`work/Data` 已含 1,361 文件 / 179,877,496 B（无需再复制；若要重来：`cp -r '/e/Study/github program/imoto life/work/imouto/Data' work/Data`）。`work/` 要进 `.gitignore`。`wolf-cli` 的 `WOLF_DATA_ROOT` 默认指向 `./work/full`（`crates/wolf-cli/src/main.rs:580`，默认值在 `:517`），本作要改成 `./work/Data`。
+1. **建仓库**：在仓库根目录执行 `git init`；复制上一作的 `.gitignore`（含 `/target`、`/work/`、`*.exe`、`/tools/{bin,cmake,ffmpeg}/`）、`rust-toolchain.toml`（channel stable + rustfmt + clippy）、`tools/env.sh`、`tools/env.ps1`/`setpath.ps1`。
+2. **搬 crate**：从姊妹仓库复制 `crates/` 到本仓库，并复制根 `Cargo.toml`（7 成员、resolver 2、`workspace.package` version 0.1.0 / edition 2021 / rust-version 1.87 / publish false、profile.dev opt-level 1 debug 1、dev.package."*" opt-level 2、release opt-level 3 + lto thin + codegen-units 1）。`cargo build -q` 必须绿。
+3. **数据已就位**：`work/Data` 已含 1,361 文件 / 179,877,496 B（无需再复制；需要重建时从合法安装副本导入）。`work/` 要进 `.gitignore`。`wolf-cli` 的 `WOLF_DATA_ROOT` 默认指向 `./work/full`（`crates/wolf-cli/src/main.rs:580`，默认值在 `:517`），本作要改成 `./work/Data`。
 4. **WolfGeneration**：按上表加两代常量表 + 用 `version_header`/`version` 选表；`gamedat`/`commonevent`/`database`/`tileset` 的解析都改成「读表拿常量」。
 5. **.project CP932**：`name_at` 加 CP932 回退，然后确认 `SysDatabase.project` 能出 28 个类名、`DataBase.project` 40 个、`CDataBase.project` 30 个。
 6. **本作基线**：写 `docs/BASELINE.json`（**不要照抄上一作**），先落这些键：`game_dat`（25 个游戏参数、种子 22507/23301、分辨率 1024x576）、`common_events`（350 / 63,506 / 9,890 / 53,616 / 46 opcodes）、`map_events`（56 / 102 / 12,266 / 10,078 / 35 opcodes）、`precompile`、`tileset_data`（版本 209）、`file_versions`（各 .dat 的 version+footer）、`wolf_archives`（1,361 条目 / 179,877,496 B；若实现 VER6 解包，再加 `dxarchive_ver6` 键：key、1,339 未压缩 + 22 压缩、逐字节校验计数）。
@@ -214,8 +214,8 @@ Sys 变量（type 6，135 行）中 row 104 = `Ｘスクロール値`、row 105 
 
 ## 8. 环境与协作陷阱（血泪，别重踩）
 
-1. **每条 bash 命令开头**：`cd '/e/Study/github program/Imouto Life' && source tools/env.sh >/dev/null 2>&1`（env.sh 提供 msys PATH + 中科大 rustup 镜像 + `CARGO_NET_GIT_FETCH_WITH_CLI`）。路径必须用 msys 形式（`/e/...`）。
-2. `C:/Users/REISEN/.cargo/config.toml` 必须保留 `[http] proxy = ''`：注册表代理（127.0.0.1:7890）会被 cargo/libcurl 采用而 curl 不采用，症状是「curl 能连镜像、cargo 不能」。
+1. **每条 bash 命令开头**：`cd "$(git rev-parse --show-toplevel)" && source tools/env.sh >/dev/null 2>&1`（env.sh 提供工具 PATH + rustup 镜像 + `CARGO_NET_GIT_FETCH_WITH_CLI`）。
+2. 用户级 `$HOME/.cargo/config.toml` 必须保留 `[http] proxy = ''`：注册表代理（127.0.0.1:7890）会被 cargo/libcurl 采用而 curl 不采用，症状是「curl 能连镜像、cargo 不能」。
 3. **sccache 会破坏 MSVC 链接**（LNK1104 lnk{GUID}.tmp）——不要开。
 4. **GitHub 直连下载只有 ~2 KB/s**：源码包走 `codeload.github.com`（已验证可用），普通文件用 `ghfast.top` 前缀；`api.github.com` 可读元数据，但读文件内容要带 `?ref=main` 并检查 `.message`（限流）。`cargo-binstall` 不可用（os error 5），用 `cargo install --locked`。
 5. **不要用 PowerShell 抢前台/模拟按键截图**（用户明令：会造成他无法操作电脑）。截图只能由用户按游戏内 PrintScreen（`ScreenShotFlag=1`），产物落在安装目录，1024x576 原生。
@@ -223,7 +223,7 @@ Sys 变量（type 6，135 行）中 row 104 = `Ｘスクロール値`、row 105 
 7. **临时输出放 `work/out/`**：`/tmp` 在 Windows 上映射到系统临时目录，bash 派生的子进程写它会 `PermissionDenied (os error 5)`；测试临时目录用 `target/test-scratch` + `env!(CARGO_MANIFEST_DIR)`。
 8. 交互式截图/报告都落到 `work/out/`；`work/` 与 `/tools/{bin,cmake,ffmpeg}/` 已 gitignore。
 9. 团队规模上限 8 人（lead + 7）；共享任务板用 `team_task_*`；写作用域按文件/目录切分。
-10. 提交身份固定为仓库拥有者：`git -c user.name='Nana7mi0721' -c user.email='linxin070410@gmail.com' commit ...`（或先 `git config user.name/user.email`）；不要再使用 `imoto lead <lead@imoto.local>`；`git add` 的 CRLF 警告无害。
+10. 提交身份使用仓库本地已配置的维护者身份；不要把个人邮箱写进脚本、文档或示例命令。`git add` 的 CRLF 警告无害。
 
 ---
 
@@ -241,7 +241,7 @@ Sys 变量（type 6，135 行）中 row 104 = `Ｘスクロール値`、row 105 
 ## 10. 恢复后的第一条命令
 
 ```bash
-cd '/e/Study/github program/Imouto Life' && source tools/env.sh 2>/dev/null || echo 'run M0 step 1 first (copy tools/env.sh)'
+cd "$(git rev-parse --show-toplevel)" && source tools/env.sh 2>/dev/null || echo 'run M0 step 1 first (copy tools/env.sh)'
 git status --short 2>/dev/null | head
 cat docs/HANDOFF_M0.md | head -60
 ```
@@ -261,7 +261,32 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 > **[HANDOFF_PROGRESS.md](HANDOFF_PROGRESS.md)**。本节只保留**当前状态摘要**；
 > 新会话判断“现在是什么状态”以本节 + 各专题文档为准，查历史细节再翻日志。
 
-### 11.1 当前状态（2026-11-19）
+### 11.1 当前状态（2026-11-20）
+
+* **2026-11-20 0.1.1 六包发布与 Android 真机验证（当前最新）**：在 OnePlus
+  PJZ110（Android 15 / SDK 35 / arm64-v8a）完成标准与 slim APK 的覆盖安装、
+  冷启动与标题/剧情渲染验证；`versionName=0.1.1`、`versionCode=2`，
+  沿用 0.1.0 release 证书，`user://` 数据保留。六个产物（Windows 标准/slim
+  setup+zip、Android 标准/slim APK）已汇总到
+  `work/out/dist/release-assets/0.1.1/`，附聚合 `SHA256SUMS.txt`。
+  标准包体积 122.3 MB setup / 128.6 MB zip / 125.7 MB APK；slim 为
+  93.8 MB / 100.5 MB / 97.6 MB。Android 日志确认媒体包留在 APK 内直读，
+  稳定启动 `skipped=true`，不再复制约 100 MB；无接口/panic/媒体 CRC 错误。
+  详见 `docs/release/PACKAGING.md` §8.8。
+
+* **2026-11-20 公开发布审计收口（0.1.1 发包前）**：PUB-01..06 全部修复
+  （license 继承、存档原子写、并发输入、Android 后台释放、隐私脱敏、粗体测宽）。
+  `media.pak` 升级 v2 逐条 zstd；标准 100,773,072 B，slim 72,714,784 B
+  （slim 源树较标准源 −34.7%）。Android 改为 `media.pak.blob.cfb` 留在 APK
+  内、Godot `FileAccess` 直读，不再复制约 100 MB 到应用数据目录。新增
+  `[profile.release-dist]`（fat LTO/strip/panic=abort）与
+  `tools/build-godot-template.sh`：aggressive Windows 模板 52,120,576 B、
+  Android arm64 模板 APK 21,775,866 B（其中 `libgodot_android.so`
+  56,326,888 B）；`wolf-gdext` 启用 `lazy-function-tables` 以安全删除
+  3D/XR 类（见 `docs/release/GODOT_TEMPLATE.md`）。该阶段**未生成发行包、未提交**；
+  后续 0.1.1 六包与真机验证见上条。
+  详见 `docs/reviews/PUBLIC_RELEASE_FIX_REPORT.md` 与 `HANDOFF_PROGRESS.md`
+  2026-11-20 条目。
 
 * **2026-11-19 仓库文件结构、工程规范与全量文档体系深度整合规范化（当前最新）**：
   对齐顶级开源仓库（如 AstrBot、yetone/magpie）规范：
@@ -275,7 +300,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 * **2026-11-19 0.1.0 Windows/Android 发布、存档清理与工作区整理**：
   Windows NSIS 安装版、便携 ZIP 与 Android arm64 release APK 已交付到
-  `D:\REISEN\Downloads\Imouto Life 0.1.0\`；Windows `SHA256SUMS.txt`、
+  `work/out/dist/release-assets/`；Windows `SHA256SUMS.txt`、
   Android `checksums.txt` 与 APK release 签名均已校验。Android 证书 DN
   `CN=Imouto Life, OU=Release, O=Inusuku, L=Shanghai, ST=Shanghai, C=CN`，
   证书 SHA-256
@@ -290,7 +315,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `aaf62fc54c1df1ee63f3e5338b05ec349476346ec1a42b532c8cba0e3b3d888d`。
   依赖旧玩家编号存档的视觉/夜间夹具测试需重新生成存档，不能再引用已删除的
   `player_saves_*`、`save_analysis` 或 `review/save_backup`。
-  详见 `docs/release/PACKAGING.md` §8.6 与 `docs/HANDOFF_PROGRESS.md` 末条。
+  详见 `docs/release/PACKAGING.md` §8.7 与 `docs/HANDOFF_PROGRESS.md` 末条。
 
 * **2026-11-19 MCP/Godot 运行时审计探针 v3（实机验证）**：
   通过 Godot MCP 实际启动游戏并挂载探针/驱动，走通
@@ -324,7 +349,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   （标题菜单 `menu1..menu3` 映射到实际图片槽位 3..5），输出带 VM 快照的 JSON。
   `tools/audit-godot.sh` 和
   `tools/smoke-godot.sh` 已接入无头 smoke；Godot 4.7.2 默认路径同步到
-  `E:\Study\tools\Godot_v4.7.2-stable`。探针只在 `tests/`，不进入发行 PCK。
+  环境变量 `GODOT_BIN` 所指向的 Godot 4.7.2。探针只在 `tests/`，不进入发行 PCK。
   验证：`audit_probe_smoke` 通过（events=5、targets=4 含 3 个标题选项、
   stall/text/flicker/report 全过），
   完整 Godot smoke 通过，`cargo check -p wolf-gdext` 与 Android check-only
@@ -446,7 +471,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `aa1bcda54bd5bd71e526cebb3ea9011a2179cc8c42280f65fa4dca67bdbe3591`；
   `Setup.zip` **159,788,921 B** / SHA-256
   `fe4dea402cc29b5784bdaa2984ec021be332a93d48eb4164ba5710e4e9d088a4`。
-  安装版/便携版均已复制到 `D:\REISEN\Downloads\Imouto Life 0.1.0\`。
+  安装版/便携版均已复制到 `work/out/dist/release-assets/`。
 
 * **2026-11-18 文档全面整理（当前状态）**：仓库文档从「散落 + 索引失真」整理为
   **零断链 / 零孤儿** 的结构。① 根目录散落的 `review/`（16 份云端审查产物）与
@@ -517,7 +542,7 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   两轮均含 `按键功能指引.txt`）。
   `work/out` 的 Low Mandatory Level 标签会让 Setup 无法写普通 `%TEMP%`，
   可运行副本已放到
-  `D:\REISEN\Downloads\Imouto Life 0.1.0\`。
+  `work/out/dist/release-assets/`。
   `cargo test --workspace` 仅余已记录的玩家 `SaveData01` 夹具漂移
   `m17_ui_regressions::night_message_click_is_not_eaten_by_parallel_pollers`。
 

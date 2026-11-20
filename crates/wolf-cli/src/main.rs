@@ -1,15 +1,15 @@
 //! `wolf-cli` — the project's diagnostic front end.
 //!
-//! The only command that matters during M0 is `verify`: it loads every game
-//! data file, prints the counts, and compares them against the frozen baseline
-//! in `docs/BASELINE.json`. Those numbers are a regression ratchet — if a
-//! parser change moves one of them, the change is a bug until proven otherwise.
+//! `verify` loads every game data file, prints the counts, and compares them
+//! against the frozen baseline in `docs/BASELINE.json`. Those numbers are a
+//! regression ratchet: if a parser change moves one of them, the change is a bug
+//! until proven otherwise.
 
 mod hotkeys;
 mod localclock;
 mod play;
 
-/// `--audio` turns on real audio output for every command that builds a [`Game`] (M4).
+/// `--audio` turns on real audio output for every command that builds a [`Game`].
 /// It is one process-wide flag rather than a new parameter on every runner, so `capture`,
 /// `capture --map`, `dump` and `play` all honour it without threading an argument through
 /// each signature.
@@ -127,7 +127,7 @@ fn main() -> ExitCode {
     // new game starts before CE48/CE63 exist, so Sys1/2 and the message window are
     // missing from the first frames; parity pixel captures need the primed entry.
     let mut prime_engine = false;
-    // M5 presentation controls, shared by `play` only. The default keeps the retail
+    // Presentation controls, shared by `play` only. The default keeps the retail
     // integer pixel grid; `fit-*` fills a 16:9 window instead of leaving bars.
     let mut scale_mode = ScaleMode::Integer;
     let mut fullscreen = false;
@@ -138,29 +138,29 @@ fn main() -> ExitCode {
     // No file means the built-in F-key mapping, which is also the default table
     // the parser falls back to on an unreadable or malformed entry.
     let mut hotkeys_path: Option<PathBuf> = None;
-    // M5-D side-car content catalog: replaces exact message/choice strings at runtime.
+    // Side-car content catalog: replaces exact message/choice strings at runtime.
     let mut translation: Option<PathBuf> = None;
-    // M5-D authoring tools for that catalog (the `translations` command).
+    // Authoring tools for that catalog (the `translations` command).
     let mut translations_template: Option<PathBuf> = None;
     let mut translations_check: Option<PathBuf> = None;
     let mut translations_strict = false;
-    // M5-E mod data overlays, highest priority last.
+    // Mod data overlays, highest priority last.
     let mut mods: Vec<PathBuf> = Vec::new();
     let mut map: Option<String> = None;
     let mut map_run: Option<String> = None;
-    // `dump` seeds inputs into a real Game and reads state back out. It is the probe
-    // for the battle slices (docs/BATTLE.md section 5): slice A needs common event 189
-    // to run with SV28 set and then reads CDataBase row counts, slice B needs 2000350
-    // forced to 2 and then reads 2000352.
+    // `dump` seeds inputs into a real Game and reads state back out. It drives the
+    // battle probes (docs/BATTLE.md section 5): common event 189 must run with SV28 set
+    // before reading CDataBase row counts, and 2000350 must be forced to 2 before
+    // reading 2000352.
     let mut seed_vars: Vec<(u32, i32)> = Vec::new();
     let mut seed_selfs: Vec<(usize, i32)> = Vec::new();
     let mut show_dbs: Vec<(String, i32)> = Vec::new();
     let mut print_vars: Vec<u32> = Vec::new();
     let mut print_selfs: Vec<usize> = Vec::new();
     let mut watch: Option<u32> = None;
-    // `--watch-var ADDR` prints a variable whenever it changes, the observable trace the
-    // M3 battle state machine needs: 2000350 must show 0 -> 1 -> 2 -> 0 and 2000352 the
-    // written outcome. Accepts both a flat slot and a magic address.
+    // `--watch-var ADDR` prints a variable whenever it changes, the trace the battle
+    // state machine needs: 2000350 must show 0 -> 1 -> 2 -> 0 and 2000352 the written
+    // outcome. Accepts both a flat slot and a magic address.
     let mut watch_vars: Vec<u32> = Vec::new();
     // `--watch-start EVENT` reports the frame an instance of that common event is
     // created and the frame it stops. `--watch` only prints program-counter movement,
@@ -281,7 +281,7 @@ fn main() -> ExitCode {
                 map_run = args.next();
             }
             "--hold-message" => hold_message = true,
-            // Turn on real audio output (M4). Every runner honours it; the engine degrades
+            // Turn on real audio output. Every runner honours it; the engine degrades
             // to a silent null backend when the machine has no device, so it is safe on CI.
             "--audio" => AUDIO.store(true, std::sync::atomic::Ordering::Relaxed),
             // A/B switch for the run_condition == 2 scheduler (docs/ENGINE_EVENTS.md
@@ -740,7 +740,9 @@ fn print_help() {
     );
     println!("    --hotkeys <FILE>  Rebind the simulator function keys from a UTF-8 config");
     println!("                      file (action = key lines); omitted actions keep defaults.");
-    println!("                      See docs/milestones/M7_HOTKEYS.md. The in-game keys are unaffected.");
+    println!(
+        "                      See docs/milestones/M7_HOTKEYS.md. The in-game keys are unaffected."
+    );
     println!("    --translation <FILE>  Replace exact message/choice strings using a UTF-8 TSV");
     println!("                      catalog (original<TAB>translation; # comments); works in play/capture.");
     println!("    --mod <DIR>       Data overlay root mirroring the data tree (repeatable; later");
@@ -1277,10 +1279,9 @@ fn run_verify(root: &Path, wolf_path: Option<&Path>) -> ExitCode {
     }
 
     // --- .wolf DXArchive v8 (wolf-format::dxarchive) ----------------------
-    // work/full was unpacked by UberWolf, so opening the same archive with our own
-    // reader and re-parsing a file out of it pins the decryption end to end. The
-    // archive is 1.2 GB in total; BasicData.wolf is the smallest one that still
-    // exercises the Huffman + LZ path.
+    // Opening this game's Data.wolf with our own reader and re-parsing a file out of
+    // it pins the decryption end to end. The archive is 1.2 GB in total;
+    // BasicData.wolf is the smallest one that still exercises the Huffman + LZ path.
     match wolf_path {
         Some(path) => verify_wolf(root, path, &mut checks),
         None => match read(&game_dir().join("Data").join("BasicData.wolf"))
@@ -1340,7 +1341,8 @@ fn run_verify(root: &Path, wolf_path: Option<&Path>) -> ExitCode {
 /// `verify --wolf <PATH>`: open the shipped archive with our own reader and
 /// compare every entry against the unpacked data root, byte for byte. This pins the
 /// whole decryption+decompression chain (VER6 or VER8) end to end: 1,361 entries and
-/// 179,877,496 bytes of this game's `Data.wolf` must match `work/Data` exactly.
+/// 179,877,496 bytes of this game's `Data.wolf` must match the extracted data tree
+/// exactly.
 fn verify_wolf(root: &Path, wolf: &Path, checks: &mut Vec<Check>) {
     println!("  wolf file : {}", wolf.display());
     let bytes = match std::fs::read(wolf) {
@@ -1461,7 +1463,7 @@ fn verify_wolf(root: &Path, wolf: &Path, checks: &mut Vec<Check>) {
 /// Compile all 350 common events and diff the precompiler's invariants against
 /// the counts measured in docs/OPCODE_SPEC.md.
 ///
-/// This is the load-time half of the M1 acceptance test: the interpreter can be
+/// This is the load-time half of interpreter validation: the interpreter can be
 /// as correct as it likes, but if the branch pairing is off by one the jump
 /// tables point at the wrong slot and every downstream test lies.
 fn run_precompile(root: &Path) -> ExitCode {
@@ -1542,8 +1544,7 @@ fn run_precompile(root: &Path) -> ExitCode {
         Check::num("else_cases", 1_012, stats.else_cases as u64),
         Check::num("cancel_cases", 85, stats.cancel_cases as u64),
         // Tolerance counters: markers are still counted when the stack is empty,
-        // but a correct stack discipline reaches zero for all of them (the 112
-        // fix removed the last orphans).
+        // but a correct stack discipline reaches zero for all of them.
         Check::num("orphan_cases", 0, stats.orphan_cases as u64),
         Check::num("orphan_ends", 0, stats.orphan_ends as u64),
         Check::num("implicit_closes", 0, stats.implicit_closes as u64),
@@ -1657,8 +1658,8 @@ impl Host for TraceHost {
     }
 
     // Without --answer the prompt is held: a headless trace then shows the menu
-    // frame instead of branching away from it, which is what M1's screenshot
-    // needs (docs/M1_CLOSURE.md §5).
+    // frame instead of branching away from it, which is what the title-screen
+    // capture needs.
     fn choice_made(&mut self) -> Option<ChoiceReply> {
         let index = self.answer?;
         if self.choices.is_empty() {
@@ -1816,15 +1817,15 @@ fn short(text: &str) -> String {
 
 /// Run one common event headlessly.
 ///
-/// This is the M1 debugging workhorse from PLAN.md: \`wolf-cli run --event N\`
-/// executes the event against a recording host so a branch can be checked
-/// without a window, a GPU or a save file.
+/// This is the primary headless debugging path: \`wolf-cli run --event N\` executes
+/// the event against a recording host so a branch can be checked without a window,
+/// a GPU or a save file.
 /// Print every common event with its size, so a caller can find the event that
 /// drives a given screen without opening the editor.
 ///
 /// The real-instruction count excludes the NOP slots the editor leaves behind,
 /// which is why it is smaller than the slot count (docs/OPCODE_SPEC.md §0.1).
-/// `translations`: author and check the M5-D content catalog.
+/// `translations`: author and check the content catalog.
 ///
 /// With no flags it prints how many literal message/choice strings the script has.
 /// `--template FILE` writes a fill-in TSV; `--check FILE` reports coverage against an
@@ -2157,7 +2158,7 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool, answer: Option<us
 
 /// `dump` drives a real [`Game`] (real databases, real scheduler) with inputs seeded
 /// before the first frame, then reads state back out. This is the probe the battle
-/// slices need: `run --event` uses a counting stub host, so it cannot show whether a
+/// checks need: `run --event` uses a counting stub host, so it cannot show whether a
 /// `250` write changed CDataBase or whether a variable came out at a particular value.
 #[allow(clippy::too_many_arguments)]
 /// Accept either the flat variable slot (350) or the script's magic address
@@ -3595,7 +3596,7 @@ fn render_overlays(game: &Game) -> Vec<wolf_render::ScreenOverlay> {
 ///
 /// The retail entry point is the boot map, but two other entries are useful: the
 /// bare title menu (to photograph the runtime choice panel without the splash
-/// chain) and an arbitrary map event (the M2 story scripts, which never call the
+/// chain) and an arbitrary map event (the map story scripts, which never call the
 /// title at all).
 /// How a headless capture answers choice prompts.
 #[derive(Clone, Debug, Default)]
@@ -3637,9 +3638,8 @@ enum Entry<'a> {
     },
     Save(&'a Path),
     /// A single common event, started after the engine events. `capture --event <ID>`
-    /// without an explicit `--boot`/`--menu-only` lands here; before this variant existed
-    /// the id was silently dropped and the run photographed the boot map instead
-    /// (docs/BATTLE.md section 6.2).
+    /// without an explicit `--boot`/`--menu-only` lands here, so an event request is
+    /// not silently treated as the default boot capture (docs/BATTLE.md section 6.2).
     CommonEvent(u32),
 }
 
@@ -3669,9 +3669,9 @@ enum CaptureEntry {
 /// explicitly, because those two name an entry point of their own. `--map` never reaches
 /// here: `capture --map <NAME>` takes the separate map-rendering path.
 ///
-/// `boot` defaults to true, which is why the explicit flags are tracked separately: a
-/// default that cannot say "the user did not ask for this" used to make
-/// `capture --event 239` fall back to the boot map and photograph the vendor logo.
+/// `boot` defaults to true, which is why the explicit flags are tracked separately:
+/// without that distinction, `capture --event 239` would fall back to the boot map
+/// and photograph the vendor logo.
 fn resolve_capture_entry(
     load_save: Option<&Path>,
     map_run: Option<&str>,
@@ -4004,7 +4004,7 @@ fn render_capture_frame(
 ///
 /// WOLF keeps 108 coroutines alive for the whole session: 10 engine always-on events
 /// (the ENGINE_ALWAYS list), 1 auto-start event, and 97 run_condition == 2 events
-/// whose start is gated by a variable. The M6 main-line proof is that a real entry
+/// whose start is gated by a variable. The end-to-end check is that a real entry
 /// point (SampleMapA event 0, the new-game story) keeps that machinery turning
 /// without deadlocking, so print the registry size next to what ran.
 fn print_background_report(game: &Game) {
@@ -4061,7 +4061,7 @@ fn run_capture(
     }
     // A capture has no keyboard, so messages dismiss immediately. Choice prompts are
     // HELD by default: the title's first prompt is its menu, and answering it teleports
-    // into the game (docs/M1_CLOSURE.md §5), so a held run is what photographs the title.
+    // into the game, so a held run is what photographs the title.
     // --hold-message parks the run on the first 101 message instead, which is how a
     // capture photographs the message window (the story scripts talk before they branch).
     game.auto_advance = !hold_message;
@@ -4683,9 +4683,9 @@ fn stop_autorun_pages(game: &mut Game) -> usize {
 
 /// Run one MAP event page through the interpreter.
 ///
-/// The M1 title screen lives in a map (TitleMap.mps event 2), and PLAN's M2
-/// acceptance closure is keyed on SampleMapA event 1, so map command streams
-/// need the same treatment common events already get: compile the page with
+/// The title screen lives in a map (TitleMap.mps event 2), and SampleMapA event 1
+/// is the story-script entry point, so map command streams need the same treatment
+/// common events already get: compile the page with
 /// `Program::from_slots` (it builds the identical jump tables) and step it.
 /// Common events stay loaded because map scripts reach them through opcode 210.
 /// `blocks`: print the control flow the VM compiled for one event, so a jump that

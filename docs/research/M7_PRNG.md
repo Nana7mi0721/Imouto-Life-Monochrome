@@ -53,7 +53,7 @@ generate() {
 ```
 
 The `_offset` in those formulas is the **file offset of the block**, not 0.
-The sibling 2.10 build (`E:/Study/github program/imoto life/work/full/BasicData/Game.dat`,
+The sibling 2.10 build (`<sibling-checkout>/work/full/BasicData/Game.dat`,
 29,273 bytes, block at 328, `random_a` 22227, `random_b` 25684, table 28,936
 bytes, all 0..=127) was used as the control:
 

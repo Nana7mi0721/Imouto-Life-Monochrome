@@ -23,8 +23,8 @@ extends RefCounted
 ##     line_y = (line_height - (ascent + descent)) / 2 + ascent
 ##
 ## with `line_height = 1.25 * size` (`wolf-render::text::LINE_HEIGHT_FACTOR`)
-## and the primary face's hhea ratios (`C:/Windows/Fonts/msyhbd.ttc`, face 0,
-## upem 2048: ascender 2167, descender -536, so A = 1.058105, D = 0.261719):
+## and the primary face's hhea ratios (`msyhbd.ttc`, face 0, upem 2048: ascender
+## 2167, descender -536, so A = 1.058105, D = 0.261719):
 ##
 ##     (1.25 - (A + D)) / 2 + A = 1.023193
 ##
@@ -64,8 +64,8 @@ extends RefCounted
 ## only multi-line case is a paragraph that *wraps* inside one item, and there
 ## cosmic-text uses the same `1.25 * size` pitch.  `TextParagraph` pitch is
 ## `ascent + descent + line_spacing`, so the spacing is set to
-## `round(1.25 * size) - height`, not the old `size * 0.25` (which produced
-## 1.65 * size).  The value is irrelevant for the single-line items the game
+## `round(1.25 * size) - height`; `size * 0.25` would produce 1.65 * size.  The
+## value is irrelevant for the single-line items the game
 ## actually sends but keeps wrapped items on the reference pitch.
 ##
 ## Width
@@ -98,13 +98,13 @@ const OUTLINE_PX := 2
 const WIDTH_SLACK_PX := 2.0
 ## Fallback font size for an item without `font_px`, matching GameView.
 const DEFAULT_FONT_PX := 20.0
-## Shaped paragraphs are reusable across frames. Every text item used to run
-## `TextParagraph.new()` + `add_string()` per frame, re-shaping the same strings
-## through HarfBuzz even when only a counter changed (report II.P1). The cache is
-## keyed by face, size, width and text; 256 entries covers a full scene plus the
-## message history without pinning every typewriter prefix ever drawn.
+## Shaped paragraphs are reusable across frames. Creating a `TextParagraph` and
+## re-shaping every string through HarfBuzz even when only a counter changed wastes
+## frame time. The cache is keyed by face, size, width and text; 256 entries covers
+## a full scene plus the message history without pinning every typewriter prefix
+## ever drawn.
 const PARAGRAPH_CACHE_LIMIT := 256
-## Probe size used to check whether a loaded face matches Microsoft YaHei's
+## Probe size for checking whether a loaded face matches Microsoft YaHei's
 ## vertical metrics (1 px quantization at 64 px is ~0.0156, well within tolerance).
 const YAHEI_METRIC_PROBE_PX := 64
 const YAHEI_METRIC_TOLERANCE := 0.025

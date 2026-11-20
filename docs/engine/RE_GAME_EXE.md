@@ -57,7 +57,7 @@ python tools/re/wolfpe.py "$GAME" disasm --va 0x46a21d --length 128
 
 | 项 | 值 |
 |---|---|
-| 路径 | `E:/EROGAME/Imouto! Life ~Monochrome~ zh-CN Ver/Game.exe` |
+| 路径 | `<retail-install-root>/Game.exe` |
 | SHA-256 | `e0716a35323007c79e6033bc19c610a38e1d4ccc0dce47c6f79cf706853e5b76` |
 | 大小 | 6,365,184 字节 |
 | 格式 | PE32，machine `0x14c`(i386)，subsystem 2(GUI)，ImageBase `0x400000` |

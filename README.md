@@ -8,7 +8,7 @@
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Language-Rust%202021-orange.svg" alt="Language"></a>
   <a href="https://godotengine.org/"><img src="https://img.shields.io/badge/Frontend-Godot%204.7.2-blue.svg" alt="Frontend"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-brightgreen.svg" alt="Platform"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.0-blueviolet.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.1-blueviolet.svg" alt="Version"></a>
 </p>
 
 《妹！生活 ～単色～》（いぬすく 2019，WOLF RPG Editor，zh-CN 汉化 2.03）的高性能现代化跨平台重构工程。
@@ -56,13 +56,16 @@
 
 ### 1. 获取发行包
 
-请前往 [Releases 页面](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) 下载对应平台的最新正式版本（当前最新版本：`v0.1.0`）：
+请前往 [Releases 页面](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) 下载对应平台的最新正式版本（当前最新版本：`v0.1.1`）：
 
 - **Windows 用户**：
-  - `Imouto Life setup.exe`：一键安装程序（包含桌面快捷方式与控制面板卸载集成）。
-  - `Imouto Life setup.zip`：便携压缩包（解压至任意目录双击 `Imouto Life.exe` 即可运行）。
+  - `ImoutoLife-0.1.1-windows-amd64-setup.exe`：一键安装程序（包含桌面快捷方式与控制面板卸载集成）。
+  - `ImoutoLife-0.1.1-windows-amd64.zip`：便携压缩包（解压至任意目录双击 `Imouto Life.exe` 即可运行）。
+  - `ImoutoLife-0.1.1-windows-amd64-setup-slim.exe` / `ImoutoLife-0.1.1-windows-amd64-slim.zip`：媒体重编码的精简版，与标准版存档格式一致。
 - **Android 用户**：
-  - `ImoutoLife-release.apk`：直接安装至安卓设备。
+  - `ImoutoLife-0.1.1-android-arm64.apk`：直接安装至安卓设备。
+  - `ImoutoLife-0.1.1-android-arm64-slim.apk`：精简媒体版。
+- 每个平台目录中的 `SHA256SUMS.txt` 提供当前版本发行文件的完整校验值。
 
 ### 2. 准备游戏数据
 

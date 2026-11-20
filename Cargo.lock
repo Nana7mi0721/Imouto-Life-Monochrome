@@ -910,6 +910,7 @@ checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
+ "image-webp",
  "moxcms",
  "num-traits",
  "png",
@@ -918,8 +919,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "image-webp"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
+dependencies = [
+ "byteorder-lite",
+ "quick-error",
+]
+
+[[package]]
 name = "imouto-launcher"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "indexmap"
@@ -1814,6 +1825,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
+name = "quick-error"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
+
+[[package]]
 name = "quick-xml"
 version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1992,6 +2009,12 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "rusty_zstd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "864f2400b06de8b2491e0991790c5f01681c254a428636529c97ec26159efe42"
 
 [[package]]
 name = "same-file"
@@ -3216,7 +3239,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wolf-audio"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cpal",
  "symphonia",
@@ -3225,7 +3248,7 @@ dependencies = [
 
 [[package]]
 name = "wolf-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "winit",
@@ -3238,11 +3261,14 @@ dependencies = [
 
 [[package]]
 name = "wolf-format"
-version = "0.1.0"
+version = "0.1.1"
+dependencies = [
+ "rusty_zstd",
+]
 
 [[package]]
 name = "wolf-game"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "ttf-parser",
@@ -3254,16 +3280,17 @@ dependencies = [
 
 [[package]]
 name = "wolf-gdext"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "godot",
+ "wolf-format",
  "wolf-game",
  "wolf-vm",
 ]
 
 [[package]]
 name = "wolf-render"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytemuck",
  "glam 0.34.1",
@@ -3275,14 +3302,14 @@ dependencies = [
 
 [[package]]
 name = "wolf-save"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "wolf-format",
 ]
 
 [[package]]
 name = "wolf-vm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "wolf-format",
 ]

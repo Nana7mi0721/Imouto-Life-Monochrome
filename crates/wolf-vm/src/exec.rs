@@ -566,8 +566,7 @@ pub struct BlockResult {
 /// What the platform layer has to do for the interpreter.
 ///
 /// Every method has a default: `wolf-cli` only overrides `log` and `show_message`
-/// and gets a fully working trace host, which is how the M1 acceptance test is
-/// driven.
+/// and gets a fully working trace host, which drives the scripted trace tests.
 pub trait Host {
     /// `101 Message`: display `text` and keep it up until
     /// [Host::message_dismissed] returns true. `face` is the `@n` speaker prefix
@@ -764,7 +763,7 @@ pub trait Host {
 
     /// Reads one attribute of a map event or party member for `124` (`0x1000` / `0x1200`).
     ///
-    /// The map layer only arrives in M2, so the default is "unknown".
+    /// This interpreter does not model the map layer, so the default is "unknown".
     fn character_state(&mut self, target: i32, field: i32) -> Option<i32> {
         let _ = (target, field);
         None
@@ -1045,9 +1044,8 @@ pub struct Vm {
     pub input: InputState,
     /// Transition setting shared by 160/161/162.
     pub transition: TransitionState,
-    /// Every common-event id this VM started at least once. The M6 main-line
-    /// harness reads this to prove how many of the 108 background coroutines
-    /// were exercised by a run (docs/HANDOFF_M4.md section 4.6).
+    /// Every common-event id this VM started at least once. The background-system
+    /// harness reads this to measure how many of the 108 coroutines a run exercised.
     pub started_events: BTreeSet<EventId>,
     /// Successful `start_event` calls, including restarts of the same id.
     pub started_event_total: u64,
@@ -1803,8 +1801,7 @@ fn eval_num(raw: i32, inst: &Instance, vars: &Variables) -> i32 {
         // "Opaque" is not a bank at all: it is the negative-sentinel space
         // (-1 keep, -2 whole screen, -1_000_000 unchanged) plus anything above
         // the system bank. Those values are literals and must survive, otherwise
-        // picture -2 collapses to 0 and the full-screen layer is lost
-        // (docs/M1_CLOSURE.md Q3).
+        // picture -2 collapses to 0 and the full-screen layer is lost.
         MagicKind::Opaque => raw,
     }
 }
@@ -2407,7 +2404,7 @@ fn execute(
                 // into the following case. Case *entry* never lands here -- it is
                 // done by enter_block() / poll_waits() through case_target(),
                 // which resume one slot PAST the marker. Getting this wrong makes
-                // the title menu run every option at once (docs/M1_CLOSURE.md Q1).
+                // the title menu run every option at once.
                 let block_ref = &program.blocks[block];
                 inst.pc = block_ref.end_target(program.len());
                 continue;
@@ -2444,8 +2441,8 @@ fn execute(
                             inst.pc = target;
                         } else {
                             // A malformed jump is a script bug, not a reason to kill the
-                            // whole coroutine (BUG-13): report it and continue after the
-                            // 213 so the rest of the event can still finish.
+                            // whole coroutine: report it and continue after the 213 so
+                            // the rest of the event can still finish.
                             host.log(
                                 LogLevel::Warn,
                                 &format!(
@@ -2813,8 +2810,8 @@ fn execute(
                         };
                         store_str(inst, vars, target, &value, cross_writes);
                     }
-                    // Unknown operation: keep the old plain-assignment behaviour
-                    // rather than silently blanking the destination.
+                    // Unknown operation: keep plain-assignment behaviour rather than
+                    // silently blanking the destination.
                     _ => {
                         let value = read_source();
                         store_str(inst, vars, target, &value, cross_writes);
@@ -2826,9 +2823,9 @@ fn execute(
             123 => {
                 // Key-input poll (docs/OPCODE_SPEC.md 5.13). The destination receives
                 // the CODE of the held key, not a bit pattern - the game compares it
-                // against 10/11/12 and the numpad direction codes, which is why the
-                // old "key_bits & mask" model could never take a branch. A headless
-                // host reports 0, exactly like an untouched keyboard.
+                // against 10/11/12 and the numpad direction codes, which a
+                // "key_bits & mask" model cannot represent. A headless host reports 0,
+                // exactly like an untouched keyboard.
                 //
                 // The option word is decoded here so the host only sees the request:
                 // which keys count, whether the poll waits, and which device it reads.
@@ -3130,9 +3127,9 @@ fn execute(
             }
             162 => {
                 // ExecuteTransition resumes drawing and blocks until the
-                // configured animation has run. The old one-frame wait ignored
-                // the 10-frame default, which would cut every SampleMapB
-                // transition ten times too short.
+                // configured animation has run. A one-frame wait ignores the
+                // 10-frame default and cuts every SampleMapB transition ten times
+                // too short.
                 transition.prepared = false;
                 let frames = transition.frames();
                 host.transition_execute();
@@ -3210,9 +3207,9 @@ fn execute(
                     // plugins in this game use 600_100 as offset 0 and address their
                     // siblings as caller + (raw - 600_100). CE264 (the message window
                     // interface) calls 600101..600104 for CE265..CE268, and CE270 calls
-                    // 600094..600098 for CE264..CE268; the old `raw - 600_000` sent every
-                    // one of those calls to an unrelated event (600104 became CE104,
-                    // the protagonist menu setup). 31 sites use this form.
+                    // 600094..600098 for CE264..CE268; `raw - 600_000` would send every
+                    // one of those calls to an unrelated event (600104 would become
+                    // CE104, the protagonist menu setup). 31 sites use this form.
                     600_000..=699_999 => Some(relative_call_target(raw, inst.event)),
                     _ => None,
                 };
@@ -3320,8 +3317,9 @@ fn execute(
                 // A save cannot be written while the interpreter is inside the host
                 // call, so the game queues it and flushes at frame end. CE131 then
                 // redraws the slot grid in the *same* command stream (pc 82), and the
-                // grid's 221 existence probe still saw the old file: the just-saved
-                // slot kept reading 没有数据 until the player left and re-entered.
+                // grid's 221 existence probe can still see the previous file: the
+                // just-saved slot keeps reading 没有数据 until the player leaves and
+                // re-enters.
                 // Blocking the saver for one frame lets the flush land before the
                 // redraw. The script already waits 16+9 frames around the save, so
                 // the extra tick is invisible.
@@ -3732,7 +3730,7 @@ fn eval_string_condition(
         };
         let equal = lhs == rhs;
         // Mode 1 is WOLF's "異なる" (not equal); modes we have not identified keep
-        // the historical equality test rather than inventing a comparison.
+        // the equality test rather than inventing a comparison.
         let hit = if mode == 1 { !equal } else { equal };
         if hit {
             matched = Some((i + 1) as i32);

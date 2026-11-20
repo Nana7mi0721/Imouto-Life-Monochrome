@@ -10,8 +10,8 @@
 //! # Field layout (measured, not quoted)
 //!
 //! docs/OPCODE_SPEC.md section 5.20 describes the editor's argument order. Dumping the real
-//! instructions out of work/full/BasicData/CommonEvent.dat shows a different but consistent
-//! order for the long form (argc >= 11, after the type/number words):
+//! instructions out of this game's `BasicData/CommonEvent.dat` shows a different but
+//! consistent order for the long form (argc >= 11, after the type/number words):
 //!
 //! | args[..] | meaning | evidence |
 //! |---|---|---|
@@ -96,7 +96,7 @@
 //! a fade back; a host that assigns the opacity outright shows an instant cut instead.
 //!
 //! The fade lengths of the 927 `150 Move` instructions of the shipped common events
-//! (`work/Data/BasicData/CommonEvent.dat`) group as 30 (x195), 100 (x190), 5 (x146), 0 (x101),
+//! (`BasicData/CommonEvent.dat` in this game's data) group as 30 (x195), 100 (x190), 5 (x146), 0 (x101),
 //! 50 (x85), 60 (x34), 20 (x26), 80 (x19), 2 (x18), 4 (x14), 150 (x13), 7 (x13), 3 (x11),
 //! 10 (x6), 40 (x6), 120 (x5), 8 (x3), 140 (x2), 180 (x2), 75 (x2), 1 (x1) and 70 (x1), plus
 //! 34 instructions whose fade is a self variable the editor resolves at run time. 178 of the
@@ -112,7 +112,7 @@
 //! # Negative numbers are fixed-screen layers
 //!
 //! Picture numbers below zero are the screen-fixed pictures: their x/y are not affected by
-//! the map camera. They are *not* implicitly 1024x576. Retail data refutes the old
+//! the map camera. They are *not* implicitly 1024x576. Retail data rules out the
 //! "whole-screen layer" shortcut (H-PIC-1 in docs/UNVERIFIED.md): slot -5 is the 48x64
 //! save icon at (10,510) and slot -4 the data icon at (925,507), while the title and CG
 //! backdrops happen to be 1024x576 at (0,0). Every negative picture therefore uses the same
@@ -286,8 +286,8 @@ pub const TONE_NEUTRAL: Tone = [SCALE_ONE, SCALE_ONE, SCALE_ONE];
 pub const EFFECT_FLASH: u8 = 0;
 /// Effect kind 1: colour correction, an offset added to the base tone and kept until replaced.
 ///
-/// This used to be read as "cancel the running flash". docs/OPCODE_290.md section 5.2 shows
-/// the other reading is the right one: common event 8 highlights a menu row with
+/// Reading this as "cancel the running flash" is wrong. docs/OPCODE_290.md section 5.2
+/// shows the correct reading: common event 8 highlights a menu row with
 /// `290 [16, 1, 3200, 3200, 25, 25, 25]` and immediately clears the previous row with
 /// `290 [16, 1, 3201, 3201, 0, 0, 0]`. An accumulating correction could never be cleared by
 /// adding zero, and the game has no "clear all effects" instruction anywhere, so the
@@ -1265,7 +1265,7 @@ impl Screen {
         // The command's own slot always lies inside the range - lo and hi are its
         // minimum and maximum against the span end - and it joins the list even when
         // nothing lives there yet, because the move creates that slot. The list stays
-        // in the ascending order the per-number walk used to produce.
+        // in ascending order.
         if !list.contains(&cmd.number) {
             list.push(cmd.number);
             list.sort_unstable();
@@ -1360,9 +1360,8 @@ impl Screen {
                 // Retail draws over a slot that already carries the same graphic by
                 // sliding it to the new spot over the command's wait time; only an
                 // empty slot fades in. The retail picture writer arms the same
-                // interpolation the move command uses
-                // (work/out/re_all/all/0049c7a0_FUN_0049c7a0.c) and keeps the
-                // slot's current alpha, so the host slides too. Common event 238
+                // interpolation the move command uses and keeps the slot's current
+                // alpha, so the host slides too. Common event 238
                 // parks the status panel at x=-305 and brings it back at x=0, and
                 // those two draws are the drawer sliding out of and into the room.
                 let kind = PictureKind::from_code(cmd.kind);
@@ -1645,9 +1644,9 @@ impl Screen {
                         // are the six sleep states (泥眠 / 熟睡 / 睡眠 / 半覚 / 寝惚 /
                         // 覚醒, each a 43x43 disc), not six frames of one pose. The
                         // retail side is NOT confirmed: the badge measures 43-45
-                        // logical pixels in `ptr_sc/恶作剧_BAD&GOOD条特写.png`, which
-                        // is exactly the asset's own ink, so a still frame cannot
-                        // show a five percent pulse.
+                        // logical pixels in the retail screenshot, which is exactly
+                        // the asset's own ink, so a still frame cannot show a five
+                        // percent pulse.
                         //
                         // The carry-over is narrow on purpose: it only applies when
                         // the amplitude, the excursion length and the rest are all
@@ -1752,8 +1751,8 @@ impl Screen {
     /// `opcode 124 hover` and the save-grid pointer mapping must land on the pixels
     /// the player sees: text metrics from the window box, window panels from their
     /// box, ordinary pictures from their texture's native size, plus the tenths UI
-    /// The old hover shortcut treated every
-    /// negative slot as a full-screen layer, which gave the 48x48 album icon at
+    /// Treating every negative slot as a full-screen layer would give the 48x48 album
+    /// icon at
     /// picture -7 a 1024x576 hit box and swallowed clicks meant for the data icon.
     #[must_use]
     pub fn picture_rect<F>(&self, number: i32, mut tex_size: F) -> Option<[f32; 4]>
@@ -2175,8 +2174,8 @@ fn merge_args(picture: &mut Picture, args: &[i32], scale_mode: u8) {
 /// `<SQUARE>` block, but the script asks for a six-pixel window for the BAD
 /// frame and an eight-pixel one for the GOOD frame, and it puts the BAD frame one
 /// pixel lower. The retail screen does not show that difference: in the shipped
-/// screenshot (`ptr_sc/恶作剧_BAD&GOOD条特写.png`) both frames put their top and
-/// bottom edges on the very same rows, so the two bars read as one weight.
+/// screenshot both frames put their top and bottom edges on the very same rows, so
+/// the two bars read as one weight.
 ///
 /// These four draws are the only `<SQUARE><FRAME>` and `<SQUARE>` windows the
 /// game ever creates, so the host pins the BAD frame onto the GOOD frame's box

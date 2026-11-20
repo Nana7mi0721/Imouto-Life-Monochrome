@@ -4,6 +4,7 @@
 #   tools/build-godot.sh              # optimised, no debug info (profile "godot")
 #   tools/build-godot.sh --debug      # normal cargo dev profile
 #   tools/build-godot.sh --release    # release (thin LTO)
+#   tools/build-godot.sh --dist       # shipped release-dist (fat LTO, stripped, abort)
 #
 # The DLL is gitignored; the Godot project loads it from godot/bin/ through
 # godot/bin/wolf_gdext.gdextension.
@@ -19,6 +20,10 @@ for arg in "$@"; do
         --release)
             profile_dir="release"
             cargo_args=("--release")
+            ;;
+        --dist)
+            profile_dir="release-dist"
+            cargo_args=("--profile" "release-dist")
             ;;
         --debug)
             profile_dir="debug"

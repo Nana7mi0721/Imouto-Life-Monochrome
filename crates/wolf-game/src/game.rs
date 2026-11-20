@@ -24,6 +24,7 @@ use std::sync::{Arc, OnceLock};
 
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
+use wolf_format::media_pack::MediaPack;
 use wolf_format::mps::Map;
 use wolf_format::tileset::TileSetData;
 use wolf_vm::{
@@ -98,22 +99,21 @@ pub const ENGINE_ALWAYS: &[u32] = &[
 pub const ENGINE_RESTART: &[u32] = &[216, 270, 271];
 
 // 271 is the balloon-message library's initiator: it calls event 98, which registers 19
-// window pictures (10225..10248). It used to be left out, because starting it alone
-// moved retail title parity from mean abs 0.012 to 0.130 at max 255: those widgets
-// landed at (0,0) and came out visible. They now land at (-2784, 2880), i.e. on the
-// library's own parking spot, once the call arguments reach their self bank and the
-// database writes behind them resolve; `picture::on_screen` then drops them, because a
-// quad that cannot touch the screen is not a drawing. Re-measured with 271 alone:
-// `imgdiff` reports the frame identical to not starting it, and retail parity is back
-// at mean abs 0.012 / psnr 67.20 dB (docs/ENGINE_EVENTS.md section 10.5).
+// window pictures (10225..10248). Starting it without the rest of the engine initiators
+// leaves those widgets at (0,0) and visible, moving retail title parity from mean abs
+// 0.012 to 0.130 at max 255. With the normal call arguments, self bank and database
+// writes in place they land at (-2784, 2880), the library's own parking spot;
+// `picture::on_screen` then drops them because a quad that cannot touch the screen is
+// not a drawing. In isolation its frame is indistinguishable from not starting it;
+// retail parity is mean abs 0.012 / psnr 67.20 dB (docs/ENGINE_EVENTS.md section 10.5).
 
 /// `auto_start(1)`: run once when the game starts. It clears its own condition variable
 /// (slot 628 writes `v350 = 0`) and ends, so it never becomes a resident coroutine.
 pub const ENGINE_AUTO_START: &[u32] = &[241];
 
 /// Started by an engine *feature* rather than by `run_condition`: YADOT-WOLF documents
-/// that every 【文章の表示】 executes 063 (work/yado.txt:61-63 and :68-70), and no script
-/// anywhere targets 500063, so without this the message-window frame never appears.
+/// that every 【文章の表示】 executes 063, and no script anywhere targets 500063, so
+/// without this the message-window frame never appears.
 pub const ENGINE_IMPLICIT: &[u32] = &[63];
 
 /// One visible message window.
@@ -127,7 +127,7 @@ pub struct Message {
     pub frames: u32,
 }
 
-/// How many messages the M5-F history keeps.
+/// How many messages the history keeps.
 ///
 /// The retail window replaces its one message on every 101, so a line the player has
 /// already advanced past is gone. Keeping the last two hundred is enough for a full
@@ -163,9 +163,13 @@ const PICTURE_ACTION_CONTROLS: &[(i32, u32, &str)] = &[
 /// icons for them made save/album unclickable during normal night play. The
 /// scenes below are the ones whose dialogue/transition gaps must suppress the
 /// host-level quick UI: the night command and its scenes, sleep/morning, the
-/// daytime and holiday menus, and the evening meal that ends in the auto-save.
+/// daytime and holiday menus, the evening meal that ends in the auto-save, and
+/// the deep-night cut-in/cleanup handlers (CE219, CE220, CE283, CE284, CE290).
+/// Those five ids are common events called by the map interaction pages, not map
+/// event ids; they keep the quick UI closed while a scene hands control back.
 const STORY_COMMON_EVENTS: &[u32] = &[
-    245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259,
+    219, 220, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 283, 284,
+    290,
 ];
 
 /// CE270's completed body-text picture.
@@ -212,8 +216,8 @@ const BALLOON_FRAME_MIN_HEIGHT: i32 = 60;
 
 /// Retail balloon frame height when a speaker face avatar is present.
 ///
-/// Measured off `ptr_sc/卧室_点击妹妹_首句话.png`, a 1536x907 window
-/// shot of the 1024x576 viewport at 1.5x whose content starts at physical y = 43.
+/// Measured from a retail 1536x907 windowed screenshot of the 1024x576 viewport at
+/// 1.5x; the captured content starts at physical y = 43.
 ///
 /// The retail balloon is a soft-edged rounded rectangle: its top gradient starts
 /// at physical y = 732 and its bottom edge ends at physical y = 892, i.e. logical
@@ -222,10 +226,6 @@ const BALLOON_FRAME_MIN_HEIGHT: i32 = 60;
 /// height and must keep the bottom at logical y = 566), which is why the height
 /// constant is the single number that carries the retail measurement:
 /// 566 - 459.3 = 106.7, rounded to 107.
-///
-/// The previous value 136 (added in 9a817e4) put the top edge at logical 430,
-/// 29 px above the retail balloon, and left an empty band between the balloon
-/// and the avatar's head.
 const BALLOON_FACE_FRAME_MIN_HEIGHT: i32 = 107;
 
 /// Avatar bottom edge inside the expanded balloon frame.
@@ -237,10 +237,9 @@ const BALLOON_FACE_FRAME_MIN_HEIGHT: i32 = 107;
 /// (228, 469) and its bottom edge at logical 559.
 ///
 /// The artwork's own alpha box is (22, 0, 168, 172) of 180, so the ink bottom
-/// lands at logical 555 and the ahoge - the topmost alpha row - at 469. The
-/// previous value 563 (added in 9a817e4) put the avatar four pixels too low and
-/// the ahoge at 473, which opened the empty band between the balloon's top
-/// edge and the avatar's head.
+/// lands at logical 555 and the ahoge - the topmost alpha row - at 469. A bottom
+/// edge of 563 would put the avatar four pixels too low and the ahoge at 473,
+/// opening an empty band between the balloon's top edge and the avatar's head.
 const BALLOON_FACE_BOTTOM_Y: f32 = 558.0;
 
 /// Data 26 row 0 `余白[px]`: top and bottom breathing room inside the balloon.
@@ -271,8 +270,8 @@ const HUD_ACTION_BAR: [f32; 4] = [531.0, 15.0, 165.0, 14.0];
 /// `150 [0x300, -1, 0, 1, 1, 1, 255, 0, 36, 100, 0]`, so the cover starts
 /// exactly below the 36 px top bar and leaves that band showing whatever was
 /// there. A cover therefore only hides the gauge when it really paints over
-/// that band; the old "slot -1 is alive" test hid it for the whole
-/// transition and swallowed the top bar along with the gauge.
+/// that band; testing only whether slot -1 is alive would hide it for the whole
+/// transition and swallow the top bar along with the gauge.
 const HUD_TOP_BAND_HEIGHT: f32 = 36.0;
 
 /// Picture slots that can carry a cover over the top bar.
@@ -553,9 +552,9 @@ fn utc_datetime() -> LocalDateTime {
 /// source-image Y ranges, measured from the shipped alpha masks.
 const STATUS_HANDLE_Y: (f32, f32) = (118.0, 157.0);
 const ITEM_HANDLE_Y: (f32, f32) = (260.0, 297.0);
-/// The closed panels leave their rightmost 25 source pixels on screen. The old
-/// 20 px band started at screen x=5, leaving the left half of the visible
-/// triangle unclickable.
+/// The closed panels leave their rightmost 25 source pixels on screen. A 20 px
+/// band would start at screen x=5 and leave the left half of the visible triangle
+/// unclickable.
 const SIDE_PANEL_HANDLE_RIGHT: f32 = 25.0;
 
 /// Alpha the parked side panels keep on the left edge.
@@ -563,10 +562,9 @@ const SIDE_PANEL_HANDLE_RIGHT: f32 = 25.0;
 /// Retail re-runs CE238/CE239's hide page every frame, and each repaint restarts
 /// a ten-frame fade-in at age two, so the drawer never gets past `2/10 = 0.2`
 /// alpha. That stuck fade is what makes the parked strip a faint handle rather
-/// than a solid slab. The host now answers `hover` stably for these two slots
-/// (T18 stopped the per-frame rebuild, which was both a flicker and a script pass
-/// per frame), so nothing repaints them after a load; the renderer has to carry
-/// the retail alpha itself.
+/// than a solid slab. The host answers `hover` stably for these two slots, so
+/// nothing repaints them after a load; the renderer has to carry the retail alpha
+/// itself.
 const SIDE_PANEL_PARKED_ALPHA: f32 = 0.2;
 
 /// Left edge of the parked position: a drawer at or past this x is off screen.
@@ -973,7 +971,7 @@ pub struct Game {
     /// 60 Hz would be wasteful. A size + modification time stamp keeps the cache
     /// correct when the player overwrites a slot while the grid is open.
     save_summary_cache: RefCell<HashMap<i32, CachedSaveSummary>>,
-    /// Optional M5-D content catalog: exact runtime strings to replacement text. Empty by
+    /// Optional content catalog: exact runtime strings to replacement text. Empty by
     /// default, which leaves the shipped script untouched.
     translator: Translator,
     /// The current map's tile layers, drawn underneath every picture. WOLF draws the
@@ -982,10 +980,10 @@ pub struct Game {
     pub tilemap: Option<TileMap>,
     /// The map currently installed, retained so a save can rebuild SavePart1.
     ///
-    /// `install_map` used to drop the parsed map after building the tile layer and the
-    /// page runtime, which left `save_to` with no map snapshot to write. Keeping the
-    /// parsed data costs one map per switch and gives the save path the event list,
-    /// tile layers and tileset index it needs.
+    /// `install_map` retains the parsed map after building the tile layer and page
+    /// runtime so `save_to` has a map snapshot to write. Keeping the parsed data costs
+    /// one map per switch and gives the save path the event list, tile layers and
+    /// tileset index it needs.
     pub current_map: Option<Map>,
     /// Path of the map currently installed (e.g. `MapData/SampleMapA.mps`).
     pub current_map_path: Option<String>,
@@ -1029,13 +1027,13 @@ pub struct Game {
     /// WOLF stores the running track in SavePart2; keeping the last Play command here
     /// lets `save_to` write it and `apply` restart it instead of loading into silence.
     pub current_bgm: Option<(String, i32)>,
-    /// M4 audio output. `None` keeps the pure-logic and test paths silent and
+    /// Real audio output. `None` keeps the pure-logic and test paths silent and
     /// allocation-free; [`Self::enable_audio`] installs a real engine.
     #[cfg(feature = "audio")]
     pub audio: Option<wolf_audio::Engine>,
     /// Message windows on screen.
     pub messages: Vec<Message>,
-    /// M5-F transcript: every message shown since the current title/load, oldest first.
+    /// Message transcript: every message shown since the current title/load, oldest first.
     pub history: Vec<Message>,
     /// Pending choice prompt.
     pub choices: Option<Choices>,
@@ -1197,7 +1195,7 @@ pub struct Game {
     /// tree; a file present here is used instead of the base root. See
     /// [`Self::with_overlays`].
     overlays: Vec<PathBuf>,
-    /// Validated manifests for those overlays, in the same order (M5-E).
+    /// Validated manifests for those overlays, in the same order.
     mods: Vec<crate::mods::ModInfo>,
 }
 
@@ -1245,10 +1243,29 @@ impl Game {
         overlays: Vec<PathBuf>,
         save_dir: impl Into<PathBuf>,
     ) -> Result<Self, GameError> {
+        Self::with_overlays_and_save_dir_and_media(root, overlays, save_dir, None)
+    }
+
+    /// Loads the game with a host-provided media pack.
+    ///
+    /// Android uses this to read `media.pak` straight from the APK through
+    /// Godot's random-access `FileAccess` instead of copying it into
+    /// `user://data` first. All other inputs behave like
+    /// [`Self::with_overlays_and_save_dir`].
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::new`].
+    pub fn with_overlays_and_save_dir_and_media(
+        root: impl Into<PathBuf>,
+        overlays: Vec<PathBuf>,
+        save_dir: impl Into<PathBuf>,
+        media: Option<Arc<MediaPack>>,
+    ) -> Result<Self, GameError> {
         let root = root.into();
         let save_dir = save_dir.into();
         let mods = crate::mods::validate(&overlays).map_err(GameError::Mod)?;
-        // A mod may carry a text-level patch catalog at its root (M5-E second slice):
+        // A mod may carry a text-level patch catalog at its root:
         // it rewords individual messages/choices without replacing CommonEvent.dat.
         // Mods merge in --mod order (later wins); the explicit --translation catalog
         // is merged after the game is built, so it keeps the final say.
@@ -1286,8 +1303,8 @@ impl Game {
             .and_then(|bytes| TileSetData::parse(&bytes).ok());
         // System.sav is a complete save file in this game: use it as the template so a
         // brand-new game can write its first save without inventing part1/part4. Its
-        // variable database is empty, though (docs/milestones/M3_VARDB_BUG.md), so seed the
-        // CDataBase schema from the static table before any save can use it.
+        // variable database is empty, though, so seed the CDataBase schema from the
+        // static table before any save can use it.
         // Prefer the writable `save_dir/System.sav`; fall back to the read-only
         // template under `<root>/Save/System.sav`.
         let writable_system_sav = save_dir.join("System.sav");
@@ -1302,6 +1319,10 @@ impl Game {
             databases.seed_vardb(&mut save.vardb);
         }
         let auto_events = AutoEvents::from_common_events(&events);
+        let assets = match media {
+            Some(pack) => Assets::with_overlays_and_media_pack(&root, overlays.clone(), pack),
+            None => Assets::with_overlays(&root, overlays.clone()),
+        };
         let mut game = Self {
             vm: Vm::new(programs),
             screen: Screen::new(),
@@ -1323,7 +1344,7 @@ impl Game {
             current_map: None,
             current_map_path: None,
             tilesets,
-            assets: Assets::with_overlays(&root, overlays.clone()),
+            assets,
             databases,
             key_bits: 0,
             sounds: Vec::new(),
@@ -1563,12 +1584,12 @@ impl Game {
         &self.mods
     }
 
-    /// Installs an M5-D content catalog parsed in memory.
+    /// Installs a content catalog parsed in memory.
     pub fn set_translator(&mut self, translator: Translator) {
         self.translator = translator;
     }
 
-    /// Loads an M5-D UTF-8 TSV catalog and returns its entry count.
+    /// Loads a UTF-8 TSV content catalog and returns its entry count.
     ///
     /// # Errors
     ///
@@ -1595,7 +1616,7 @@ impl Game {
         &self.translator
     }
 
-    /// Merges an M5-D catalog over the installed one and returns its entry count.
+    /// Merges a content catalog over the installed one and returns its entry count.
     ///
     /// Unlike [`Self::load_translation_file`], this keeps mod-level catalogs loaded by
     /// [`Self::with_overlays`] and lets the explicit `--translation` file override
@@ -1614,7 +1635,7 @@ impl Game {
         Ok(entries)
     }
 
-    /// Turns on real audio output (M4). Safe on a machine with no device -- the engine
+    /// Turns on real audio output. Safe on a machine with no device -- the engine
     /// degrades to a silent null backend -- and idempotent. Tests leave audio off because
     /// [`Self::new`] defaults to `None`.
     #[cfg(feature = "audio")]
@@ -1757,8 +1778,8 @@ impl Game {
             crate::key::LEFT,
             crate::key::RIGHT,
         ];
-        // Zero means "the script never set it"; falling back to 1 reproduces the
-        // old once-per-frame behaviour instead of locking the key out.
+        // Zero means "the script never set it"; falling back to 1 keeps a once-per-frame
+        // repeat instead of locking the key out.
         let delay = u32::try_from(self.sys(15).max(1)).unwrap_or(1);
         let interval = u32::try_from(self.sys(16).max(1)).unwrap_or(1);
         let mut out = 0;
@@ -2722,7 +2743,7 @@ impl Game {
     ///
     /// A map page is an ordinary instruction stream, so it compiles through the same
     /// jump-table precompiler the common events use. Only the first page runs: later
-    /// pages need the page-switch machinery that M2 adds.
+    /// pages are not modeled here.
     /// Start every automatic page of `map` and remember them.
     ///
     /// The boot map's own event is started separately by `start_map_event`,
@@ -2749,20 +2770,19 @@ impl Game {
 
     fn install_map(&mut self, map: &Map, skip: Option<u32>) {
         // Retire the previous map's coroutines before replacing the runtime that
-        // owns them. `switch_map` already did this for a scripted teleport, but
-        // `resume_loaded_map` used to swap the runtime without retiring the title
-        // map's event 2. That orphan kept its whole call chain (CE549 -> CE42 ->
-        // CE14 -> CE131) alive after a load, so the save grid still owned the
-        // pointer and every map icon click was ignored (BUG-08). Stopping the map
-        // event also stops its descendants through `Vm::stop_instance`.
+        // owns them. Without this, a loaded map leaves the title map's event 2 alive;
+        // that orphan keeps its whole call chain (CE549 -> CE42 -> CE14 -> CE131)
+        // after the load, so the save grid still owns the pointer and every map icon
+        // click is ignored. Stopping the map event also stops its descendants through
+        // `Vm::stop_instance`.
         self.runtime.stop_all(&mut self.vm);
         // `MapRuntime` only owns the pages it collected. A map-self coroutine
         // started directly - the boot event through `start_map_event`, a scripted
         // `CallByName`, or a child a page spawned outside the runtime - is not in
         // that list and would otherwise keep its whole call chain alive across the
-        // map switch (report section 6 BUG-21). Common-event coroutines share this
-        // VM and must survive a map change, so the sweep matches `MAP_SELF_BASE`
-        // only. Ids are collected first because `stop_instance` mutates the slice.
+        // map switch. Common-event coroutines share this VM and must survive a map
+        // change, so the sweep matches `MAP_SELF_BASE` only. Ids are collected first
+        // because `stop_instance` mutates the slice.
         let stale: Vec<_> = self
             .vm
             .instances()
@@ -2776,7 +2796,7 @@ impl Game {
         self.boot_map_active = false;
         // A map change retires the coroutine that owned any open prompt, so a
         // leftover `choices` would otherwise survive as a panel no script can
-        // close (report section 1.3). Clearing here also covers a teleport that
+        // close. Clearing here also covers a teleport that
         // happens while the choice waiter is already dead. The cursor is reset
         // only when a prompt was actually open: callers (and tests) may set the
         // desired row before the map installs its first menu.
@@ -2804,7 +2824,7 @@ impl Game {
         };
         // The camera is fixed at the map origin: all playable maps in this game fit the
         // 1024x576 viewport at their origin, and Sys 104/105 are engine scroll *outputs*
-        // with no script state behind them (docs/HANDOFF_M3.md section 5).
+        // with no script state behind them.
         //
         // `quads` caches the drawn list against this map plus the autotile animation
         // phase (playtime_frames % period), so a static map is built once and every later
@@ -2908,7 +2928,7 @@ impl Game {
         }
         if balloon_owns_message && self.balloon_has_face() {
             // Anchor the face avatar cleanly inside the expanded balloon frame.
-            // In retail dialogue (ptr_sc/卧室_点击妹妹_首句话.png), the sister's bust
+            // In retail dialogue, the sister's bust
             // picture sits at logical y = 468..558, with its bottom 8 px above the
             // balloon's bottom edge (566) and its hair tip 9 px below the balloon's
             // top edge (459). See `BALLOON_FACE_BOTTOM_Y`.
@@ -2925,9 +2945,9 @@ impl Game {
             // faces behind the balloon. 19502 is the large right-side face that
             // leaked through whenever the message slot had already been cleared
             // while CE270 was still fading its balloon out: the native slots are
-            // erased a frame or three after the balloon takes over, and the old
-            // `balloon_visuals_active()` gate had already dropped the balloon's
-            // ownership in that gap.
+            // erased a frame or three after the balloon takes over. Suppression
+            // must follow the balloon mode through that gap, not only the message
+            // slot.
             quads.retain(|quad| !NATIVE_MESSAGE_PICTURES.contains(&quad.number));
         }
         if !self.balloon_nameplate_active() {
@@ -3191,8 +3211,9 @@ impl Game {
     /// CE242 draws the "行动力 current/max" text picture in slot 230 from
     /// CDataBase 0:12:8/9. Returning `None` while that HUD picture is absent
     /// keeps the gauge off title/menu screens and out of save thumbnails. The
-    /// old implementation read the stamina cells 6/7 and therefore appeared
-    /// full whenever the separate `精力` row was full.
+    /// Gauge values come from the action-point row, not the stamina cells 6/7:
+    /// reading those makes the gauge appear full whenever the separate `精力` row
+    /// is full.
     #[must_use]
     pub fn hud_action_points(&self) -> Option<(i32, i32)> {
         let hud = self.screen.get(HUD_ACTION_PICTURE)?;
@@ -3202,8 +3223,8 @@ impl Game {
         // A cover only hides the gauge when it really paints over the band the
         // gauge lives in. The retail black screen is drawn at y = 36, i.e.
         // BELOW the top bar, so it leaves the bar - and the gauge with it -
-        // visible for the whole transition. The old blanket "slot -1 is
-        // alive" test swallowed the top bar during every black screen.
+        // visible for the whole transition. Testing only whether slot -1 is alive
+        // would swallow the top bar during every black screen.
         if self.hud_top_band_covered() {
             return None;
         }
@@ -3290,8 +3311,8 @@ impl Game {
 
     /// The engine's font size, from Sys8.
     ///
-    /// WOLF shares one font size between 文章の表示, 選択肢 and ピクチャ text (work/yado.txt
-    /// lines 56-79), and common event 48 writes Sys8 = 20 during its system-initialisation
+    /// WOLF shares one font size between 文章の表示, 選択肢 and ピクチャ text, and
+    /// common event 48 writes Sys8 = 20 during its system-initialisation
     /// branch, so every text path must read it from the VM instead of hard-coding a size.
     /// A value outside 8..=64 falls back to crate::message::DEFAULT_FONT_PX: Sys8 is 0
     /// before event 48 runs, and a negative or absurd size would shred the layout.
@@ -3353,7 +3374,7 @@ impl Game {
 
     /// Every message shown since the current title screen or save load, oldest first.
     ///
-    /// M5-F exposes this transcript through the F4 overlay. It is runtime-only: saves
+    /// The F4 overlay exposes this transcript. It is runtime-only: saves
     /// keep their retail layout, so a transcript never travels between sessions.
     #[must_use]
     pub fn message_history(&self) -> &[Message] {
@@ -3371,10 +3392,9 @@ impl Game {
     /// Drops prompts that belong to the coroutine a load is about to replace.
     ///
     /// A `220` load replaces every script coroutine. A message or choice opened by
-    /// the old scene can therefore outlive its waiter: it stays painted on screen,
-    /// swallows input, and no script is left to close it (the reported "load during
-    /// dialogue leaves a stuck box" bug). Clear the visible prompt state together
-    /// with the message history at the start of a load.
+    /// the previous scene can therefore outlive its waiter: it stays painted on screen,
+    /// swallows input, and no script is left to close it. Clear the visible prompt state
+    /// together with the message history at the start of a load.
     pub(crate) fn clear_transient_prompts(&mut self) {
         self.messages.clear();
         self.choices = None;
@@ -3442,9 +3462,8 @@ impl Game {
     ///
     /// `messages` becomes empty as soon as the native 101 waiter is dismissed,
     /// but CE270 deliberately keeps its frame/body/name plate alive for a few
-    /// frames while its close timer runs. Testing only the native message slot
-    /// let the old full-width 19500 window and the 19502 face reappear during
-    /// that hand-off.
+    /// frames while its close timer runs. Testing only the native message slot lets
+    /// the full-width 19500 window and the 19502 face reappear during that hand-off.
     fn balloon_visuals_active(&self) -> bool {
         !self.messages.is_empty()
             || self.screen.iter().any(|picture| {
@@ -3719,8 +3738,7 @@ impl Game {
         (12_000..13_000).contains(&number)
     }
 
-    /// Lays one text picture out into its quad list. This is the old body of
-    /// [`Self::text_quads`], factored out so the cache can call it on a miss.
+    /// Lays one text picture out into its quad list; the cache calls it on a miss.
     fn build_text_picture(
         &self,
         picture: &crate::picture::Picture,
@@ -3896,7 +3914,7 @@ impl Game {
         }
     }
 
-    /// Read-only progress snapshot for the M5-C statistics overlay.
+    /// Read-only progress snapshot for the statistics overlay.
     #[must_use]
     pub fn play_stats(&self) -> crate::achievements::PlayStats {
         crate::achievements::PlayStats::from_vars(&self.vm.vars)
@@ -4071,13 +4089,12 @@ impl Game {
     /// * the event's own activation conditions still select the page, and a page
     ///   that is already running is not restarted (`MapRuntime::action_key_at`).
     ///
-    /// Residual overlap (documented, not worked around): the deep-night interface's
-    /// parallel pages poll the mouse themselves (op124/op123), and during that
-    /// state a click that lands in both a trigger-0 hotspot and one of those
-    /// picture hit boxes reaches both. The data gates most of them (v176/v238/v100
-    /// conditions), but the daytime sister hotspots (ev1-4) remain selected while
-    /// v100 == 1. That does not affect the mapped controls (save, status, menu,
-    /// end button); see `tests/m3_map_click.rs` for the measured points.
+    /// Deep-night interaction mode (`v100 != 0`) is script-owned: its parallel
+    /// pages poll the mouse through picture hit boxes (op124/op123). The map's
+    /// daytime trigger-0 rectangles (ev1..ev4) can still be selected in some
+    /// state combinations, so the generic fallback below stays disabled in that
+    /// mode. Picture-owned controls and event 35 return before reaching it and
+    /// keep working; see `tests/m3_map_click.rs` for the measured points.
     fn handle_action_key_input(&mut self) -> bool {
         if !self.messages.is_empty() || self.choices.is_some() {
             return false;
@@ -4164,7 +4181,7 @@ impl Game {
                 return false;
             }
             // The visible icon owns the press even when its page condition is not
-            // active: falling through would revive the old tile rectangle or hit
+            // active: falling through would revive a tile rectangle or hit
             // an unrelated hotspot behind the icon.
             self.mouse_consumed = true;
             let mut started = self.runtime.action_key_event(&mut self.vm, event);
@@ -4191,12 +4208,19 @@ impl Game {
                 return false;
             }
         }
-        if let Some(id) = self
-            .runtime
-            .action_key_at_excluding(&mut self.vm, x, y, &governed)
-        {
-            self.last_action_event = Some(id);
-            self.mouse_consumed = true;
+        // Sys100 (`深夜1`) is the interaction-mode switch. While it is non-zero,
+        // the deep-night pages own input through their picture/script handlers;
+        // the map's daytime trigger-0 rectangles (ev1..ev4) can still match, so
+        // this generic fallback must stay dormant. Event 35, the mapped icons and
+        // the sister hit test above remain reachable in this mode.
+        if self.vm.vars.get(100) == 0 {
+            if let Some(id) = self
+                .runtime
+                .action_key_at_excluding(&mut self.vm, x, y, &governed)
+            {
+                self.last_action_event = Some(id);
+                self.mouse_consumed = true;
+            }
         }
         false
     }
@@ -4456,8 +4480,8 @@ impl Game {
 
     /// Action-key events whose only valid click target is their picture control.
     ///
-    /// This stays unconditional even when the icon is hidden. The old map tile
-    /// rectangles for save/data/end are larger than the art and must never revive
+    /// This stays unconditional even when the icon is hidden. The map tile rectangles
+    /// for save/data/end are larger than the art and must never revive
     /// a control that the current screen does not show (the night UI hides the
     /// data icon, and CE231 can hide the save row).
     fn picture_governed_action_events(&self) -> Vec<u32> {
@@ -4550,12 +4574,12 @@ impl Game {
                 self.choice_cursor = 0;
                 return;
             }
-            // A click outside the panel used to be swallowed and ignored, which felt
-            // like a dead prompt. When the script allows cancelling (opcode 102 has a
-            // 421 cancel marker) treat the outside click as cancel, just like a right
-            // click. Without a marker it must be a complete no-op: the prompt still
-            // owns the edge, so consuming it here keeps a carried press from activating
-            // a map hotspot after the prompt closes, while no CANCEL reaches the VM.
+            // Swallowing a click outside the panel makes the prompt feel dead. When the
+            // script allows cancelling (opcode 102 has a 421 cancel marker) treat the
+            // outside click as cancel, just like a right click. Without a marker it must
+            // be a complete no-op: the prompt still owns the edge, so consuming it here
+            // keeps a carried press from activating a map hotspot after the prompt
+            // closes, while no CANCEL reaches the VM.
             //
             // A 101 immediately followed by 102 keeps its message visible while the
             // options are already up. In that state the same click has to advance the
@@ -5080,8 +5104,8 @@ impl Game {
         self.restart_always_events();
         // A prompt that was on screen at the start of this frame holds the cursor
         // that answered it. Once it closes (keyboard, mouse, or auto_choice), the
-        // next prompt starts at row 0; leaving the old index behind made a scripted
-        // title-load leave cursor 1 for the night menu's first row.
+        // next prompt starts at row 0; leaving a previous index behind would make a
+        // scripted title-load start at cursor 1 for the night menu's first row.
         let had_choice = self.choices.is_some();
         self.handle_choice_input();
         // Mirror the choice cursor into system variable 20 so the conditional title event
@@ -5237,7 +5261,7 @@ impl Game {
                             // roots by id; `Vm::stop_instance` also retires their
                             // descendants (CE549 -> CE42 -> CE14 -> CE131). Without
                             // this the grid stays alive and owns the pointer, so the
-                            // loaded bedroom's icon clicks are ignored (BUG-08).
+                            // loaded bedroom's icon clicks are ignored.
                             self.retire_load_ui_chain();
                             // A load replaces the whole session. Any click that was
                             // still travelling through the old grid must not become a
@@ -5325,7 +5349,7 @@ impl Game {
         // terminate that coroutine (forced scene transition, forced release, or a
         // scripted map change) without its `Choice`/`MessageWithChoices` waiter ever
         // returning. `self.choices` then survives as a panel no script can close and
-        // keeps swallowing clicks (report 1.3), so drop it once the VM has no waiter.
+        // keeps swallowing clicks, so drop it once the VM has no waiter.
         if self.choices.is_some()
             && !self.vm.instances().iter().any(|instance| {
                 matches!(
@@ -5339,7 +5363,7 @@ impl Game {
         }
         // The title menu is a one-shot op102 inside CE42. Cancelling CE131 unwinds
         // CE14 -> CE42 -> the TitleMap event 2 page, leaving a menu-less title
-        // background with nothing running (docs/milestones/M3_TITLE_UX.md section 2.5). Re-enter
+        // background with nothing running. Re-enter
         // CE42 once the whole title stack has drained, so CANCEL really means "back to
         // the title" instead of a soft lock. A successful load clears
         // `boot_map_active`, so this only fires on the cancel path.
@@ -5436,7 +5460,7 @@ impl Game {
         // SysStr25 (magic 9_900_025) is WOLF's current-message buffer. The third-party balloon library
         // (CE270) watches Sys12 and copies this string into its own CSelf6 before
         // drawing the balloon; without it the interface events run but the balloon
-        // never opens (BUG-02's visible half). Publish it alongside Sys12.
+        // never opens. Publish it alongside Sys12.
         // Clear the buffer when the live message ends. CE270 reads SysStr25 to
         // detect a new line; leaving the last string in place made the closed
         // balloon look like a still-current message and kept System 12/CE270's
@@ -5813,14 +5837,14 @@ struct GameHost<'a> {
     assets: &'a mut Assets,
     databases: &'a mut crate::db::Databases,
     sounds: &'a mut Vec<SoundCmd>,
-    /// M4: the real audio engine, when [`Game::enable_audio`] turned it on. `None` keeps
+    /// The real audio engine, when [`Game::enable_audio`] turned it on. `None` keeps
     /// `Host::sound` a pure recorder (tests, headless captures).
     #[cfg(feature = "audio")]
     audio: Option<&'a mut wolf_audio::Engine>,
     messages: &'a mut Vec<Message>,
     history: &'a mut Vec<Message>,
     choices: &'a mut Option<Choices>,
-    /// M5-D catalog; the host applies it where text leaves the VM.
+    /// content catalog; the host applies it where text leaves the VM.
     translator: &'a Translator,
     replies: &'a mut std::collections::VecDeque<ChoiceReply>,
     diagnostics: &'a mut BTreeMap<String, u64>,
@@ -5949,6 +5973,12 @@ impl GameHost<'_> {
     /// Only a press edge counts (see crate::key::mouse_bits); a held button looks
     /// like nothing so a menu polled every frame fires exactly once.
     fn mouse_key_bits(&mut self) -> u32 {
+        // A click already spent this frame belongs to the first consumer. Check
+        // before reading pending or marking it consumed again, so overlapping
+        // pollers cannot replay the same edge.
+        if *self.mouse_consumed {
+            return 0;
+        }
         if self.frame_mouse_blocked || !self.messages.is_empty() || self.choices.is_some() {
             return 0;
         }
@@ -6077,9 +6107,8 @@ impl Host for GameHost<'_> {
 
     fn message_dismissed(&mut self) -> bool {
         // A human dismisses messages with the confirm key or a left click. Both are
-        // edges: a held button/key must not run through a whole conversation. The
-        // confirm key used to be level-triggered, so holding Enter skipped every
-        // consecutive line the moment it appeared.
+        // edges: a held button/key must not run through a whole conversation. A
+        // level-triggered confirm skips every consecutive line the moment it appears.
         let fresh_click = self.mouse_buttons & 1 != 0 && self.previous_mouse_buttons & 1 == 0;
         let carried_click = *self.pending_mouse & crate::key::OK != 0;
         let clicked = (fresh_click || carried_click) && !*self.mouse_consumed;
@@ -6114,10 +6143,10 @@ impl Host for GameHost<'_> {
                 .map_or_else(|| option.clone(), str::to_owned);
             // Opcode 102 hands over the script's raw string, which can carry WOLF
             // style escapes (`\c[...]`, `\f[...]`, inline icon codes). The choice
-            // renderer draws plain text, so an escape used to leak into the row as
-            // a missing-glyph diamond ("红茶 ♦ 2000" in the tea menu). Strip the
-            // markup before measuring and drawing; empty labels stay skipped so
-            // the source index still maps to the script's case table.
+            // renderer draws plain text, so an unstripped escape leaks into the row as
+            // a missing-glyph diamond ("红茶 ♦ 2000" in the tea menu). Strip the markup
+            // before measuring and drawing; empty labels stay skipped so the source
+            // index still maps to the script's case table.
             let stripped = wolf_format::messagetext::strip(&translated);
             if stripped.trim().is_empty() {
                 continue;
@@ -6209,7 +6238,7 @@ impl Host for GameHost<'_> {
     fn sound(&mut self, cmd: &SoundCmd) {
         self.sounds.push(cmd.clone());
         self.stats.sounds += 1;
-        // M4: the VM already decoded opcode 140 into this SoundCmd; the engine does the
+        // The VM already decoded opcode 140 into this SoundCmd; the engine does the
         // play/stop with the right volume and loop rules. Silently skipped when audio is
         // off, so headless captures and tests stay deterministic.
         #[cfg(feature = "audio")]
@@ -7369,6 +7398,38 @@ mod tests {
             );
         }
         assert!(game.mouse_consumed, "the poll must spend the click");
+    }
+
+    #[test]
+    fn a_consumed_click_is_not_delivered_to_a_second_poller() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.mouse_buttons = 1;
+        game.previous_mouse_buttons = 0;
+        game.mouse_consumed = false;
+
+        let mut host = host(&mut game);
+        assert_eq!(
+            host.mouse_key_bits() & key::OK,
+            key::OK,
+            "the first poller owns the fresh click"
+        );
+        assert_eq!(
+            host.mouse_key_bits(),
+            0,
+            "an overlapping poller must not replay the spent click"
+        );
+        assert!(game.mouse_consumed, "the first poll spends the click");
+    }
+
+    #[test]
+    fn story_common_events_include_the_deep_night_handlers() {
+        for event in [219, 220, 283, 284, 290] {
+            assert!(
+                STORY_COMMON_EVENTS.contains(&event),
+                "CE{event} must hold the quick UI closed while it runs"
+            );
+        }
     }
 
     #[test]

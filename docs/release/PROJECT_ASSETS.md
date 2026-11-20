@@ -10,7 +10,7 @@
 > `_archive/` 历史证据/报告；`re_all/`、`re_anchor/`、`wolfmanual/`、
 > `event_reach/`、`shot_metrics/`、`m14_visual/` 等可重建材料已删除。
 > 项目内 `SaveData*.sav` 也已经删除，`work/Data/Save/System.sav` 已重置为
-> 干净零售模板。发布细节见 `docs/release/PACKAGING.md` §8.6。
+> 干净零售模板。发布细节见 `docs/release/PACKAGING.md` §8.7。
 
 ---
 

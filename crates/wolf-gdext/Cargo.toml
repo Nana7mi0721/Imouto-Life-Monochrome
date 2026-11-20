@@ -3,7 +3,6 @@ name = "wolf-gdext"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 publish.workspace = true
 description = "Godot 4 GDExtension facade for the WOLF RPG Editor runtime"
 
@@ -11,6 +10,7 @@ description = "Godot 4 GDExtension facade for the WOLF RPG Editor runtime"
 crate-type = ["cdylib"]
 
 [dependencies]
-godot = { version = "0.5.5", features = ["api-4-7"] }
+godot = { version = "0.5.5", features = ["api-4-7", "lazy-function-tables"] }
+wolf-format = { workspace = true }
 wolf-vm = { workspace = true }
 wolf-game = { path = "../wolf-game", default-features = false }

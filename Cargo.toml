@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.87"
 authors = ["imoto-life contributors"]
@@ -38,6 +38,17 @@ opt-level = 2
 opt-level = 3
 lto = "thin"
 codegen-units = 1
+
+# Shipped binaries: no symbols, whole-program LTO and abort-on-panic. Tests keep
+# the default unwind profile, so a release build is the only place where this
+# smaller runtime contract applies.
+[profile.release-dist]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
 
 # Godot development build: optimised like a release binary but without debug info or
 # incremental state. The gdext bindings' debug rlib is ~275 MB; this profile keeps the

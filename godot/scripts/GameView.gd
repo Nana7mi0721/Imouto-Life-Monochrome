@@ -339,13 +339,13 @@ var regular_font: Font
 var data_root := ""
 var bgm_player: AudioStreamPlayer
 ## WOLF's BGS (background sound / ambience) is a second looping bus; rain or wind
-## must not stop the music (report BUG-17).
+## must not stop the music.
 var bgs_player: AudioStreamPlayer
 var se_players: Array[AudioStreamPlayer] = []
 var audio_cache: Dictionary = {}
-## Insertion order for [member audio_cache]. The cache used to grow forever; 64
-## streams is enough for the current scene plus recent voices, and the oldest
-## entry that no player still references is dropped first (report II.P2).
+## Insertion order for [member audio_cache]. The cache is capped at 64 streams,
+## enough for the current scene plus recent voices; the oldest entry that no player
+## still references is dropped first.
 const AUDIO_CACHE_LIMIT := 64
 var audio_cache_order: Array[String] = []
 var bgm_tween: Tween
@@ -388,6 +388,15 @@ var force_touch_mode := false
 var android_data_src := ""
 var android_dest_root := ""
 var save_dir_override := ""
+## Android first-run/upgrade staging runs off the main thread. The worker only
+## touches files; the main thread polls it from `_process` so the window keeps
+## painting the status panel and never blocks for the ~113 MB copy.
+var _android_stage_thread: Thread
+var _android_stage_started_usec := 0
+var _android_stage_last_update_usec := 0
+## Startup timing survives the asynchronous Android branch so `ready_ms` still
+## measures the whole cold start, not only the post-staging half.
+var _startup_started_usec := 0
 
 ## Touch gesture state (pure touch layer; never modifies desktop mouse/key state).
 var _touch_points: Dictionary = {}
@@ -406,7 +415,7 @@ var held_keys: Dictionary = {}
 var held_order: Array[int] = []
 ## `key_config()` crosses the GDExtension boundary with a fresh PackedInt32Array
 ## every call; the six words only move when CE132 writes Sys52..57, so keep the
-## converted array and refresh it from `key_config_revision()` (report II.P2).
+## converted array and refresh it from `key_config_revision()`.
 var key_config_cache: Array = []
 var key_config_revision_cache := -2
 
@@ -506,7 +515,7 @@ var _info_title_elapsed := 0.0
 
 
 func _ready() -> void:
-	var startup_started := Time.get_ticks_usec()
+	_startup_started_usec = Time.get_ticks_usec()
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_mat_add = CanvasItemMaterial.new()
 	_mat_add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
@@ -527,17 +536,17 @@ func _ready() -> void:
 	var root := _explicit_data_root_arg()
 	save_dir_override = ""
 	if root.is_empty() and _is_android_runtime():
-		var staged := _prepare_android_storage()
-		if not bool(staged.get("ok", false)):
-			_fail_startup(
-				str(staged.get("reason", "Android 资源初始化失败。")),
-				str(staged.get("path", ""))
-			)
-			return
-		root = str(staged.get("data_dir", ""))
-		save_dir_override = str(staged.get("save_dir", ""))
-	elif root.is_empty():
+		_begin_android_storage_staging()
+		return
+	if root.is_empty():
 		root = _resolve_data_root()
+	_finish_startup(root, "")
+
+
+## Completes startup once a writable data root exists. Android calls this from
+## `_poll_android_storage_staging` after the background worker is joined.
+func _finish_startup(root: String, staged_save_dir: String, staged_media_path := "") -> void:
+	save_dir_override = staged_save_dir
 	data_root = root
 	var fonts_started := Time.get_ticks_usec()
 	bold_font = _load_font(true)
@@ -560,10 +569,18 @@ func _ready() -> void:
 	wolf = WolfGame.new()
 	var open_started := Time.get_ticks_usec()
 	var opened := false
-	if not save_dir_override.is_empty() and wolf.has_method("open_with_save_dir"):
-		opened = bool(wolf.open_with_save_dir(root, save_dir_override))
-	else:
-		opened = bool(wolf.open(root))
+	var media_file: FileAccess = null
+	if not staged_media_path.is_empty() and wolf.has_method("open_with_media_file"):
+		media_file = FileAccess.open(staged_media_path, FileAccess.READ)
+		if media_file == null:
+			print("android: cannot open packaged media pack: ", staged_media_path)
+		else:
+			opened = bool(wolf.open_with_media_file(root, save_dir_override, media_file))
+	if not opened:
+		if not save_dir_override.is_empty() and wolf.has_method("open_with_save_dir"):
+			opened = bool(wolf.open_with_save_dir(root, save_dir_override))
+		else:
+			opened = bool(wolf.open(root))
 	if not opened:
 		_fail_startup("无法打开游戏数据（WolfGame.open 返回失败）。", root)
 		return
@@ -634,7 +651,7 @@ func _ready() -> void:
 	print("startup: prewarm_upload_ms=", "%.1f" % ((Time.get_ticks_usec() - prewarm_upload_started) / 1000.0))
 
 	set_physics_process(true)
-	print("startup: ready_ms=", "%.1f" % ((Time.get_ticks_usec() - startup_started) / 1000.0))
+	print("startup: ready_ms=", "%.1f" % ((Time.get_ticks_usec() - _startup_started_usec) / 1000.0))
 	queue_redraw()
 
 
@@ -1162,6 +1179,10 @@ func _handle_modal_event(event: InputEvent) -> void:
 			if identity == KEY_ESCAPE or identity == KEY_ENTER or identity == KEY_KP_ENTER:
 				_quit_from_startup_error()
 			return
+		if _modal_kind == "android_staging":
+			# Resource staging owns the screen until the worker finishes. No key,
+			# including Escape, may dismiss it into a half-initialised runtime.
+			return
 		var count := maxi(1, _modal_layer.labels.size())
 		match identity:
 			KEY_ESCAPE:
@@ -1200,7 +1221,7 @@ func _handle_modal_event(event: InputEvent) -> void:
 				return
 		# A click outside the panel is a cancel, like Escape. The fatal startup
 		# dialog has no cancel path, so it ignores clicks outside its button.
-		if _modal_kind != "startup_error":
+		if _modal_kind != "startup_error" and _modal_kind != "android_staging":
 			_close_modal()
 		return
 	if event is InputEventScreenTouch:
@@ -1240,7 +1261,11 @@ func _handle_modal_event(event: InputEvent) -> void:
 				_set_modal_focus(index)
 				_activate_modal_focus()
 				return
-		if _modal_kind != "startup_error" and not _modal_layer.panel_rect().has_point(local):
+		if (
+			_modal_kind != "startup_error"
+			and _modal_kind != "android_staging"
+			and not _modal_layer.panel_rect().has_point(local)
+		):
 			_close_modal()
 		return
 	if event is InputEventScreenDrag:
@@ -1417,6 +1442,8 @@ func _activate_modal_focus() -> void:
 				_quit_app()
 		"save_slot":
 			_activate_save_slot(action)
+		"android_staging":
+			pass
 		_:
 			_close_modal()
 
@@ -1479,6 +1506,10 @@ func _quit_app() -> void:
 func _handle_back_request() -> void:
 	if _modal_kind == "startup_error":
 		_quit_from_startup_error()
+		return
+	if _modal_kind == "android_staging":
+		# The status panel must stay visible until the worker is joined. A
+		# second back press must not fall through to "quit with no runtime".
 		return
 	if not _modal_kind.is_empty():
 		_close_modal()
@@ -1587,6 +1618,7 @@ func _notification(what: int) -> void:
 
 
 func _exit_tree() -> void:
+	_join_android_stage_thread()
 	if not _is_mobile_touch():
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_save_settings_on_exit()
@@ -1914,6 +1946,8 @@ func _mark_input_handled() -> void:
 
 
 func _process(delta: float) -> void:
+	if _poll_android_storage_staging():
+		return
 	if _show_window_info:
 		_info_title_elapsed += delta
 		if _info_title_elapsed >= 0.25:
@@ -2200,13 +2234,32 @@ func _ensure_save_return_texture() -> void:
 	if wolf != null and wolf.has_method("read_media"):
 		var packed: PackedByteArray = wolf.read_media("Picture/endbutton.png")
 		if not packed.is_empty():
-			loaded = image.load_png_from_buffer(packed) == OK
+			loaded = _load_image_from_buffer(image, packed)
 	if not loaded and not data_root.is_empty():
 		loaded = image.load(data_root.path_join("Picture/endbutton.png")) == OK
 	if loaded:
 		save_return_texture = ImageTexture.create_from_image(image)
 	else:
 		push_warning("ui: cannot load Picture/endbutton.png for the save-page button")
+
+
+func _load_image_from_buffer(image: Image, packed: PackedByteArray) -> bool:
+	var size := packed.size()
+	if size >= 8 \
+			and packed[0] == 0x89 and packed[1] == 0x50 \
+			and packed[2] == 0x4E and packed[3] == 0x47:
+		return image.load_png_from_buffer(packed) == OK
+	if size >= 12 \
+			and packed[0] == 0x52 and packed[1] == 0x49 \
+			and packed[2] == 0x46 and packed[3] == 0x46 \
+			and packed[8] == 0x57 and packed[9] == 0x45 \
+			and packed[10] == 0x42 and packed[11] == 0x50:
+		return image.load_webp_from_buffer(packed) == OK
+	if size >= 3 and packed[0] == 0xFF and packed[1] == 0xD8 and packed[2] == 0xFF:
+		return image.load_jpg_from_buffer(packed) == OK
+	if size >= 2 and packed[0] == 0x42 and packed[1] == 0x4D:
+		return image.load_bmp_from_buffer(packed) == OK
+	return false
 
 
 func _draw_save_notice_line(text: String, index: int) -> void:
@@ -2391,7 +2444,21 @@ func _load_audio(file: String) -> AudioStream:
 	if wolf != null and wolf.has_method("read_media"):
 		packed = wolf.read_media(file)
 	var stream: AudioStream = null
-	match path.get_extension().to_lower():
+	var format := path.get_extension().to_lower()
+	if packed.size() >= 4 \
+			and packed[0] == 0x4F and packed[1] == 0x67 \
+			and packed[2] == 0x67 and packed[3] == 0x53:
+		format = "ogg"
+	elif packed.size() >= 3 \
+			and packed[0] == 0x49 and packed[1] == 0x44 and packed[2] == 0x33:
+		format = "mp3"
+	elif packed.size() >= 12 \
+			and packed[0] == 0x52 and packed[1] == 0x49 \
+			and packed[2] == 0x46 and packed[3] == 0x46 \
+			and packed[8] == 0x57 and packed[9] == 0x41 \
+			and packed[10] == 0x56 and packed[11] == 0x45:
+		format = "wav"
+	match format:
 		"ogg":
 			if not packed.is_empty():
 				stream = AudioStreamOggVorbis.load_from_buffer(packed)
@@ -2573,6 +2640,138 @@ func _explicit_data_root_arg() -> String:
 	return ""
 
 
+## Starts first-run/upgrade staging on a worker and returns immediately.
+##
+## The worker is only given filesystem work. Completion is joined and consumed
+## by `_poll_android_storage_staging` on the main thread, which keeps Godot's
+## scene tree and the `WolfGame` object on their owning thread.
+func _begin_android_storage_staging() -> void:
+	if _android_stage_thread != null:
+		return
+	_android_stage_started_usec = Time.get_ticks_usec()
+	_android_stage_last_update_usec = 0
+	_show_android_storage_status()
+	var src_dir := android_data_src if not android_data_src.is_empty() else "res://android_data"
+	var dest_base := (
+		android_dest_root if not android_dest_root.is_empty() else OS.get_user_data_dir()
+	)
+	var thread := Thread.new()
+	var err := thread.start(
+		Callable(self, "_run_android_storage_staging").bind(src_dir, dest_base)
+	)
+	if err != OK:
+		_fail_startup(
+			"无法创建 Android 资源准备线程（错误码 %d）。" % err,
+			src_dir
+		)
+		return
+	_android_stage_thread = thread
+	print("android: resource staging started in background")
+
+
+func _run_android_storage_staging(src_dir: String, dest_root: String) -> Dictionary:
+	return _prepare_android_storage(src_dir, dest_root)
+
+
+## Shows a non-interactive startup panel while the worker copies resources.
+func _show_android_storage_status() -> void:
+	_ensure_modal_layer()
+	_modal_kind = "android_staging"
+	_modal_actions = []
+	_modal_slot = {}
+	_modal_click = Vector2i(-1, -1)
+	_modal_layer.error_mode = false
+	_modal_layer.title = "正在准备资源"
+	_modal_layer.body = "正在释放游戏资源，请稍候（已用时 0 秒）"
+	_modal_layer.labels = []
+	_modal_layer.focus_index = 0
+	_modal_layer.toast = ""
+	_modal_layer.open = true
+	_modal_layer.queue_redraw()
+	_reset_modal_input()
+	_modal_release_guard = false
+	set_process(true)
+	# No runtime exists yet; only the status animation and main loop need to run.
+	set_physics_process(false)
+	queue_redraw()
+	print("ui: Android resource preparation panel opened")
+
+
+## Updates the elapsed-time text and animated title without busy-polling.
+func _update_android_storage_status(force := false) -> void:
+	if _modal_layer == null or _modal_kind != "android_staging":
+		return
+	var now := Time.get_ticks_usec()
+	if not force and now - _android_stage_last_update_usec < 250000:
+		return
+	_android_stage_last_update_usec = now
+	var elapsed_s := int((now - _android_stage_started_usec) / 1000000)
+	var phase := int((now - _android_stage_started_usec) / 250000) % 4
+	_modal_layer.title = "正在准备资源" + ".".repeat(phase)
+	_modal_layer.body = "正在释放游戏资源，请稍候（已用时 %d 秒）" % elapsed_s
+	_modal_layer.queue_redraw()
+
+
+## Joins a finished worker and resumes normal startup on the main thread.
+##
+## Returns true while staging is active and the caller must skip its normal
+## frame work.
+func _poll_android_storage_staging() -> bool:
+	if _android_stage_thread == null:
+		return false
+	if _android_stage_thread.is_alive():
+		_update_android_storage_status()
+		return true
+	var thread := _android_stage_thread
+	_android_stage_thread = null
+	var result_value: Variant = thread.wait_to_finish()
+	var elapsed_ms := float(Time.get_ticks_usec() - _android_stage_started_usec) / 1000.0
+	_android_stage_started_usec = 0
+	_android_stage_last_update_usec = 0
+	if not (result_value is Dictionary):
+		_fail_startup(
+			"Android 资源准备线程未返回有效结果。",
+			android_data_src if not android_data_src.is_empty() else "res://android_data"
+		)
+		return true
+	var result: Dictionary = result_value
+	if not bool(result.get("ok", false)):
+		_fail_startup(
+			str(result.get("reason", "Android 资源初始化失败。")),
+			str(result.get("path", ""))
+		)
+		return true
+	var data_dir := str(result.get("data_dir", ""))
+	var save_dir := str(result.get("save_dir", ""))
+	if data_dir.is_empty() or save_dir.is_empty():
+		_fail_startup("Android 资源准备结果缺少数据目录或存档目录。", data_dir)
+		return true
+	print(
+		"android: resource staging complete copied=", int(result.get("copied", 0)),
+		" removed=", int(result.get("removed", 0)),
+		" skipped=", bool(result.get("skipped", false)),
+		" elapsed_ms=", "%.1f" % elapsed_ms
+	)
+	_close_modal()
+	var media_path := str(result.get("media_path", ""))
+	_finish_startup(data_dir, save_dir, media_path)
+	return true
+
+
+## `Thread` objects must be joined before their script/object can be destroyed.
+## A live worker cannot be safely killed, so exit waits for its current file.
+func _join_android_stage_thread() -> void:
+	if _android_stage_thread == null:
+		return
+	var thread := _android_stage_thread
+	_android_stage_thread = null
+	if thread.is_started():
+		var was_alive := thread.is_alive()
+		thread.wait_to_finish()
+		if was_alive:
+			print("android: joined resource staging thread on exit")
+
+
 ## First-run Android asset staging: copies `android_data_manifest.json` files
 ## from the APK/PCK (`res://android_data`, or `--android-data-src=` in tests)
 ## into writable `user://data`, while placing initial `Save/System.sav` into
@@ -2615,6 +2814,51 @@ func _prepare_android_storage(
 			"reason": "Android 资源清单缺少 version 或 files 字段。",
 			"path": manifest_path,
 		}
+	if (
+		bool(manifest.get("media_pak_in_apk", false))
+		and not FileAccess.file_exists(_android_media_path(manifest, src_dir, data_dir))
+	):
+		return {
+			"ok": false,
+			"reason": "APK 内缺少 media.pak.blob.cfb（资源清单声明了 media_pak_in_apk）。",
+			"path": _android_media_path(manifest, src_dir, data_dir),
+		}
+	# Validate every manifest path before touching the destination. The keep-set
+	# is exact, segment-normalised and only covers files that belong under
+	# `data/`; the initial System.sav is handled separately in `Save/`.
+	var manifest_rels: Array[String] = []
+	var keep_data: Dictionary = {}
+	for item in files_val:
+		var parsed_rel := _normalise_manifest_rel(item)
+		if not bool(parsed_rel.get("ok", false)):
+			return {
+				"ok": false,
+				"reason": "Android 资源清单包含非法路径。",
+				"path": str(item),
+			}
+		var rel := str(parsed_rel.get("rel", ""))
+		if manifest_rels.has(rel):
+			return {
+				"ok": false,
+				"reason": "Android 资源清单包含重复路径。",
+				"path": rel,
+			}
+		var lower_rel := rel.to_lower()
+		if lower_rel == "save/system.sav":
+			pass
+		elif (
+			lower_rel.ends_with(".sav")
+			or lower_rel == "save"
+			or lower_rel.begins_with("save/")
+		):
+			return {
+				"ok": false,
+				"reason": "Android 资源清单包含不应释放的存档路径。",
+				"path": rel,
+			}
+		else:
+			keep_data[rel] = true
+		manifest_rels.append(rel)
 	var data_dir_err := DirAccess.make_dir_recursive_absolute(data_dir)
 	if data_dir_err != OK:
 		return {
@@ -2639,26 +2883,22 @@ func _prepare_android_storage(
 	var up_to_date := (
 		staged_version == expected_version
 		and FileAccess.file_exists(data_dir.path_join("BasicData/Game.dat"))
-		and FileAccess.file_exists(data_dir.path_join("media.pak"))
+		and _android_media_ready(manifest, src_dir, data_dir)
 	)
 	if up_to_date:
 		return {
 			"ok": true,
 			"data_dir": data_dir,
 			"save_dir": save_dir,
+			"media_path": _android_media_path(manifest, src_dir, data_dir),
 			"copied": 0,
+			"removed": 0,
 			"skipped": true,
 		}
+	var version_changed := staged_version != expected_version
 	var copied := 0
 	var blob_suffix := str(manifest.get("blob_suffix", ""))
-	for item in files_val:
-		var rel := str(item).replace("\\", "/").lstrip("/")
-		if rel.is_empty() or rel.find("..") != -1:
-			return {
-				"ok": false,
-				"reason": "Android 资源清单包含非法路径。",
-				"path": str(item),
-			}
+	for rel in manifest_rels:
 		var src_path := src_dir.path_join(rel + blob_suffix)
 		var dst_path := data_dir.path_join(rel)
 		if rel.to_lower() == "save/system.sav":
@@ -2673,6 +2913,16 @@ func _prepare_android_storage(
 				"path": src_path,
 			}
 		copied += 1
+	var removed := 0
+	if version_changed:
+		var cleanup := _remove_stale_staged_data(data_dir, keep_data)
+		if not bool(cleanup.get("ok", false)):
+			return {
+				"ok": false,
+				"reason": "清理旧版本资源文件失败（错误码 %d）。" % int(cleanup.get("error", FAILED)),
+				"path": str(cleanup.get("path", data_dir)),
+			}
+		removed = int(cleanup.get("removed", 0))
 	var version_tmp := version_path + ".tmp"
 	var wf := FileAccess.open(version_tmp, FileAccess.WRITE)
 	if wf == null:
@@ -2704,9 +2954,118 @@ func _prepare_android_storage(
 		"ok": true,
 		"data_dir": data_dir,
 		"save_dir": save_dir,
+		"media_path": _android_media_path(manifest, src_dir, data_dir),
 		"copied": copied,
+		"removed": removed,
 		"skipped": false,
 	}
+
+
+## Whether the manifest's media pack is present at its runtime location.
+##
+## New Android packages set `media_pak_in_apk` and keep the pack at
+## `res://android_data/media.pak.blob`; older packages copied it into
+## `user://data/media.pak`.
+func _android_media_ready(manifest: Dictionary, src_dir: String, data_dir: String) -> bool:
+	if bool(manifest.get("media_pak_in_apk", false)):
+		return FileAccess.file_exists(_android_media_path(manifest, src_dir, data_dir))
+	return FileAccess.file_exists(data_dir.path_join("media.pak"))
+
+
+## Runtime path of the media pack, or an empty string when it is not packaged
+## separately from the staged files.
+func _android_media_path(manifest: Dictionary, src_dir: String, data_dir: String) -> String:
+	if bool(manifest.get("media_pak_in_apk", false)):
+		var blob_rel := str(manifest.get("media_pak_blob", "media.pak.blob.cfb"))
+		return src_dir.path_join(blob_rel)
+	if FileAccess.file_exists(data_dir.path_join("media.pak")):
+		return data_dir.path_join("media.pak")
+	return ""
+
+
+
+## Parses one manifest entry into a safe, normalised relative path.
+##
+## Comparisons are segment-aware: `..` is still rejected, but a harmless name
+## such as `notes..txt` is not mistaken for traversal.
+func _normalise_manifest_rel(value: Variant) -> Dictionary:
+	if not (value is String):
+		return {"ok": false}
+	var raw := str(value)
+	if raw.is_empty():
+		return {"ok": false}
+	for index in range(raw.length()):
+		if raw.unicode_at(index) < 0x20:
+			return {"ok": false}
+	var normalised := raw.replace("\\", "/")
+	if normalised.begins_with("/"):
+		return {"ok": false}
+	if normalised.length() >= 2 and normalised.substr(1, 1) == ":":
+		return {"ok": false}
+	var segments: Array[String] = []
+	for segment in normalised.split("/", true):
+		if segment.is_empty() or segment == "." or segment == ".." or segment.contains(":"):
+			return {"ok": false}
+		segments.append(segment)
+	if segments.is_empty():
+		return {"ok": false}
+	return {"ok": true, "rel": "/".join(segments)}
+
+
+## Removes files under `data/` that the new manifest no longer lists.
+##
+## The exact keep-set protects current files and `.staged_version`. The whole
+## `Save` subtree and every `.sav` file are skipped even though this function is
+## only rooted at `user://data`, so an older layout cannot delete player data.
+func _remove_stale_staged_data(data_dir: String, keep: Dictionary) -> Dictionary:
+	var removed: Array[String] = []
+	var failure := _prune_staged_data_dir(data_dir, "", keep, removed)
+	if not bool(failure.get("ok", false)):
+		return failure
+	return {"ok": true, "removed": removed.size()}
+
+
+func _prune_staged_data_dir(
+	root_dir: String,
+	rel_dir: String,
+	keep: Dictionary,
+	removed: Array[String]
+) -> Dictionary:
+	var abs_dir := root_dir if rel_dir.is_empty() else root_dir.path_join(rel_dir)
+	var dir := DirAccess.open(abs_dir)
+	if dir == null:
+		return {"ok": false, "error": ERR_CANT_OPEN, "path": abs_dir}
+	for file_name in dir.get_files():
+		var rel := file_name if rel_dir.is_empty() else rel_dir + "/" + file_name
+		if keep.has(rel) or _is_protected_staged_path(rel):
+			continue
+		var abs_file := abs_dir.path_join(file_name)
+		if dir.is_link(abs_file):
+			continue
+		var rm_err := DirAccess.remove_absolute(abs_file)
+		if rm_err != OK:
+			return {"ok": false, "error": rm_err, "path": abs_file}
+		removed.append(rel)
+	for dir_name in dir.get_directories():
+		var child_rel := dir_name if rel_dir.is_empty() else rel_dir + "/" + dir_name
+		if _is_protected_staged_path(child_rel):
+			continue
+		var abs_child := abs_dir.path_join(dir_name)
+		if dir.is_link(abs_child):
+			continue
+		var child_failure := _prune_staged_data_dir(root_dir, child_rel, keep, removed)
+		if not bool(child_failure.get("ok", false)):
+			return child_failure
+	return {"ok": true}
+
+
+func _is_protected_staged_path(rel: String) -> bool:
+	if rel == ".staged_version":
+		return true
+	var lower := rel.to_lower()
+	if lower.ends_with(".sav"):
+		return true
+	return lower == "save" or lower.begins_with("save/")
 
 
 func _copy_file_chunked(src_path: String, dst_path: String) -> Error:

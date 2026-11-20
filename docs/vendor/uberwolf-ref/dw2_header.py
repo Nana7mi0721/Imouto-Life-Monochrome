@@ -1,6 +1,6 @@
 import struct, os, collections
-ARC = 'E:/EROGAME/Imouto! Life ~Monochrome~ zh-CN Ver/Data.wolf'
-ROOT = 'E:/Study/github program/imoto life/work/imouto/Data'
+ARC = os.environ.get('WOLF_DATA_WOLF', 'Data.wolf')
+ROOT = os.environ.get('WOLF_EXTRACTED_ROOT', 'work/Data')
 SRC = bytes([0x38,0x50,0x40,0x28,0x72,0x4f,0x21,0x70,0x3b,0x73,0x35,0x38])
 def keycreate(src):
     L=len(src); k=bytearray(12)

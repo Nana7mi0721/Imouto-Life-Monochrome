@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
 # tools/package-android.sh - build and package the Android arm64-v8a APK.
 #
+# Profiles:
+#   standard -> work/out/dist/android/<version>/
+#   slim     -> work/out/dist/android-slim/<version>/
+#
 # Produces:
-#   work/out/dist/android/<version>/
-#     ImoutoLife-<version>-arm64.apk   signed Android APK (arm64-v8a)
+#   <profile output>/<version>/
+#     ImoutoLife-<version>-android-arm64.apk       signed APK (standard)
+#     ImoutoLife-<version>-android-arm64-slim.apk  signed APK (slim)
 #     README_ANDROID.txt               installation and troubleshooting guide
-#     checksums.txt                    SHA-256 checksums for release artifacts
+#     checksums.txt                    SHA-256 checksums for package files
+#     SHA256SUMS.txt                   checksums for current-version APKs
 #
 # Packaging pipeline:
 #   1. Preflight Godot 4.7.x Android export templates, JDK (keytool), preset,
 #      GDExtension manifest, and data manifest.
 #   2. Build libwolf_gdext.so (arm64-v8a) via tools/build-android.sh (unless
-#      --skip-build) and ensure target/release/media-pack.exe is built.
-#   3. Pack media assets into work/out/android/media.pak.
-#   4. Stage plaintext data (without the retail Japanese font) + media.pak + clean System.sav +
+#      --skip-build) and ensure target/release-dist/media-pack.exe is built.
+#   3. Pack media assets into work/out/android/media.pak (zstd auto level 9).
+#   4. Stage plaintext data (without the retail Japanese font) + media.pak.blob.cfb + clean System.sav +
 #      android_data_manifest.json into godot/android_data/ (always cleaned up on
 #      EXIT via trap so Windows packaging is never polluted).
 #   5. Export APK using Godot prebuilt templates (use_gradle_build=false; no
@@ -35,8 +41,12 @@ VERSION=""
 DATA_ROOT="work/Data"
 MANIFEST="tools/package/release-data.manifest"
 OUT_DIR=""
+SLIM=0
+RELEASE_PROFILE="standard"
 SYSTEM_SAVE_OPT=""
-GODOT="${GODOT_BIN:-/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64.exe}"
+GODOT="${GODOT_BIN:-$(command -v godot 2>/dev/null || command -v Godot 2>/dev/null || true)}"
+TEMPLATE_OPT="${GODOT_TEMPLATE_ANDROID:-}"
+TEMPLATE_BACKUP=""
 PRESET_NAME="Android"
 NDK_OPT=""
 API_LEVEL="24"
@@ -69,10 +79,14 @@ Usage: tools/package-android.sh [options]
   --data-root DIR      unpacked game data (default: work/Data)
   --manifest FILE      release Data allowlist
                        (default: tools/package/release-data.manifest)
-  --out-dir DIR        output folder (default: work/out/dist/android/<version>)
+  --slim               build the slim media profile (WebP stage before media.pak)
+  --out-dir DIR        output folder (default: work/out/dist/android/<version>,
+                       or work/out/dist/android-slim/<version> with --slim)
   --system-save FILE   clean System.sav to ship (default: retail template,
                        then <data-root>/Save/System.sav)
-  --godot PATH         Godot editor executable (default: GODOT_BIN or 4.7.2)
+  --godot PATH         Godot editor executable (default: GODOT_BIN or PATH)
+  --template FILE      custom Android release template APK (default:
+                       GODOT_TEMPLATE_ANDROID; empty uses the official one)
   --preset NAME        export preset (default: "Android")
   --ndk PATH           Android NDK path (forwarded to tools/build-android.sh)
   --api LEVEL          Android API level for NDK build (default: 24)
@@ -136,14 +150,37 @@ abs_path() {
     realpath -m -- "$path"
 }
 
+restore_export_preset() {
+    if [ -n "$TEMPLATE_BACKUP" ] && [ -f "$TEMPLATE_BACKUP" ]; then
+        cp -f -- "$TEMPLATE_BACKUP" "$PRESET_FILE"
+        rm -f -- "$TEMPLATE_BACKUP"
+        TEMPLATE_BACKUP=""
+    fi
+}
+
+apply_custom_template() {
+    [ -n "$TEMPLATE_OPT" ] || return 0
+    [ -f "$TEMPLATE_OPT" ] || die "custom Android template not found: $TEMPLATE_OPT"
+    TEMPLATE_BACKUP="$REPO/work/out/export_presets.android.$$.cfg"
+    mkdir -p "$REPO/work/out"
+    cp -f -- "$PRESET_FILE" "$TEMPLATE_BACKUP"
+    python "$PRESET_TEMPLATE_TOOL" \
+        --preset-file "$PRESET_FILE" \
+        --preset "$PRESET_NAME" \
+        --template "$TEMPLATE_OPT"
+    echo "==> custom Android template: $TEMPLATE_OPT"
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version)     need_arg "$@"; VERSION="$2"; shift 2 ;;
         --data-root)   need_arg "$@"; DATA_ROOT="$2"; shift 2 ;;
         --manifest)    need_arg "$@"; MANIFEST="$2"; shift 2 ;;
+        --slim)        SLIM=1; shift ;;
         --out-dir)     need_arg "$@"; OUT_DIR="$2"; shift 2 ;;
         --system-save) need_arg "$@"; SYSTEM_SAVE_OPT="$2"; shift 2 ;;
         --godot)       need_arg "$@"; GODOT="$2"; shift 2 ;;
+        --template)    need_arg "$@"; TEMPLATE_OPT="$2"; shift 2 ;;
         --preset)      need_arg "$@"; PRESET_NAME="$2"; shift 2 ;;
         --ndk)         need_arg "$@"; NDK_OPT="$2"; shift 2 ;;
         --api)         need_arg "$@"; API_LEVEL="$2"; shift 2 ;;
@@ -166,6 +203,16 @@ if [ -z "$VERSION" ]; then
         | head -n1)"
 fi
 [ -n "$VERSION" ] || die "cannot read [workspace.package] version from Cargo.toml"
+if [ "$SLIM" -eq 1 ]; then
+    RELEASE_PROFILE="slim"
+    PROFILE_LABEL="slim（精简版）"
+    PROFILE_NOTE="slim：media.pak 由 WebP 重编码后的媒体源生成。"
+    DEFAULT_OUT_ROOT="$REPO/work/out/dist/android-slim"
+else
+    PROFILE_LABEL="standard（标准版）"
+    PROFILE_NOTE="standard：media.pak 直接使用原版媒体文件。"
+    DEFAULT_OUT_ROOT="$REPO/work/out/dist/android"
+fi
 
 DATA_ROOT="$(abs_path "$DATA_ROOT")"
 [ -d "$DATA_ROOT/BasicData" ] || die "data root has no BasicData: $DATA_ROOT"
@@ -173,7 +220,7 @@ MANIFEST="$(abs_path "$MANIFEST")"
 [ -f "$MANIFEST" ] || die "release manifest not found: $MANIFEST"
 
 if [ -z "$OUT_DIR" ]; then
-    OUT_DIR="$REPO/work/out/dist/android/$VERSION"
+    OUT_DIR="$DEFAULT_OUT_ROOT/$VERSION"
 fi
 OUT_DIR="$(abs_path "$OUT_DIR")"
 
@@ -185,15 +232,31 @@ STAGE_DATA_DIR="$GODOT_PROJECT/android_data"
 ANDROID_WORK_DIR="$REPO/work/out/android"
 MEDIA_PAK="$ANDROID_WORK_DIR/media.pak"
 DEFAULT_DEBUG_KEYSTORE="$ANDROID_WORK_DIR/debug.keystore"
-MEDIA_PACK_BIN="$REPO/target/release/media-pack.exe"
+MEDIA_PACK_BIN="$REPO/target/release-dist/media-pack.exe"
 RELEASE_DATA_TOOL="$REPO/tools/package/release_data.py"
+SLIM_MEDIA_TOOL="$REPO/tools/package/slim_media.py"
 ANDROID_DATA_TOOL="$REPO/tools/package/android_data.py"
+PRESET_TEMPLATE_TOOL="$REPO/tools/package/export_preset_template.py"
 BUILD_ANDROID_SCRIPT="$REPO/tools/build-android.sh"
-APK_NAME="ImoutoLife-${VERSION}-arm64.apk"
+SLIM_MEDIA_ROOT="$REPO/work/out/slim/$VERSION/media-src"
+PACK_SOURCE_ROOT="$DATA_ROOT"
+if [ "$SLIM" -eq 1 ]; then
+    APK_NAME="ImoutoLife-${VERSION}-android-arm64-slim.apk"
+else
+    APK_NAME="ImoutoLife-${VERSION}-android-arm64.apk"
+fi
+ANDROID_ARTIFACT_NAMES=(
+    "ImoutoLife-${VERSION}-android-arm64.apk"
+    "ImoutoLife-${VERSION}-android-arm64-slim.apk"
+)
 APK_PATH="$OUT_DIR/$APK_NAME"
 
 [ -f "$RELEASE_DATA_TOOL" ] || die "release Data helper missing: $RELEASE_DATA_TOOL"
+if [ "$SLIM" -eq 1 ] && [ ! -f "$SLIM_MEDIA_TOOL" ]; then
+    die "slim media helper missing: $SLIM_MEDIA_TOOL"
+fi
 [ -f "$ANDROID_DATA_TOOL" ] || die "Android Data helper missing: $ANDROID_DATA_TOOL"
+[ -f "$PRESET_TEMPLATE_TOOL" ] || die "export-template helper missing: $PRESET_TEMPLATE_TOOL"
 [ -f "$BUILD_ANDROID_SCRIPT" ] || die "Android build script missing: $BUILD_ANDROID_SCRIPT"
 [ -x "$GODOT" ] || die "Godot executable not found: $GODOT"
 [ -f "$PRESET_FILE" ] || die "missing export preset file: $PRESET_FILE"
@@ -445,7 +508,28 @@ find_ndk() {
     return 1
 }
 
+publish_sha256sums() {
+    local dir="$1"
+    shift
+    local name
+    local tmp="$dir/.SHA256SUMS.tmp"
+    mkdir -p "$dir"
+    : > "$tmp"
+    for name in "$@"; do
+        if [ -f "$dir/$name" ]; then
+            (cd "$dir" && sha256sum -- "$name") >> "$tmp"
+        fi
+    done
+    if [ -s "$tmp" ]; then
+        mv -f -- "$tmp" "$dir/SHA256SUMS.txt"
+    else
+        rm -f -- "$tmp"
+        rm -f -- "$dir/SHA256SUMS.txt"
+    fi
+}
+
 echo "==> version $VERSION"
+echo "==> release profile: $RELEASE_PROFILE"
 echo "==> Godot preset: $PRESET_NAME ([preset.$PRESET_INDEX], mode=$BUILD_MODE)"
 echo "==> Data manifest: $MANIFEST"
 echo "==> System.sav template: $SYSTEM_SAVE_SOURCE"
@@ -470,8 +554,26 @@ if [ "$DRY_RUN" -eq 1 ]; then
             RELEASE_PLAN_ARGS+=(--exclude-file "$font")
         fi
     done
-    echo "==> media pack: android_data/media.pak (staged temporarily in godot/android_data/)"
+    if [ "$SLIM" -eq 1 ]; then
+        SLIM_ARGS=(
+            --root "$DATA_ROOT"
+            --manifest "$MANIFEST"
+            --dest "$SLIM_MEDIA_ROOT"
+            --dry-run
+        )
+        for prefix in "${MEDIA_PREFIXES[@]}"; do
+            SLIM_ARGS+=(--exclude-prefix "$prefix")
+        done
+        echo "==> slim media staging: $SLIM_MEDIA_ROOT"
+        python "$SLIM_MEDIA_TOOL" "${SLIM_ARGS[@]}"
+        PACK_SOURCE_ROOT="$SLIM_MEDIA_ROOT"
+        echo "    would pack media from the staged slim tree, manifest remains: $MANIFEST"
+    else
+        echo "==> standard media staging: use original data root"
+    fi
+    echo "==> media pack: android_data/media.pak ($RELEASE_PROFILE profile)"
     echo "    include prefixes: $PACK_PREFIX_SUMMARY"
+    echo "    compression: auto (per-entry zstd level 9 when smaller)"
     echo "    Android staging also excludes the retail Japanese fonts:"
     echo "      ◆GenJyuuGothicX-P-Bold.ttf"
     echo "      07やさしさゴシックボールド.ttf"
@@ -483,13 +585,16 @@ if [ "$DRY_RUN" -eq 1 ]; then
         echo "==> dry run: media-pack available: $MEDIA_PACK_BIN"
     else
         echo "==> dry run: media-pack not built yet: $MEDIA_PACK_BIN"
-        echo "    a real run builds it with: cargo build -q --release -p wolf-format --bin media-pack"
+        echo "    a real run builds it with: cargo build -q --profile release-dist -p wolf-format --bin media-pack"
     fi
 
     if check_android_templates; then
         echo "==> dry run: Android export templates available"
     else
         echo "warning: a real export would stop because Android export templates are missing" >&2
+    fi
+    if [ -n "$TEMPLATE_OPT" ]; then
+        echo "==> dry run: would use custom Android template: $TEMPLATE_OPT"
     fi
 
     if find_jdk; then
@@ -519,7 +624,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     fi
 
     if [ "$SKIP_BUILD" -eq 0 ]; then
-        echo "==> dry run: would build GDExtension with: bash tools/build-android.sh --release --api $API_LEVEL"
+        echo "==> dry run: would build GDExtension with: bash tools/build-android.sh --dist --api $API_LEVEL"
     else
         echo "==> dry run: would reuse existing $SO_FILE (--skip-build)"
     fi
@@ -540,8 +645,13 @@ if [ "$DRY_RUN" -eq 1 ]; then
         fi
     fi
 
-    echo "==> dry run: would export APK to: $APK_PATH"
+    echo "==> dry run: would export $RELEASE_PROFILE APK to: $APK_PATH"
     echo "==> dry run: would verify APK with: python tools/package/android_data.py verify-apk --apk \"$APK_PATH\" --require-so"
+    echo "==> dry run: would publish SHA256SUMS.txt in: $OUT_DIR"
+    echo "    it will cover whichever of these current-version artifacts exist:"
+    for name in "${ANDROID_ARTIFACT_NAMES[@]}"; do
+        echo "      $name"
+    done
     if [ -e "$OUT_DIR" ] && [ "$FORCE" -ne 1 ]; then
         echo "    note: output exists; a real run requires --force"
     fi
@@ -565,6 +675,7 @@ export PATH="$JDK_DIR/bin:$PATH"
 
 # Always clean up temporary godot/android_data and staged launcher icons on exit so Windows export stays spotless.
 cleanup() {
+    restore_export_preset
     if [ -d "$STAGE_DATA_DIR" ] || [ -e "$STAGE_DATA_DIR" ]; then
         rm -rf -- "$STAGE_DATA_DIR"
         echo "==> cleaned temporary staging directory: $STAGE_DATA_DIR"
@@ -582,31 +693,48 @@ trap cleanup EXIT
 # 1. Build libwolf_gdext.so (arm64-v8a) and media-pack.exe.
 if [ "$SKIP_BUILD" -eq 0 ]; then
     echo "==> building Android arm64-v8a GDExtension"
-    BUILD_ARGS=(--release --api "$API_LEVEL")
+    BUILD_ARGS=(--dist --api "$API_LEVEL")
     if [ -n "$NDK_OPT" ]; then
         BUILD_ARGS+=(--ndk "$NDK_OPT")
     fi
     bash "$BUILD_ANDROID_SCRIPT" "${BUILD_ARGS[@]}"
     echo "==> building media packer"
-    cargo build -q --release -p wolf-format --bin media-pack
+    cargo build -q --profile release-dist -p wolf-format --bin media-pack
 else
     echo "==> skipping Android GDExtension build (--skip-build)"
     if [ ! -x "$MEDIA_PACK_BIN" ]; then
         echo "==> media-pack missing; building it despite --skip-build"
-        cargo build -q --release -p wolf-format --bin media-pack
+        cargo build -q --profile release-dist -p wolf-format --bin media-pack
     fi
 fi
 
 [ -s "$SO_FILE" ] || die "Android arm64 GDExtension missing or empty: $SO_FILE"
 [ -x "$MEDIA_PACK_BIN" ] || die "media packer missing after build: $MEDIA_PACK_BIN"
 
+if [ "$SLIM" -eq 1 ]; then
+    SLIM_ARGS=(
+        --root "$DATA_ROOT"
+        --manifest "$MANIFEST"
+        --dest "$SLIM_MEDIA_ROOT"
+    )
+    for prefix in "${MEDIA_PREFIXES[@]}"; do
+        SLIM_ARGS+=(--exclude-prefix "$prefix")
+    done
+    echo "==> staging slim media source: $SLIM_MEDIA_ROOT"
+    python "$SLIM_MEDIA_TOOL" "${SLIM_ARGS[@]}"
+    [ -d "$SLIM_MEDIA_ROOT" ] || die "slim media staging tree missing: $SLIM_MEDIA_ROOT"
+    PACK_SOURCE_ROOT="$SLIM_MEDIA_ROOT"
+fi
+
 # 2. Pack media into work/out/android/media.pak.
 mkdir -p "$ANDROID_WORK_DIR"
 rm -f -- "$MEDIA_PAK"
 PACK_ARGS=(
-    --root "$(to_win_path "$DATA_ROOT")"
+    --root "$(to_win_path "$PACK_SOURCE_ROOT")"
     --manifest "$(to_win_path "$MANIFEST")"
     --output "$(to_win_path "$MEDIA_PAK")"
+    --compression auto
+    --zstd-level 9
 )
 STAGE_EXCLUDES=()
 for prefix in "${MEDIA_PREFIXES[@]}"; do
@@ -614,7 +742,7 @@ for prefix in "${MEDIA_PREFIXES[@]}"; do
     STAGE_EXCLUDES+=(--exclude-prefix "$prefix")
 done
 
-echo "==> packing media into $MEDIA_PAK"
+echo "==> packing $RELEASE_PROFILE media into $MEDIA_PAK"
 "$MEDIA_PACK_BIN" "${PACK_ARGS[@]}"
 [ -s "$MEDIA_PAK" ] || die "media packer did not produce a non-empty file: $MEDIA_PAK"
 
@@ -704,6 +832,7 @@ mkdir -p "$OUT_DIR"
 # 7. Export APK.
 GODOT_PROJECT_WIN="$(to_win_path "$GODOT_PROJECT")"
 APK_PATH_WIN="$(to_win_path "$APK_PATH")"
+apply_custom_template
 echo "==> exporting Android APK ($BUILD_MODE): $APK_PATH"
 "$GODOT" --headless --path "$GODOT_PROJECT_WIN" \
     "$EXPORT_FLAG" "$PRESET_NAME" "$APK_PATH_WIN"
@@ -718,8 +847,9 @@ BUILT="$(date -u +%Y-%m-%d)"
 echo "==> writing README_ANDROID.txt"
 sed 's/$/\r/' > "$OUT_DIR/README_ANDROID.txt" <<EOF
 ========================================================================
- 妹！生活 ～单色～ Godot  —  Android APK 发布包  v$VERSION
- 构建模式：$BUILD_MODE    架构：arm64-v8a    构建日期（UTC）：$BUILT
+ 妹！生活 ～单色～ Godot  —  Android APK 发布包（$RELEASE_PROFILE）  v$VERSION
+ 发布类型：$PROFILE_LABEL    构建模式：$BUILD_MODE
+ 架构：arm64-v8a    构建日期（UTC）：$BUILT
 ========================================================================
 
 【安装方式】
@@ -729,8 +859,10 @@ sed 's/$/\r/' > "$OUT_DIR/README_ANDROID.txt" <<EOF
        adb install -r "$APK_NAME"
 
 【首次启动说明】
-  - 游戏资源（media.pak、BasicData、MapData 及初始 System.sav）
-    已打包进 APK，首次启动时会自动释放到本地应用数据目录，可能需要数秒。
+  - BasicData、MapData 及初始 System.sav 会在首次启动时释放到本地应用数据目录。
+  - media.pak 以未压缩资源形式留在 APK 内，由游戏直接随机读取，
+    不再复制一份到应用数据目录，因此不会额外占用约 100 MB 手机空间。
+  - media.pak 对能受益的条目按条启用 zstd 压缩。$PROFILE_NOTE
   - 界面文字使用设备系统自带的简体中文字体，不随 APK 携带原版日文字体。
   - 本 APK 不申请网络权限，所有存档均保存在设备本地。
 
@@ -742,21 +874,28 @@ sed 's/$/\r/' > "$OUT_DIR/README_ANDROID.txt" <<EOF
 【文件清单】
   $APK_NAME           ← Android 安装包（arm64-v8a）
   README_ANDROID.txt  ← 本说明
-  checksums.txt       ← 文件 SHA-256 校验值
+  checksums.txt       ← 发布包内部文件 SHA-256 校验值
+  SHA256SUMS.txt      ← 当前版本 APK 的 SHA-256 校验值
 EOF
 
 echo "==> writing checksums.txt"
 (
     cd "$OUT_DIR"
+    printf '# release profile: %s\n' "$RELEASE_PROFILE" > .checksums.tmp
     find . -type f ! -name 'checksums.txt' ! -name '.checksums.tmp' -print0 \
         | LC_ALL=C sort -z \
         | while IFS= read -r -d '' file; do
             sha256sum -- "$file"
-        done > .checksums.tmp
+        done >> .checksums.tmp
     mv .checksums.tmp checksums.txt
 )
+
+publish_sha256sums "$OUT_DIR" "${ANDROID_ARTIFACT_NAMES[@]}"
 
 echo "==> Android package contents"
 ls -lh "$OUT_DIR"
 echo
-echo "Android APK ready: $APK_PATH"
+echo "Android $RELEASE_PROFILE APK ready: $APK_PATH"
+if [ -f "$OUT_DIR/SHA256SUMS.txt" ]; then
+    echo "Artifact checksums: $OUT_DIR/SHA256SUMS.txt"
+fi

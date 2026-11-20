@@ -4,6 +4,7 @@
 # Usage:
 #   tools/build-android.sh                # release build (default)
 #   tools/build-android.sh --release      # release build + llvm-strip
+#   tools/build-android.sh --dist         # shipped release-dist profile + llvm-strip
 #   tools/build-android.sh --debug        # debug build
 #   tools/build-android.sh --check-only   # cargo check only (no NDK required)
 #   tools/build-android.sh --ndk <PATH>   # explicit Android NDK path
@@ -28,6 +29,7 @@ usage() {
 Usage: tools/build-android.sh [options]
 
   --release        build with cargo --release and strip symbols (default)
+  --dist           build with the shipped release-dist cargo profile (fat LTO, abort)
   --debug          build with cargo dev profile
   --check-only     run cargo check for aarch64-linux-android only (no NDK needed)
   --ndk PATH       path to Android NDK root directory
@@ -71,6 +73,7 @@ to_win_path() {
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --release)    MODE="release"; shift ;;
+        --dist)       MODE="release"; DIST=1; shift ;;
         --debug)      MODE="debug"; shift ;;
         --check-only) CHECK_ONLY=1; shift ;;
         --ndk)        need_arg "$@"; NDK_OPT="$2"; shift 2 ;;
@@ -96,8 +99,13 @@ fi
 cargo_args=()
 profile_dir="debug"
 if [ "$MODE" = "release" ]; then
-    cargo_args+=("--release")
-    profile_dir="release"
+    if [ "${DIST:-0}" -eq 1 ]; then
+        cargo_args+=("--profile" "release-dist")
+        profile_dir="release-dist"
+    else
+        cargo_args+=("--release")
+        profile_dir="release"
+    fi
 fi
 
 # 2. Fast check-only mode does not require NDK or linker.

@@ -1,11 +1,12 @@
-//! M16 item 11: one mouse click reaches every parallel opcode-123 poller.
+//! M16 item 11: one mouse click is consumed by one parallel opcode-123 poller.
 //!
-//! BUG-30 has two halves:
+//! The input contract has two halves:
 //!
 //! * opcode 125's automatic input is delivered once per coroutine and survives
 //!   one frame of TTL, so a coroutine that ran before the injector still sees it;
-//! * a real mouse edge is broadcast to every coroutine polling opcode 123 in the
-//!   same frame. The first poller must not spend the click for the next one.
+//! * a real mouse edge is a single-consumer event. Once the first opcode-123
+//!   poller in a frame accepts it, overlapping pollers and host-level hotspots
+//!   must not fire from the same click.
 //!
 //! The first two tests run without game data: they drive one or two VMs and a
 //! local Host that mirrors the production click bookkeeping. The other tests use
@@ -108,6 +109,9 @@ impl SharedClickHost {
     }
 
     fn mouse_key_bits(&mut self) -> u32 {
+        if self.consumed {
+            return 0;
+        }
         let pending = self.pending;
         self.consumed = true;
         key::mouse_bits(self.buttons, self.previous) | pending
@@ -200,11 +204,9 @@ fn bug_30_auto_key_ttl_reaches_a_coroutine_that_ran_before_the_injector() {
     );
 }
 
-/// The same click edge is visible to two independent VMs stepped in the same
-/// frame. This is the smallest form of the parallel-input contract: the first
-/// VM's poll consumes the edge for the frame, but not for the second VM.
+/// The first VM consumes the edge for the frame; the second poller sees nothing.
 #[test]
-fn two_vm_instances_both_see_one_click_and_the_next_click() {
+fn two_vm_instances_share_a_single_consumer_edge() {
     let event = |id: u32, poll: i32, count: i32| {
         common_event(
             id,
@@ -230,9 +232,9 @@ fn two_vm_instances_both_see_one_click_and_the_next_click() {
     second.step_frame(&mut host);
     host.frame_end();
     assert_eq!(first.vars.get(1), key::CODE_OK, "first VM saw the click");
-    assert_eq!(second.vars.get(2), key::CODE_OK, "second VM saw the click");
+    assert_eq!(second.vars.get(2), 0, "second VM did not also consume it");
     assert_eq!(first.vars.get(11), 1);
-    assert_eq!(second.vars.get(12), 1);
+    assert_eq!(second.vars.get(12), 0);
 
     for _ in 0..3 {
         host.frame_begin();
@@ -241,7 +243,7 @@ fn two_vm_instances_both_see_one_click_and_the_next_click() {
         host.frame_end();
     }
     assert_eq!(first.vars.get(11), 1, "a held button is not a new click");
-    assert_eq!(second.vars.get(12), 1, "a held button is not a new click");
+    assert_eq!(second.vars.get(12), 0, "a held button is not a new click");
 
     host.buttons = 0;
     host.frame_begin();
@@ -261,23 +263,27 @@ fn two_vm_instances_both_see_one_click_and_the_next_click() {
     );
     assert_eq!(
         second.vars.get(12),
-        2,
-        "the second click reaches the second VM"
+        0,
+        "the second click still goes only to the first consumer"
     );
 }
 
 fn parallel_script(poll: i32, count: i32) -> Vec<Slot> {
     vec![
+        cmd(170, &[0], &[]),
         cmd(123, &[2_000_000 + poll, 0x91], &[]),
         cmd(121, &[2_000_000 + count, 1, 0, 0x100], &[]),
+        cmd(498, &[], &[]),
     ]
 }
 
 fn delayed_parallel_script(poll: i32, count: i32) -> Vec<Slot> {
     vec![
         cmd(180, &[1], &[]),
+        cmd(170, &[0], &[]),
         cmd(123, &[2_000_000 + poll, 0x91], &[]),
         cmd(121, &[2_000_000 + count, 1, 0, 0x100], &[]),
+        cmd(498, &[], &[]),
     ]
 }
 
@@ -349,62 +355,53 @@ fn open_game() -> Option<Game> {
     }
 }
 
-fn run_synthetic_click_round(game: &mut Game) {
-    let left = 10u32;
-    let right = 11u32;
-    let left_poll = 1usize;
-    let right_poll = 2usize;
-    let left_count = 11usize;
-    let right_count = 12usize;
-
-    // One press edge. Both parallel pages are blocked on their wait poll, so the
-    // frame both must resume and count exactly once.
+fn run_synthetic_click_round(game: &mut Game, first_count: usize, second_count: usize) {
+    // One press edge. Both pages are blocked on their wait poll, but only the
+    // first one to run may accept the click.
     game.mouse_buttons = 1;
     game.frame();
-    assert_eq!(game.vm.vars.get(left_poll), key::CODE_OK);
-    assert_eq!(game.vm.vars.get(right_poll), key::CODE_OK);
     assert_eq!(
-        game.vm.vars.get(left_count),
+        game.vm.vars.get(first_count),
         1,
-        "event {left} saw the click"
+        "the first poller saw the click"
     );
     assert_eq!(
-        game.vm.vars.get(right_count),
-        1,
-        "event {right} saw the click"
+        game.vm.vars.get(second_count),
+        0,
+        "the overlapping poller did not also fire"
     );
 
     // Holding the same button is not a new click.
     for _ in 0..3 {
         game.frame();
     }
-    assert_eq!(game.vm.vars.get(left_count), 1, "no repeat while held");
-    assert_eq!(game.vm.vars.get(right_count), 1, "no repeat while held");
+    assert_eq!(game.vm.vars.get(first_count), 1, "no repeat while held");
+    assert_eq!(game.vm.vars.get(second_count), 0, "no repeat while held");
 
     // Releasing and pressing again is a second independent click.
     game.mouse_buttons = 0;
     game.frame();
-    assert_eq!(game.vm.vars.get(left_count), 1);
-    assert_eq!(game.vm.vars.get(right_count), 1);
+    assert_eq!(game.vm.vars.get(first_count), 1);
+    assert_eq!(game.vm.vars.get(second_count), 0);
     game.mouse_buttons = 1;
     game.frame();
     assert_eq!(
-        game.vm.vars.get(left_count),
+        game.vm.vars.get(first_count),
         2,
-        "second click reaches {left}"
+        "second click reaches the first consumer"
     );
     assert_eq!(
-        game.vm.vars.get(right_count),
-        2,
-        "second click reaches {right}"
+        game.vm.vars.get(second_count),
+        0,
+        "second click does not reach the overlapping poller"
     );
 
     // The second press is also spent once.
     for _ in 0..3 {
         game.frame();
     }
-    assert_eq!(game.vm.vars.get(left_count), 2);
-    assert_eq!(game.vm.vars.get(right_count), 2);
+    assert_eq!(game.vm.vars.get(first_count), 2);
+    assert_eq!(game.vm.vars.get(second_count), 0);
 }
 
 fn synthetic_parallel_game(events: &[(u32, Vec<Slot>)]) -> Option<Game> {
@@ -415,31 +412,29 @@ fn synthetic_parallel_game(events: &[(u32, Vec<Slot>)]) -> Option<Game> {
     Some(game)
 }
 
-/// Two parallel map events poll 123 with the wait bit. One click in one frame
-/// must release both; the next press must reach both again, once each.
+/// Two parallel map events poll 123 with the wait bit. Only the first poller in
+/// spawn order receives the click; reversing spawn order reverses the winner.
 #[test]
-fn one_click_is_broadcast_to_every_parallel_123_poller_in_both_spawn_orders() {
+fn one_click_reaches_only_the_first_parallel_123_poller() {
     let left = (10u32, parallel_script(1, 11));
     let right = (11u32, parallel_script(2, 12));
 
     let Some(mut forward) = synthetic_parallel_game(&[left.clone(), right.clone()]) else {
         return;
     };
-    run_synthetic_click_round(&mut forward);
+    run_synthetic_click_round(&mut forward, 11, 12);
 
-    // Reversing the map event order reverses spawn order. The broadcast must not
-    // depend on which coroutine the interpreter reaches first.
+    // Reversing the map event order reverses spawn order and therefore the winner.
     let Some(mut reverse) = synthetic_parallel_game(&[right, left]) else {
         return;
     };
-    run_synthetic_click_round(&mut reverse);
+    run_synthetic_click_round(&mut reverse, 12, 11);
 }
 
-/// A click that arrives while both parallel pages are in a one-frame wait has
-/// no opcode-123 poll to deliver it. It must stay pending for the next frame,
-/// where both pollers still receive it.
+/// A click that arrives while both pages are in a one-frame wait stays pending
+/// for the next frame, where only the first poller may accept it.
 #[test]
-fn a_click_before_the_next_poll_is_carried_to_every_parallel_reader() {
+fn a_click_before_the_next_poll_is_carried_to_one_parallel_reader() {
     let events = [
         (20u32, delayed_parallel_script(3, 13)),
         (21u32, delayed_parallel_script(4, 14)),
@@ -455,8 +450,6 @@ fn a_click_before_the_next_poll_is_carried_to_every_parallel_reader() {
     assert_eq!(game.vm.vars.get(14), 0, "no poll ran this frame");
 
     game.frame();
-    assert_eq!(game.vm.vars.get(3), key::CODE_OK);
-    assert_eq!(game.vm.vars.get(4), key::CODE_OK);
     assert_eq!(
         game.vm.vars.get(13),
         1,
@@ -464,15 +457,15 @@ fn a_click_before_the_next_poll_is_carried_to_every_parallel_reader() {
     );
     assert_eq!(
         game.vm.vars.get(14),
-        1,
-        "the carried click reached event 21"
+        0,
+        "the overlapping event 21 poller did not also fire"
     );
 
     for _ in 0..3 {
         game.frame();
     }
     assert_eq!(game.vm.vars.get(13), 1, "the carried click fires once");
-    assert_eq!(game.vm.vars.get(14), 1, "the carried click fires once");
+    assert_eq!(game.vm.vars.get(14), 0, "the carried click fires once");
 }
 
 fn two_real_parallel_events() -> Option<Map> {
@@ -497,10 +490,10 @@ fn clickable_picture(number: i32, x: i32, y: i32) -> Picture {
 
 /// Real data: SampleMapA events 16 (`コマンド実行`) and 26
 /// (`システム関係の監視`) are both parallel pages. Event 16 writes the hovered
-/// command index into v67; event 26 plays its click SE when picture 1112 is
-/// hovered. One press must make both real scripts react in the same frame.
+/// command index into v67; event 26 would play its click SE when picture 1112 is
+/// hovered. One press must produce only one of those side effects.
 #[test]
-fn real_sample_map_events_16_and_26_both_react_to_one_click() {
+fn real_sample_map_events_16_and_26_do_not_both_consume_one_click() {
     let Some(map) = two_real_parallel_events() else {
         eprintln!("skipping real parallel-input test: SampleMapA.mps has no event 16/26");
         return;
@@ -531,10 +524,11 @@ fn real_sample_map_events_16_and_26_both_react_to_one_click() {
         "event 16's real 123 poll saw the command click"
     );
     assert!(
-        game.sounds
+        !game
+            .sounds
             .iter()
             .any(|sound| sound.file == "SE/Enter.wav" && sound.action == SoundAction::Play),
-        "event 26's real 123 poll saw the same click and played its SE"
+        "event 26's overlapping poller must not consume the same click"
     );
 
     for _ in 0..3 {

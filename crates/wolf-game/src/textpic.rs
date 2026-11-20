@@ -8,10 +8,10 @@
 //! (2,645 of type 2, 91 of type 4) and 2,403 of those carry a markup string, so this
 //! is not a corner case - it is the whole HUD.
 //!
-//! The host used to strip the markup (`messagetext::strip`) and draw every text picture
-//! at `choice::TEXT_PX`, which is why the HUD collapsed into overlapping labels: CE217
-//! alone places three text pictures that only make sense with their own sizes *and*
-//! their own anchors - `\f[18]73\f[14]日` right-aligned on x=66,
+//! Stripping the markup (`messagetext::strip`) and drawing every text picture at
+//! `choice::TEXT_PX` collapses the HUD into overlapping labels: CE217 alone places
+//! three text pictures that only make sense with their own sizes *and* their own
+//! anchors - `\f[18]73\f[14]日` right-aligned on x=66,
 //! `\f[24]\v[4]:\v[5]` right-aligned on x=140, `\f[18]周六` left-aligned on x=150.
 //!
 //! # Scope
@@ -153,7 +153,7 @@ const MAX_ESCAPE_DEPTH: u8 = 8;
 /// The escape state a run inherits.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Style {
-    /// Font size actually used to lay this run out, in pixels.
+    /// Layout font size for this run, in pixels.
     pub font_px: f32,
     /// Size requested by the last `\f[n]`, before the no-antialias adjustment.
     pub requested_px: f32,
@@ -483,9 +483,9 @@ fn layout_with_pitch(
             }
             let width = width_of(&chunk.text, chunk.style.font_px, advance);
             // Retail aligns every run on a line to the line's tallest font baseline:
-            // FUN_00494480 draws at `y + (line_max_font - run_font) * scale`
-            // (00494480_FUN_00494480.c:682/713). Without this a small run after a
-            // large one sits too high, e.g. the HUD `[32]1[14]天` block.
+            // the engine draws at `y + (line_max_font - run_font) * scale`. Without
+            // this a small run after a large one sits too high, e.g. the HUD
+            // `[32]1[14]天` block.
             let run_y = line_top + (line_font_px - chunk.style.font_px);
             let mut run = run_of(chunk, cursor, run_y, false);
             run.width = width;
@@ -544,10 +544,10 @@ struct Line {
     /// Index of the first chunk that `<R>` moved to the right edge.
     tail_from: Option<usize>,
     width: f32,
-    /// `\space[n]` active when this line ended, if the author set one. `None` keeps
-    /// the legacy 1.3 em pitch used by the HUD; `Some(gap)` means the retail
-    /// "font size + line gap" pitch, which is how the save-slot names ask for a tight
-    /// two-line block (`\space[0]` -> exactly one em between baselines).
+    /// `\space[n]` active when this line ended, if the author set one. `None` uses the
+    /// HUD's default 1.3 em pitch; `Some(gap)` means the retail "font size + line gap"
+    /// pitch, which is how the save-slot names ask for a tight two-line block
+    /// (`\space[0]` -> exactly one em between baselines).
     gap: Option<f32>,
 }
 
@@ -626,9 +626,9 @@ impl<'a, 'b> Builder<'a, 'b> {
             TextToken::Backslash => self.buf.push('\\'),
             TextToken::Newline => self.end_line(),
             // The tokeniser turns a literal `\space[n]` into this dedicated token, not
-            // into [TextToken::Code]. Without this arm the gap silently stayed `None` and
-            // the slot-name block kept the legacy 1.3 em pitch (measured 20.8 px at 16 px
-            // instead of the retail 16).
+            // into [TextToken::Code]. Without this arm the gap stays `None`, so the
+            // slot-name block uses the 1.3 em pitch (measured 20.8 px at 16 px instead
+            // of the retail 16).
             TextToken::LineGap(gap) => self.line_gap = Some(*gap as f32),
             TextToken::AbsoluteX(x) => {
                 self.flush();
@@ -756,7 +756,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             }
             // `\space[n]` must be honoured: the save-slot name block writes
             // `\space[0]` before its two lines and the retail pitch is then exactly one
-            // em, not the legacy 1.3 em. Ignoring it put the second line 10 px too low.
+            // em, not the default 1.3 em. Ignoring it puts the second line 10 px too low.
             CodeKind::LineGap => {
                 if let Some(gap) = args.first().and_then(|arg| self.int_raw(arg)) {
                     self.line_gap = Some(gap as f32);
@@ -946,7 +946,7 @@ fn line_pitch(ctx: &Ctx<'_>, line: &Line, pitch: Pitch) -> f32 {
         return crate::message::line_height(font_px);
     }
     // `\space[n]` is the author's explicit line gap; retail then advances by exactly
-    // font + gap. Without it the HUD labels keep the legacy 1.3 em approximation.
+    // font + gap. Without it the HUD labels use the default 1.3 em approximation.
     match line.gap {
         Some(gap) => font_px + gap.max(0.0),
         None => font_px * DEFAULT_LINE_PITCH_RATIO,

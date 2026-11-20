@@ -29,8 +29,9 @@
 
 | 脚本 | 产出物 | 说明 |
 |---|---|---|
-| `package-godot.sh` | Windows 便携版 ZIP + NSIS 安装程序 | 完整发布包流水线，自动嵌入 PCK 与必要运行时 |
-| `package-android.sh` | Android APK (`.apk`) | Android 安装包构建、资源打包与对齐签名 |
+| `package-godot.sh` | Windows 便携版 ZIP + NSIS 安装程序 | 完整发布包流水线，自动嵌入 PCK 与必要运行时；`--slim` 生成媒体精简版，`GODOT_TEMPLATE_WINDOWS` 可指定定制 2D 模板 |
+| `package-android.sh` | Android APK (`.apk`) | Android 安装包构建、资源打包与对齐签名；`media.pak` 留在 APK 内直读，`GODOT_TEMPLATE_ANDROID` 可指定定制模板 |
+| `build-godot-template.sh` | 定制 Godot 导出模板 | 拉取匹配源码并用 SCons 构建精简 Windows/Android 模板，产物在 `work/out/godot-template/out/<version>/` |
 | `package-playable.sh` | 快速便携测试包 | 供内部测试用的轻量级打包 |
 
 ## 5. 辅助子目录

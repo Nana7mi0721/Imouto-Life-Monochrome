@@ -3,7 +3,6 @@ name = "wolf-game"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 publish.workspace = true
 description = "Game state, scene stack and asset database"
 
@@ -19,7 +18,7 @@ wolf-audio = { workspace = true, optional = true }
 # Only what the WOLF asset set actually ships: every picture in this game is a PNG or a
 # JPEG (SystemGraphic/TitleGraphic.jpg, MapChip/*.png ...). Enabling the other decoders
 # triples the cold build and buys nothing.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 # Text pictures need real glyph advances for anchor/right-align maths; the renderer
 # already shapes the same TTF, so this keeps both sides on the same width.
 ttf-parser = "0.25"

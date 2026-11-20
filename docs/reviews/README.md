@@ -21,6 +21,8 @@
 | [REVIEW_9a817e4_FIX_REPORT.md](REVIEW_9a817e4_FIX_REPORT.md) | 现行 · 修复 | 基线 `9a817e4` 审查处置：名牌缓存、格子条对齐、夜间点击热区 |
 | [LIVE_PLAY_FIX_REPORT.md](LIVE_PLAY_FIX_REPORT.md) | 现行 · 实机 | 实机测试断言修复：开场穿透取消、窗口图标、音频通道管理 |
 | [T13_UI_REGRESSION_AUDIT.md](T13_UI_REGRESSION_AUDIT.md) | 现行 · UI专项 | 用户 15 项截图缺陷逐项复核与命中判定测试 |
+| [public_release_deep_audit_4f77b128.md](public_release_deep_audit_4f77b128.md) | 现行 · 公开发布审计 | 基线 `4f77b128` 的 P0 构建阻断、存档原子写、输入/Android/隐私缺陷与包体优化方向 |
+| [PUBLIC_RELEASE_FIX_REPORT.md](PUBLIC_RELEASE_FIX_REPORT.md) | 现行 · 修复交接 | 上述审计的修复落点、媒体/模板/Rust 瘦身数据与验证基线 |
 
 ## 3. 云端只读审查轮次
 

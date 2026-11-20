@@ -8,15 +8,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
 
-use wolf_format::media_pack::{validate_path, MediaPackWriter};
+use wolf_format::media_pack::{
+    validate_path, CompressionPolicy, MediaPack, MediaPackWriter, DEFAULT_ZSTD_LEVEL,
+};
 
 const USAGE: &str = "\
 usage: media-pack --root DIR --manifest FILE --include-prefix PREFIX ... --output FILE
+                  [--compression auto|store] [--zstd-level N]
 
   --root DIR              unpacked data root (contains Picture/, BGM/, ...)
   --manifest FILE         newline-separated relative paths
   --include-prefix PFX    pack entries under PFX (repeatable)
   --output FILE           destination, normally Data/media.pak
+  --compression MODE      auto (default: zstd only when smaller) or store
+  --zstd-level N          zstd level for auto mode (default: 9)
 ";
 
 #[derive(Debug)]
@@ -25,6 +30,8 @@ struct Args {
     manifest: PathBuf,
     include_prefixes: Vec<String>,
     output: PathBuf,
+    compression: CompressionPolicy,
+    zstd_level: i32,
 }
 
 fn main() {
@@ -60,6 +67,8 @@ fn run() -> Result<(), String> {
     let root = fs::canonicalize(&args.root)
         .map_err(|error| format!("cannot resolve root {}: {error}", args.root.display()))?;
     let mut writer = MediaPackWriter::new();
+    writer.set_compression(args.compression);
+    writer.set_zstd_level(args.zstd_level);
     for relative in selected {
         let source = args.root.join(&relative);
         let canonical = fs::canonicalize(&source)
@@ -82,11 +91,28 @@ fn run() -> Result<(), String> {
     let stats = writer
         .write(&args.output)
         .map_err(|error| error.to_string())?;
+    let reader = MediaPack::open(&args.output).map_err(|error| error.to_string())?;
+    if reader.len() != stats.files {
+        return Err(format!(
+            "pack verification found {} entries, expected {}",
+            reader.len(),
+            stats.files
+        ));
+    }
+    for path in reader.paths() {
+        reader
+            .read(path)
+            .map_err(|error| format!("pack verification failed for {path}: {error}"))?
+            .ok_or_else(|| format!("pack verification lost {path}"))?;
+    }
     println!(
-        "packed: {} files / {} bytes -> {}",
+        "packed: {} files / {} bytes raw / {} zstd -> {} bytes ({:.1}% of raw): {}",
         stats.files,
         stats.bytes,
-        args.output.display()
+        stats.compressed_files,
+        stats.output_bytes,
+        stats.output_bytes as f64 * 100.0 / stats.bytes.max(1) as f64,
+        args.output.display(),
     );
     Ok(())
 }
@@ -96,6 +122,8 @@ fn parse_args() -> Result<Option<Args>, String> {
     let mut manifest: Option<PathBuf> = None;
     let mut include_prefixes = Vec::new();
     let mut output: Option<PathBuf> = None;
+    let mut compression = CompressionPolicy::Auto;
+    let mut zstd_level = DEFAULT_ZSTD_LEVEL;
     let mut args = std::env::args().skip(1);
     while let Some(argument) = args.next() {
         match argument.as_str() {
@@ -118,6 +146,24 @@ fn parse_args() -> Result<Option<Args>, String> {
                 PathBuf::from(take_value(&mut args, "--output")?),
                 "--output",
             )?,
+            "--compression" => {
+                compression = match take_value(&mut args, "--compression")?.as_str() {
+                    "auto" => CompressionPolicy::Auto,
+                    "store" => CompressionPolicy::Store,
+                    other => return Err(format!("--compression must be auto or store: {other}")),
+                };
+            }
+            "--zstd-level" => {
+                let value = take_value(&mut args, "--zstd-level")?;
+                zstd_level = value
+                    .parse::<i32>()
+                    .map_err(|_| format!("invalid --zstd-level {value:?}"))?;
+                if !(1..=22).contains(&zstd_level) {
+                    return Err(format!(
+                        "--zstd-level must be between 1 and 22: {zstd_level}"
+                    ));
+                }
+            }
             _ if argument.starts_with("--root=") => set_once(
                 &mut root,
                 PathBuf::from(&argument["--root=".len()..]),
@@ -136,6 +182,24 @@ fn parse_args() -> Result<Option<Args>, String> {
                 PathBuf::from(&argument["--output=".len()..]),
                 "--output",
             )?,
+            _ if argument.starts_with("--compression=") => {
+                compression = match &argument["--compression=".len()..] {
+                    "auto" => CompressionPolicy::Auto,
+                    "store" => CompressionPolicy::Store,
+                    other => return Err(format!("--compression must be auto or store: {other}")),
+                };
+            }
+            _ if argument.starts_with("--zstd-level=") => {
+                let value = &argument["--zstd-level=".len()..];
+                zstd_level = value
+                    .parse::<i32>()
+                    .map_err(|_| format!("invalid --zstd-level {value:?}"))?;
+                if !(1..=22).contains(&zstd_level) {
+                    return Err(format!(
+                        "--zstd-level must be between 1 and 22: {zstd_level}"
+                    ));
+                }
+            }
             other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
         }
     }
@@ -149,6 +213,8 @@ fn parse_args() -> Result<Option<Args>, String> {
         manifest: manifest.ok_or_else(|| format!("--manifest is required\n{USAGE}"))?,
         include_prefixes,
         output: output.ok_or_else(|| format!("--output is required\n{USAGE}"))?,
+        compression,
+        zstd_level,
     }))
 }
 

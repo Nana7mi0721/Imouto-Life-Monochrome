@@ -7,10 +7,16 @@
 | 文档 | 状态 | 核心内容 |
 |---|---|---|
 | [PACKAGING.md](PACKAGING.md) | **现行 · 交付** | 全平台打包指南：Windows NSIS 安装包、便携 ZIP 与 Android ARM64 Release APK 签名流水线 |
+| [GODOT_TEMPLATE.md](GODOT_TEMPLATE.md) | 现行 · 构建 | 定制 Godot 4.7.2 导出模板：safe/aggressive 参数、实测体积与打包接入 |
 | [ASSETS.md](ASSETS.md) | 现行 · 规范 | 素材导出与封包规范：`wolf-cli assets`、媒体清单校验与数据库资源提取 |
 | [PROJECT_ASSETS.md](PROJECT_ASSETS.md) | 现行 · 资产 | 仓库资产盘点：发布后清理记录、保留资产与证据链清单 |
 
 ## 产物与交付路径
 
-- **Windows 发行包**：`work/out/dist/<version>/`（含 `Imouto Life setup.exe` 与 `Imouto Life setup.zip`）
-- **Android 安装包**：`work/out/dist/<version>/`（含 `ImoutoLife-release.apk`）
+- **Windows 发行包**：`work/out/dist/godot/<version>/` 与命名规范的
+  `ImoutoLife-<version>-windows-amd64-setup.exe` / `.zip`（可选 `-slim` 媒体精简版）
+- **Android 安装包**：`work/out/dist/android/<version>/` 与
+  `work/out/dist/android-slim/<version>/`，文件名为
+  `ImoutoLife-<version>-android-arm64.apk` / `-slim.apk`。
+  `media.pak` 以未压缩的 `.blob.cfb` 留在 APK 内并由运行时直接随机读取，
+  首次启动不再复制第二份到应用数据目录。

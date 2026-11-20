@@ -1,11 +1,12 @@
 //! Read-only, obfuscated media pack (`Data/media.pak`).
 //!
-//! The pack is deliberately simple: a plaintext 32-byte header points at an
-//! obfuscated index at the end of the file, while every file body is stored at a
-//! 16-byte-aligned absolute offset. A fixed 32-byte seed drives a splitmix64
-//! XOR stream, and the stream is selected by the byte's absolute offset. That
-//! lets the reader decrypt any range without loading the whole pack and avoids
-//! the repeating-XOR pattern of a whole-file stream.
+//! Version 2 adds per-entry zstd compression; the reader also accepts version 1
+//! packs, which stored every body uncompressed. A plaintext 32-byte header points
+//! at an obfuscated index at the end of the file, while every stored body starts
+//! at a 16-byte-aligned absolute offset. A fixed 32-byte seed drives a splitmix64
+//! XOR stream selected by the byte's absolute offset. That lets the reader
+//! decrypt any range without loading the whole pack and avoids the repeating-XOR
+//! pattern of a whole-file stream.
 //!
 //! Only media directories belong in this pack. Databases, maps, saves and mod
 //! overlays stay as plain files on disk; [`crate::media_pack`] does not impose
@@ -20,11 +21,14 @@ use std::sync::Mutex;
 
 use crate::dxarchive::crc32_for_pack as crc32;
 
-/// File magic. The trailing digit is also the format's major version.
-pub const MAGIC: [u8; 8] = *b"WOLFMPK1";
+/// Current file magic. The trailing digit is also the format's major version.
+pub const MAGIC: [u8; 8] = *b"WOLFMPK2";
+
+/// Version-1 file magic, still accepted by the reader.
+pub const MAGIC_V1: [u8; 8] = *b"WOLFMPK1";
 
 /// On-disk format version.
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 
 /// Plaintext header size.
 pub const HEADER_SIZE: u64 = 32;
@@ -46,7 +50,42 @@ const SEED: [u8; 32] = [
 
 const STREAM_BLOCK: u64 = 64;
 const GOLDEN: u64 = 0x9E37_79B9_7F4A_7C15;
-const INDEX_FIXED: usize = 2 + 8 + 8 + 4;
+const INDEX_FIXED_V1: usize = 2 + 8 + 8 + 4;
+/// v2: path length, offset, stored size, raw size, CRC, codec, reserved.
+const INDEX_FIXED: usize = 2 + 8 + 8 + 8 + 4 + 1 + 1;
+
+/// Below this size zstd's frame overhead usually outweighs the saving.
+pub const ZSTD_MIN_BYTES: usize = 128;
+
+/// Default zstd level for release media packs.
+pub const DEFAULT_ZSTD_LEVEL: i32 = 9;
+
+/// v2 body encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum BodyCodec {
+    Store = 0,
+    Zstd = 1,
+}
+
+impl BodyCodec {
+    fn from_u8(value: u8) -> Result<Self, MediaPackError> {
+        match value {
+            0 => Ok(Self::Store),
+            1 => Ok(Self::Zstd),
+            other => Err(corrupt(format!("unsupported body codec {other}"))),
+        }
+    }
+}
+
+/// How [`MediaPackWriter`] stores entry bodies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompressionPolicy {
+    /// Store every body verbatim.
+    Store,
+    /// Compress each body with zstd when that makes the stored body smaller.
+    Auto,
+}
 
 /// Why a media pack could not be opened, read or written.
 #[derive(Debug)]
@@ -236,12 +275,17 @@ fn lookup_name(name: &str) -> Option<String> {
 struct Entry {
     path: String,
     offset: u64,
+    /// Bytes occupied by the stored (possibly compressed) body.
     size: u64,
+    /// Bytes after decoding, used for allocation and validation.
+    raw_size: u64,
     crc: u32,
+    codec: BodyCodec,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct Header {
+    version: u16,
     count: u32,
     index_offset: u64,
     index_size: u64,
@@ -260,14 +304,16 @@ impl Header {
     }
 
     fn decode(bytes: &[u8; HEADER_SIZE as usize], file_len: u64) -> Result<Self, MediaPackError> {
-        if bytes[0..8] != MAGIC {
-            return Err(corrupt("bad magic"));
-        }
         let version = u16::from_le_bytes([bytes[8], bytes[9]]);
-        if version != VERSION {
-            return Err(corrupt(format!(
-                "unsupported version {version}, only {VERSION} is readable"
-            )));
+        let magic: [u8; 8] = bytes[0..8].try_into().expect("header slice is eight bytes");
+        match (version, magic) {
+            (1, MAGIC_V1) | (2, MAGIC) => {}
+            (1 | 2, _) => return Err(corrupt("bad magic for the declared version")),
+            _ => {
+                return Err(corrupt(format!(
+                    "unsupported version {version}, only versions 1 and {VERSION} are readable"
+                )))
+            }
         }
         let flags = u16::from_le_bytes([bytes[10], bytes[11]]);
         if flags != 0 {
@@ -299,6 +345,7 @@ impl Header {
             )));
         }
         Ok(Self {
+            version,
             count,
             index_offset,
             index_size,
@@ -306,16 +353,58 @@ impl Header {
     }
 }
 
+/// Random-access byte source used by [`MediaPack`].
+///
+/// The default implementation is a local [`File`]. Hosts whose data lives
+/// inside a package (for example Godot's `res://` on Android) provide their own
+/// implementation so the pack can be read without copying it to writable
+/// storage first.
+pub trait PackSource {
+    /// Total number of bytes in the source.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the host's metadata/read error.
+    fn len(&mut self) -> std::io::Result<u64>;
+
+    /// Fills `buf` with bytes starting at absolute `offset`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UnexpectedEof` when the range is shorter than `buf`, or the
+    /// host's seek/read error.
+    fn read_exact_at(&mut self, offset: u64, buf: &mut [u8]) -> std::io::Result<()>;
+}
+
+impl PackSource for File {
+    fn len(&mut self) -> std::io::Result<u64> {
+        self.metadata().map(|metadata| metadata.len())
+    }
+
+    fn read_exact_at(&mut self, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
+        self.seek(SeekFrom::Start(offset))?;
+        self.read_exact(buf)
+    }
+}
+
 /// A random-access reader for one `media.pak`.
 ///
 /// Opening reads only the header and the index. `read` locks the file, seeks to
 /// one entry, reads exactly that entry and verifies its CRC after decryption.
-#[derive(Debug)]
 pub struct MediaPack {
     path: PathBuf,
-    file: Mutex<File>,
+    source: Mutex<Box<dyn PackSource>>,
     entries: Vec<Entry>,
     by_lower_path: HashMap<String, usize>,
+}
+
+impl fmt::Debug for MediaPack {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MediaPack")
+            .field("path", &self.path)
+            .field("entries", &self.entries.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl MediaPack {
@@ -327,44 +416,65 @@ impl MediaPack {
     /// index or a path is invalid.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, MediaPackError> {
         let path = path.as_ref().to_path_buf();
-        let mut file = File::open(&path).map_err(|source| io_error(&path, source))?;
-        let file_len = file
-            .metadata()
-            .map_err(|source| io_error(&path, source))?
-            .len();
+        let file = File::open(&path).map_err(|source| io_error(&path, source))?;
+        Self::open_source(path, Box::new(file))
+    }
+
+    /// Opens a pack from a caller-provided random-access source.
+    ///
+    /// `label` is used only in diagnostics and error messages. This is the
+    /// entry point for package-internal media such as Godot's Android
+    /// `res://android_data/media.pak.blob`.
+    ///
+    /// # Errors
+    ///
+    /// `Io` when the source cannot be read, `Corrupt` when the header, index
+    /// or a path is invalid.
+    pub fn open_source(
+        label: impl Into<PathBuf>,
+        source: Box<dyn PackSource>,
+    ) -> Result<Self, MediaPackError> {
+        let path = label.into();
+        let mut source = source;
+        let file_len = source.len().map_err(|source| io_error(&path, source))?;
         if file_len < HEADER_SIZE {
             return Err(corrupt(format!(
                 "file is {file_len} bytes, shorter than the {HEADER_SIZE}-byte header"
             )));
         }
         let mut header_bytes = [0u8; HEADER_SIZE as usize];
-        file.read_exact(&mut header_bytes)
+        source
+            .read_exact_at(0, &mut header_bytes)
             .map_err(|source| io_error(&path, source))?;
         let header = Header::decode(&header_bytes, file_len)?;
         let count = usize::try_from(header.count)
             .map_err(|_| corrupt("entry count does not fit this platform"))?;
         let index_size = usize::try_from(header.index_size)
             .map_err(|_| corrupt("index size does not fit this platform"))?;
-        if count > index_size / INDEX_FIXED {
+        let fixed_size = if header.version == 1 {
+            INDEX_FIXED_V1
+        } else {
+            INDEX_FIXED
+        };
+        if count > index_size / fixed_size {
             return Err(corrupt(format!(
                 "entry count {count} cannot fit in a {}-byte index",
                 header.index_size
             )));
         }
         let mut index = vec![0u8; index_size];
-        file.seek(SeekFrom::Start(header.index_offset))
-            .map_err(|source| io_error(&path, source))?;
-        file.read_exact(&mut index)
+        source
+            .read_exact_at(header.index_offset, &mut index)
             .map_err(|source| io_error(&path, source))?;
         xor_bytes(&mut index, header.index_offset);
-        let entries = parse_index(&index, count, header.index_offset)?;
+        let entries = parse_index(&index, count, header.index_offset, header.version)?;
         let mut by_lower_path = HashMap::with_capacity(entries.len());
         for (index, entry) in entries.iter().enumerate() {
             by_lower_path.insert(lower_path(&entry.path), index);
         }
         Ok(Self {
             path,
-            file: Mutex::new(file),
+            source: Mutex::new(source),
             entries,
             by_lower_path,
         })
@@ -428,13 +538,34 @@ impl MediaPack {
         let size = usize::try_from(entry.size)
             .map_err(|_| corrupt(format!("{} is too large for this platform", entry.path)))?;
         let mut bytes = vec![0u8; size];
-        let mut file = self.file.lock().map_err(|_| MediaPackError::LockPoisoned)?;
-        file.seek(SeekFrom::Start(entry.offset))
+        let mut source = self
+            .source
+            .lock()
+            .map_err(|_| MediaPackError::LockPoisoned)?;
+        source
+            .read_exact_at(entry.offset, &mut bytes)
             .map_err(|source| io_error(&self.path, source))?;
-        file.read_exact(&mut bytes)
-            .map_err(|source| io_error(&self.path, source))?;
-        drop(file);
+        drop(source);
         xor_bytes(&mut bytes, entry.offset);
+        if entry.codec == BodyCodec::Zstd {
+            let capacity = usize::try_from(entry.raw_size)
+                .map_err(|_| corrupt(format!("{} is too large for this platform", entry.path)))?;
+            bytes = rusty_zstd::decompress(&bytes).map_err(|error| {
+                corrupt(format!("{} has an invalid zstd body: {error}", entry.path))
+            })?;
+            if bytes.len() != capacity {
+                return Err(corrupt(format!(
+                    "{} decoded to {} bytes, expected {capacity}",
+                    entry.path,
+                    bytes.len()
+                )));
+            }
+        } else if entry.size != entry.raw_size {
+            return Err(corrupt(format!(
+                "{} stores {} bytes but declares a {} byte body",
+                entry.path, entry.size, entry.raw_size
+            )));
+        }
         let actual = crc32(&bytes);
         if actual != entry.crc {
             return Err(MediaPackError::CrcMismatch {
@@ -451,12 +582,18 @@ fn parse_index(
     index: &[u8],
     count: usize,
     index_offset: u64,
+    version: u16,
 ) -> Result<Vec<Entry>, MediaPackError> {
     let mut entries = Vec::with_capacity(count);
     let mut seen = HashSet::with_capacity(count);
     let mut cursor = 0usize;
+    let fixed_size = if version == 1 {
+        INDEX_FIXED_V1
+    } else {
+        INDEX_FIXED
+    };
     for number in 0..count {
-        if index.len().saturating_sub(cursor) < INDEX_FIXED {
+        if index.len().saturating_sub(cursor) < fixed_size {
             return Err(corrupt(format!(
                 "entry {number} is truncated at index byte {cursor}"
             )));
@@ -467,8 +604,26 @@ fn parse_index(
         cursor += 8;
         let size = read_u64(index, cursor)?;
         cursor += 8;
-        let crc = read_u32(index, cursor)?;
-        cursor += 4;
+        let (raw_size, crc, codec) = if version == 1 {
+            let crc = read_u32(index, cursor)?;
+            cursor += 4;
+            (size, crc, BodyCodec::Store)
+        } else {
+            let raw_size = read_u64(index, cursor)?;
+            cursor += 8;
+            let crc = read_u32(index, cursor)?;
+            cursor += 4;
+            let codec = BodyCodec::from_u8(index[cursor])?;
+            cursor += 1;
+            let flags = index[cursor];
+            cursor += 1;
+            if flags != 0 {
+                return Err(corrupt(format!(
+                    "entry {number} uses unsupported index flags 0x{flags:02X}"
+                )));
+            }
+            (raw_size, crc, codec)
+        };
         let end = cursor
             .checked_add(path_len)
             .ok_or_else(|| corrupt("index path range overflow"))?;
@@ -482,6 +637,19 @@ fn parse_index(
             .to_owned();
         cursor = end;
         validate_path(&path)?;
+        if version == 1 && codec != BodyCodec::Store {
+            return Err(corrupt(format!("{path} declares compression in a v1 pack")));
+        }
+        if codec == BodyCodec::Store && raw_size < size {
+            return Err(corrupt(format!(
+                "{path} stores {size} bytes but declares a {raw_size} byte body"
+            )));
+        }
+        if codec == BodyCodec::Zstd && raw_size < ZSTD_MIN_BYTES as u64 {
+            return Err(corrupt(format!(
+                "{path} declares an implausibly small zstd body"
+            )));
+        }
         if !seen.insert(lower_path(&path)) {
             return Err(MediaPackError::DuplicatePath { path });
         }
@@ -507,7 +675,9 @@ fn parse_index(
             path,
             offset,
             size,
+            raw_size,
             crc,
+            codec,
         });
     }
     if cursor != index.len() {
@@ -540,6 +710,8 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, MediaPackError> {
 pub struct PackStats {
     /// Number of files written.
     pub files: usize,
+    /// Number of bodies stored with zstd.
+    pub compressed_files: usize,
     /// Sum of the source file sizes.
     pub bytes: u64,
     /// Size of the finished pack, including header, padding and index.
@@ -550,9 +722,11 @@ pub struct PackStats {
 ///
 /// Additions are sorted by canonical path at write time, so adding the same
 /// files in a different order produces byte-identical output.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MediaPackWriter {
     files: Vec<SourceFile>,
+    compression: CompressionPolicy,
+    zstd_level: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -565,7 +739,21 @@ impl MediaPackWriter {
     /// An empty builder.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            files: Vec::new(),
+            compression: CompressionPolicy::Auto,
+            zstd_level: DEFAULT_ZSTD_LEVEL,
+        }
+    }
+
+    /// Selects whether bodies may be zstd-compressed.
+    pub fn set_compression(&mut self, compression: CompressionPolicy) {
+        self.compression = compression;
+    }
+
+    /// Sets the zstd compression level used by [`CompressionPolicy::Auto`].
+    pub fn set_zstd_level(&mut self, level: i32) {
+        self.zstd_level = level;
     }
 
     /// Adds one file under its pack-relative canonical path.
@@ -632,26 +820,50 @@ impl MediaPackWriter {
         let mut entries = Vec::with_capacity(files.len());
         let mut offset = HEADER_SIZE;
         let mut source_bytes = 0u64;
+        let mut compressed_files = 0usize;
         for file in &files {
             check_source(&file.source)?;
-            let mut bytes =
+            let bytes =
                 std::fs::read(&file.source).map_err(|source| io_error(&file.source, source))?;
-            let size = u64::try_from(bytes.len())
+            let raw_size = u64::try_from(bytes.len())
                 .map_err(|_| corrupt(format!("{} is too large", file.path)))?;
             source_bytes = source_bytes
-                .checked_add(size)
+                .checked_add(raw_size)
                 .ok_or_else(|| corrupt("total source size overflow"))?;
             let crc = crc32(&bytes);
+            let (codec, mut stored) = match self.compression {
+                CompressionPolicy::Store => (BodyCodec::Store, bytes),
+                CompressionPolicy::Auto if bytes.len() >= ZSTD_MIN_BYTES => {
+                    let compressed =
+                        rusty_zstd::compress(&bytes, self.zstd_level).map_err(|error| {
+                            MediaPackError::Source {
+                                path: file.source.clone(),
+                                detail: format!("zstd compression failed: {error}"),
+                            }
+                        })?;
+                    if compressed.len() < bytes.len() {
+                        compressed_files += 1;
+                        (BodyCodec::Zstd, compressed)
+                    } else {
+                        (BodyCodec::Store, bytes)
+                    }
+                }
+                CompressionPolicy::Auto => (BodyCodec::Store, bytes),
+            };
+            let size = u64::try_from(stored.len())
+                .map_err(|_| corrupt(format!("{} is too large", file.path)))?;
             out.seek(SeekFrom::Start(offset))
                 .map_err(|source| io_error(output, source))?;
-            xor_bytes(&mut bytes, offset);
-            out.write_all(&bytes)
+            xor_bytes(&mut stored, offset);
+            out.write_all(&stored)
                 .map_err(|source| io_error(output, source))?;
             entries.push(Entry {
                 path: file.path.clone(),
                 offset,
                 size,
+                raw_size,
                 crc,
+                codec,
             });
             let body_end = offset
                 .checked_add(size)
@@ -685,6 +897,7 @@ impl MediaPackWriter {
         let count =
             u32::try_from(entries.len()).map_err(|_| corrupt("more than 4,294,967,295 files"))?;
         let header = Header {
+            version: VERSION,
             count,
             index_offset,
             index_size,
@@ -696,6 +909,7 @@ impl MediaPackWriter {
         out.flush().map_err(|source| io_error(output, source))?;
         Ok(PackStats {
             files: entries.len(),
+            compressed_files,
             bytes: source_bytes,
             output_bytes: index_offset
                 .checked_add(index_size)
@@ -732,7 +946,10 @@ fn encode_index(entries: &[Entry]) -> Result<Vec<u8>, MediaPackError> {
         index.extend_from_slice(&path_len.to_le_bytes());
         index.extend_from_slice(&entry.offset.to_le_bytes());
         index.extend_from_slice(&entry.size.to_le_bytes());
+        index.extend_from_slice(&entry.raw_size.to_le_bytes());
         index.extend_from_slice(&entry.crc.to_le_bytes());
+        index.push(entry.codec as u8);
+        index.push(0);
         index.extend_from_slice(path);
     }
     Ok(index)
@@ -813,5 +1030,122 @@ mod tests {
             assert_eq!(part, whole[start..end], "range starting at {start}");
         }
         assert_ne!(whole[0..32], whole[32..64]);
+    }
+
+    #[test]
+    fn zstd_entries_round_trip_and_only_compress_when_smaller() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target/test-scratch/media-pack-zstd");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("scratch dir");
+        let source = root.join("compressible.bin");
+        std::fs::write(&source, vec![b'A'; 4096]).expect("source");
+        let destination = root.join("packed.pak");
+
+        let mut writer = MediaPackWriter::new();
+        writer
+            .add_file("Picture/compressible.bin", &source)
+            .expect("add");
+        let stats = writer.write(&destination).expect("write pack");
+        assert_eq!(stats.files, 1);
+        assert_eq!(stats.compressed_files, 1);
+        assert!(stats.output_bytes < stats.bytes / 4);
+
+        let reader = MediaPack::open(&destination).expect("open pack");
+        assert_eq!(
+            reader
+                .read("Picture/compressible.bin")
+                .expect("read")
+                .expect("present"),
+            vec![b'A'; 4096]
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn version_one_packs_remain_readable() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target/test-scratch/media-pack-v1");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("scratch dir");
+        let path = root.join("v1.pak");
+        write_v1_fixture(&path, "Picture/legacy.bin", b"version one body");
+
+        let reader = MediaPack::open(&path).expect("open v1 pack");
+        assert_eq!(
+            reader
+                .read("Picture/legacy.bin")
+                .expect("read")
+                .expect("present"),
+            b"version one body"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn host_provided_source_reads_without_a_local_file() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target/test-scratch/media-pack-host-source");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("scratch dir");
+        let source = root.join("picture.bin");
+        std::fs::write(&source, b"host source body").expect("source");
+        let destination = root.join("packed.pak");
+        let mut writer = MediaPackWriter::new();
+        writer.add_file("Picture/host.bin", &source).expect("add");
+        writer.write(&destination).expect("write pack");
+        let bytes = std::fs::read(&destination).expect("read pack");
+        let _ = std::fs::remove_dir_all(&root);
+
+        let reader = MediaPack::open_source(
+            "res://android_data/media.pak.blob",
+            Box::new(CursorSource(std::io::Cursor::new(bytes))),
+        )
+        .expect("open host source");
+        assert_eq!(
+            reader
+                .read("Picture/host.bin")
+                .expect("read")
+                .expect("present"),
+            b"host source body"
+        );
+    }
+
+    struct CursorSource(std::io::Cursor<Vec<u8>>);
+
+    impl PackSource for CursorSource {
+        fn len(&mut self) -> std::io::Result<u64> {
+            Ok(self.0.get_ref().len() as u64)
+        }
+
+        fn read_exact_at(&mut self, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
+            self.0.set_position(offset);
+            self.0.read_exact(buf)
+        }
+    }
+
+    fn write_v1_fixture(path: &Path, relative: &str, body: &[u8]) {
+        let offset = HEADER_SIZE;
+        let index_offset = align_up(offset + body.len() as u64, DATA_ALIGNMENT).expect("align");
+        let mut packed = vec![0u8; index_offset as usize];
+        packed[0..8].copy_from_slice(&MAGIC_V1);
+        packed[8..10].copy_from_slice(&1u16.to_le_bytes());
+        packed[12..16].copy_from_slice(&1u32.to_le_bytes());
+        packed[16..24].copy_from_slice(&index_offset.to_le_bytes());
+
+        let body_start = offset as usize;
+        packed[body_start..body_start + body.len()].copy_from_slice(body);
+        xor_bytes(&mut packed[body_start..body_start + body.len()], offset);
+
+        let mut index = Vec::new();
+        index.extend_from_slice(&(relative.len() as u16).to_le_bytes());
+        index.extend_from_slice(&offset.to_le_bytes());
+        index.extend_from_slice(&(body.len() as u64).to_le_bytes());
+        index.extend_from_slice(&crc32(body).to_le_bytes());
+        index.extend_from_slice(relative.as_bytes());
+        packed[24..32].copy_from_slice(&(index.len() as u64).to_le_bytes());
+        xor_bytes(&mut index, index_offset);
+        packed.extend_from_slice(&index);
+        std::fs::write(path, packed).expect("write v1 fixture");
     }
 }

@@ -77,7 +77,7 @@
 WOLF_DATA_ROOT=work/Data cargo test -q --workspace     # exit 0
 WOLF_DATA_ROOT=work/Data ./target/debug/wolf-cli.exe verify
 # PASS — 64 check(s) matched baseline, 1 pending
-./target/debug/wolf-cli.exe verify --wolf "E:/EROGAME/Imouto! Life ~Monochrome~ zh-CN Ver/Data.wolf"
+./target/debug/wolf-cli.exe verify --wolf "<retail-install-root>/Data.wolf"
 # PASS — 72 check(s) matched baseline, 0 pending (1,361/1,361 bytes)
 ```
 

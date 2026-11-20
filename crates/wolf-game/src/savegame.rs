@@ -14,7 +14,8 @@
 //! it as a byte stream where \`01 <len> <len-1 bytes>\` is a style escape. Only the
 //! escapes this game's save files actually contain are decoded (see [decode_picture_text]).
 
-use std::path::Path;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use wolf_format::mps::Map;
 use wolf_format::tileset::TileSet;
@@ -55,14 +56,49 @@ pub fn read_save(path: &Path) -> Result<SaveFile, String> {
 
 /// Encrypts and writes one save file, creating `Save/` when needed.
 pub fn write_save(path: &Path, save: &SaveFile) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|err| format!("cannot create {}: {err}", parent.display()))?;
-    }
     let bytes = save
         .to_bytes()
         .map_err(|err| format!("cannot encode {}: {err}", path.display()))?;
-    std::fs::write(path, bytes).map_err(|err| format!("cannot write {}: {err}", path.display()))
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("cannot create {}: {err}", parent.display()))?;
+        }
+    }
+
+    let temp_path = temp_path(path)?;
+    let result = (|| -> std::io::Result<()> {
+        {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&temp_path)?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+        }
+        std::fs::rename(&temp_path, path)
+    })();
+
+    if let Err(err) = result {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(format!("cannot write {}: {err}", path.display()));
+    }
+    Ok(())
+}
+
+/// A sibling path used while `path` is being replaced.
+fn temp_path(path: &Path) -> Result<PathBuf, String> {
+    let Some(file_name) = path.file_name() else {
+        return Err(format!(
+            "cannot write {}: path has no file name",
+            path.display()
+        ));
+    };
+    let mut name = std::ffi::OsString::from(".");
+    name.push(file_name);
+    name.push(".tmp");
+    Ok(path.with_file_name(name))
 }
 
 /// A `220` request that needs the whole `Game`, not just its picture layer.

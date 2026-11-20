@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # tools/package-godot.sh - build and package the Godot front-end release.
 #
+# Profiles:
+#   standard -> work/out/dist/godot/<version>/
+#   slim     -> work/out/dist/godot-slim/<version>/
+#
 # Produces:
-#   work/out/dist/godot/<version>/
+#   <profile output>/<version>/
 #     Imouto Life.exe       Godot release export (embedded PCK)
 #     wolf_gdext.dll         release GDExtension copied by the exporter
 #     Data/                  plaintext release whitelist + Save/System.sav
@@ -10,8 +14,11 @@
 #     README.txt
 #     checksums.txt
 #   work/out/dist/godot/
-#     Imouto Life setup.zip  portable package with the game folder at the root
-#     Imouto Life setup.exe  NSIS installer (optional; needs makensis.exe)
+#     ImoutoLife-<version>-windows-amd64.zip
+#     ImoutoLife-<version>-windows-amd64-setup.exe
+#     ImoutoLife-<version>-windows-amd64-slim.zip
+#     ImoutoLife-<version>-windows-amd64-setup-slim.exe
+#     SHA256SUMS.txt         checksums for all current-version artifacts
 #
 # The Windows Desktop export preset excludes addons/godot_ai/*, tests/*,
 # transient bin/~* libraries and the icon source used only to stamp the exe.
@@ -35,8 +42,12 @@ VERSION=""
 DATA_ROOT="work/Data"
 OUT_DIR=""
 ZIP_DIR="work/out/dist/godot"
+SLIM=0
+RELEASE_PROFILE="standard"
 SYSTEM_SAVE_OPT=""
-GODOT="${GODOT_BIN:-/e/Study/github program/Godot_v4.7.2-stable/Godot_v4.7.2-stable_win64.exe}"
+GODOT="${GODOT_BIN:-$(command -v godot 2>/dev/null || command -v Godot 2>/dev/null || true)}"
+TEMPLATE_OPT="${GODOT_TEMPLATE_WINDOWS:-}"
+TEMPLATE_BACKUP=""
 PRESET_NAME="Windows Desktop"
 MAKE_ZIP=1
 MAKE_SETUP=1
@@ -63,17 +74,21 @@ Usage: tools/package-godot.sh [options]
   --data-root DIR      unpacked game data (default: work/Data)
   --manifest FILE      release Data allowlist
                        (default: tools/package/release-data.manifest)
-  --out-dir DIR        release folder (default: work/out/dist/godot/<version>)
+  --slim               build the slim media profile (WebP stage before media.pak)
+  --out-dir DIR        release folder (default: work/out/dist/godot/<version>,
+                       or work/out/dist/godot-slim/<version> with --slim)
   --zip-dir DIR        release archive folder (default: work/out/dist/godot)
   --system-save FILE   clean System.sav to ship (default: retail template,
                        then <data-root>/Save/System.sav)
-  --godot PATH         Godot editor executable (default: GODOT_BIN or 4.7.2)
+  --godot PATH         Godot editor executable (default: GODOT_BIN or PATH)
+  --template FILE      custom Windows release template (default:
+                       GODOT_TEMPLATE_WINDOWS; empty uses the official one)
   --preset NAME        export preset (default: "Windows Desktop")
   --no-zip             do not create the zip archive
   --no-setup           do not create the NSIS installer
   --makensis PATH      NSIS command-line compiler (makensis.exe)
   --skip-build         reuse godot/bin/wolf_gdext.dll (the media packer is
-                       still built if target/release/media-pack.exe is missing)
+                       still built if target/release-dist/media-pack.exe is missing)
   --force              replace an existing --out-dir
   --dry-run            data-plan only: print media pack plan, plaintext
                        staging totals, and template status without building,
@@ -103,6 +118,28 @@ abs_path() {
     realpath -m -- "$path"
 }
 
+restore_export_preset() {
+    if [ -n "$TEMPLATE_BACKUP" ] && [ -f "$TEMPLATE_BACKUP" ]; then
+        cp -f -- "$TEMPLATE_BACKUP" "$PRESET_FILE"
+        rm -f -- "$TEMPLATE_BACKUP"
+        TEMPLATE_BACKUP=""
+    fi
+}
+
+apply_custom_template() {
+    [ -n "$TEMPLATE_OPT" ] || return 0
+    [ -f "$TEMPLATE_OPT" ] || die "custom Windows template not found: $TEMPLATE_OPT"
+    TEMPLATE_BACKUP="$REPO/work/out/export_presets.godot.$$.cfg"
+    mkdir -p "$REPO/work/out"
+    cp -f -- "$PRESET_FILE" "$TEMPLATE_BACKUP"
+    trap restore_export_preset EXIT
+    python "$PRESET_TEMPLATE_TOOL" \
+        --preset-file "$PRESET_FILE" \
+        --preset "$PRESET_NAME" \
+        --template "$TEMPLATE_OPT"
+    echo "==> custom Windows template: $TEMPLATE_OPT"
+}
+
 preset_value() {
     awk -v key="$1" '
         index($0, key "=\"") == 1 {
@@ -119,10 +156,12 @@ while [ "$#" -gt 0 ]; do
         --version)     need_arg "$@"; VERSION="$2"; shift 2 ;;
         --data-root)   need_arg "$@"; DATA_ROOT="$2"; shift 2 ;;
         --manifest)    need_arg "$@"; MANIFEST="$2"; shift 2 ;;
+        --slim)        SLIM=1; shift ;;
         --out-dir)     need_arg "$@"; OUT_DIR="$2"; shift 2 ;;
         --zip-dir)     need_arg "$@"; ZIP_DIR="$2"; shift 2 ;;
         --system-save) need_arg "$@"; SYSTEM_SAVE_OPT="$2"; shift 2 ;;
         --godot)       need_arg "$@"; GODOT="$2"; shift 2 ;;
+        --template)    need_arg "$@"; TEMPLATE_OPT="$2"; shift 2 ;;
         --preset)      need_arg "$@"; PRESET_NAME="$2"; shift 2 ;;
         --no-zip)      MAKE_ZIP=0; shift ;;
         --no-setup)    MAKE_SETUP=0; shift ;;
@@ -141,6 +180,16 @@ if [ -z "$VERSION" ]; then
         | head -n1)"
 fi
 [ -n "$VERSION" ] || die "cannot read [workspace.package] version from Cargo.toml"
+if [ "$SLIM" -eq 1 ]; then
+    RELEASE_PROFILE="slim"
+    PROFILE_LABEL="slim（精简版）"
+    PROFILE_NOTE="slim：media.pak 由 WebP 重编码后的媒体源生成。"
+    DEFAULT_OUT_ROOT="$REPO/work/out/dist/godot-slim"
+else
+    PROFILE_LABEL="standard（标准版）"
+    PROFILE_NOTE="standard：media.pak 直接使用原版媒体文件。"
+    DEFAULT_OUT_ROOT="$REPO/work/out/dist/godot"
+fi
 VERSION4="$VERSION"
 case "$VERSION4" in
     *.*.*.*) ;;
@@ -155,14 +204,27 @@ MANIFEST="$(abs_path "$MANIFEST")"
 [ -f "$MANIFEST" ] || die "release manifest not found: $MANIFEST"
 
 if [ -z "$OUT_DIR" ]; then
-    OUT_DIR="$REPO/work/out/dist/godot/$VERSION"
+    OUT_DIR="$DEFAULT_OUT_ROOT/$VERSION"
 fi
 OUT_DIR="$(abs_path "$OUT_DIR")"
 ZIP_DIR="$(abs_path "$ZIP_DIR")"
 GAME_FOLDER_NAME="妹！生活 ～单色～ Godot"
-ARTIFACT_BASE="Imouto Life setup"
-ZIP_PATH="$ZIP_DIR/$ARTIFACT_BASE.zip"
-SETUP_PATH="$ZIP_DIR/$ARTIFACT_BASE.exe"
+WINDOWS_ARTIFACT_STEM="ImoutoLife-${VERSION}-windows-amd64"
+if [ "$SLIM" -eq 1 ]; then
+    ZIP_NAME="${WINDOWS_ARTIFACT_STEM}-slim.zip"
+    SETUP_NAME="${WINDOWS_ARTIFACT_STEM}-setup-slim.exe"
+else
+    ZIP_NAME="${WINDOWS_ARTIFACT_STEM}.zip"
+    SETUP_NAME="${WINDOWS_ARTIFACT_STEM}-setup.exe"
+fi
+WINDOWS_ARTIFACT_NAMES=(
+    "${WINDOWS_ARTIFACT_STEM}-setup.exe"
+    "${WINDOWS_ARTIFACT_STEM}.zip"
+    "${WINDOWS_ARTIFACT_STEM}-setup-slim.exe"
+    "${WINDOWS_ARTIFACT_STEM}-slim.zip"
+)
+ZIP_PATH="$ZIP_DIR/$ZIP_NAME"
+SETUP_PATH="$ZIP_DIR/$SETUP_NAME"
 OUT_DIR_LOWER="$(printf '%s' "$OUT_DIR" | tr '[:upper:]' '[:lower:]')"
 ZIP_PATH_LOWER="$(printf '%s' "$ZIP_PATH" | tr '[:upper:]' '[:lower:]')"
 SETUP_PATH_LOWER="$(printf '%s' "$SETUP_PATH" | tr '[:upper:]' '[:lower:]')"
@@ -180,12 +242,21 @@ GDEXT_FILE="$GODOT_PROJECT/bin/wolf_gdext.gdextension"
 DLL_FILE="$GODOT_PROJECT/bin/wolf_gdext.dll"
 EXPORT_EXE="$OUT_DIR/Imouto Life.exe"
 RELEASE_DATA_TOOL="$REPO/tools/package/release_data.py"
+SLIM_MEDIA_TOOL="$REPO/tools/package/slim_media.py"
 [ -f "$RELEASE_DATA_TOOL" ] || die "release Data helper missing: $RELEASE_DATA_TOOL"
-MEDIA_PACK_BIN="$REPO/target/release/media-pack.exe"
+if [ "$SLIM" -eq 1 ] && [ ! -f "$SLIM_MEDIA_TOOL" ]; then
+    die "slim media helper missing: $SLIM_MEDIA_TOOL"
+fi
+MEDIA_PACK_BIN="$REPO/target/release-dist/media-pack.exe"
 MEDIA_PAK="$OUT_DIR/Data/media.pak"
+SLIM_MEDIA_ROOT="$REPO/work/out/slim/$VERSION/media-src"
+PACK_SOURCE_ROOT="$DATA_ROOT"
 VERSION_LANGUAGE_TOOL="$REPO/tools/package/windows_version_language.py"
+PRESET_TEMPLATE_TOOL="$REPO/tools/package/export_preset_template.py"
 [ -f "$VERSION_LANGUAGE_TOOL" ] || \
     die "Windows version-language helper missing: $VERSION_LANGUAGE_TOOL"
+[ -f "$PRESET_TEMPLATE_TOOL" ] || \
+    die "export-template helper missing: $PRESET_TEMPLATE_TOOL"
 ICON_FILE="$GODOT_PROJECT/icon_windows.png"
 NSIS_TEMPLATE="$REPO/tools/package/ImoutoLife.nsi.in"
 NSIS_RENDERER="$REPO/tools/package/render_nsis.py"
@@ -360,7 +431,28 @@ check_makensis() {
     echo "==> NSIS compiler: $MAKENSIS"
 }
 
+publish_sha256sums() {
+    local dir="$1"
+    shift
+    local name
+    local tmp="$dir/.SHA256SUMS.tmp"
+    mkdir -p "$dir"
+    : > "$tmp"
+    for name in "$@"; do
+        if [ -f "$dir/$name" ]; then
+            (cd "$dir" && sha256sum -- "$name") >> "$tmp"
+        fi
+    done
+    if [ -s "$tmp" ]; then
+        mv -f -- "$tmp" "$dir/SHA256SUMS.txt"
+    else
+        rm -f -- "$tmp"
+        rm -f -- "$dir/SHA256SUMS.txt"
+    fi
+}
+
 echo "==> version $VERSION"
+echo "==> release profile: $RELEASE_PROFILE"
 echo "==> Godot preset: $PRESET_NAME"
 echo "==> Data manifest: $MANIFEST"
 echo "==> System.sav template: $SYSTEM_SAVE_SOURCE"
@@ -380,8 +472,26 @@ if [ "$DRY_RUN" -eq 1 ]; then
         PACK_PREFIX_SUMMARY="${PACK_PREFIX_SUMMARY}${PACK_PREFIX_SUMMARY:+, }$prefix"
         RELEASE_PLAN_ARGS+=(--exclude-prefix "$prefix")
     done
-    echo "==> media pack: Data/media.pak"
+    if [ "$SLIM" -eq 1 ]; then
+        SLIM_ARGS=(
+            --root "$DATA_ROOT"
+            --manifest "$MANIFEST"
+            --dest "$SLIM_MEDIA_ROOT"
+            --dry-run
+        )
+        for prefix in "${MEDIA_PREFIXES[@]}"; do
+            SLIM_ARGS+=(--exclude-prefix "$prefix")
+        done
+        echo "==> slim media staging: $SLIM_MEDIA_ROOT"
+        python "$SLIM_MEDIA_TOOL" "${SLIM_ARGS[@]}"
+        PACK_SOURCE_ROOT="$SLIM_MEDIA_ROOT"
+        echo "    would pack media from the staged slim tree, manifest remains: $MANIFEST"
+    else
+        echo "==> standard media staging: use original data root"
+    fi
+    echo "==> media pack: Data/media.pak ($RELEASE_PROFILE profile)"
     echo "    include prefixes: $PACK_PREFIX_SUMMARY"
+    echo "    compression: auto (per-entry zstd level 9 when smaller)"
     echo "    expected payload: 733 files / 113,002,637 bytes (current manifest; plan recomputes)"
     python "$RELEASE_DATA_TOOL" "${RELEASE_PLAN_ARGS[@]}"
     echo "    would create: $MEDIA_PAK"
@@ -389,33 +499,41 @@ if [ "$DRY_RUN" -eq 1 ]; then
         echo "==> dry run: media-pack available: $MEDIA_PACK_BIN"
     else
         echo "==> dry run: media-pack not built yet: $MEDIA_PACK_BIN"
-        echo "    a real run builds it with: cargo build -q --release -p wolf-format --bin media-pack"
+        echo "    a real run builds it with: cargo build -q --profile release-dist -p wolf-format --bin media-pack"
     fi
     if check_export_templates; then
         echo "==> dry run: export templates available"
     else
         echo "warning: a real export would stop because export templates are missing" >&2
     fi
+    if [ -n "$TEMPLATE_OPT" ]; then
+        echo "==> dry run: would use custom Windows template: $TEMPLATE_OPT"
+    fi
     if [ "$SKIP_BUILD" -eq 0 ]; then
-        echo "==> dry run: would build GDExtension with: bash tools/build-godot.sh --release"
+        echo "==> dry run: would build GDExtension with: bash tools/build-godot.sh --dist"
     else
         echo "==> dry run: would reuse godot/bin/wolf_gdext.dll (--skip-build)"
     fi
     echo "==> dry run: would export to: $EXPORT_EXE"
-    echo "==> dry run: would create package in: $OUT_DIR"
+    echo "==> dry run: would create $RELEASE_PROFILE package in: $OUT_DIR"
     if [ -e "$OUT_DIR" ] && [ "$FORCE" -ne 1 ]; then
         echo "    note: output exists; a real run requires --force"
     fi
     if [ "$MAKE_ZIP" -eq 1 ]; then
-        echo "==> dry run: would create portable zip: $ZIP_PATH"
+        echo "==> dry run: would create $RELEASE_PROFILE portable zip: $ZIP_PATH"
     fi
     if [ "$MAKE_SETUP" -eq 1 ]; then
         if check_makensis; then
-            echo "==> dry run: would create installer: $SETUP_PATH"
+            echo "==> dry run: would create $RELEASE_PROFILE installer: $SETUP_PATH"
         else
             echo "warning: a real run would stop because makensis.exe is missing" >&2
         fi
     fi
+    echo "==> dry run: would publish SHA256SUMS.txt in: $ZIP_DIR"
+    echo "    it will cover whichever of these current-version artifacts exist:"
+    for name in "${WINDOWS_ARTIFACT_NAMES[@]}"; do
+        echo "      $name"
+    done
     exit 0
 fi
 
@@ -432,14 +550,14 @@ fi
 
 if [ "$SKIP_BUILD" -eq 0 ]; then
     echo "==> building release GDExtension"
-    bash tools/build-godot.sh --release
+    bash tools/build-godot.sh --dist
     echo "==> building media packer"
-    cargo build -q --release -p wolf-format --bin media-pack
+    cargo build -q --profile release-dist -p wolf-format --bin media-pack
 else
     echo "==> skipping GDExtension build (--skip-build)"
     if [ ! -x "$MEDIA_PACK_BIN" ]; then
         echo "==> media-pack missing; building it despite --skip-build"
-        cargo build -q --release -p wolf-format --bin media-pack
+        cargo build -q --profile release-dist -p wolf-format --bin media-pack
     fi
 fi
 [ -f "$DLL_FILE" ] || die "release GDExtension DLL missing: $DLL_FILE"
@@ -448,6 +566,21 @@ fi
 if [ ! -f "$GODOT_PROJECT/.godot/extension_list.cfg" ]; then
     echo "==> importing Godot project"
     "$GODOT" --headless --path "$GODOT_PROJECT" --import
+fi
+
+if [ "$SLIM" -eq 1 ]; then
+    SLIM_ARGS=(
+        --root "$DATA_ROOT"
+        --manifest "$MANIFEST"
+        --dest "$SLIM_MEDIA_ROOT"
+    )
+    for prefix in "${MEDIA_PREFIXES[@]}"; do
+        SLIM_ARGS+=(--exclude-prefix "$prefix")
+    done
+    echo "==> staging slim media source: $SLIM_MEDIA_ROOT"
+    python "$SLIM_MEDIA_TOOL" "${SLIM_ARGS[@]}"
+    [ -d "$SLIM_MEDIA_ROOT" ] || die "slim media staging tree missing: $SLIM_MEDIA_ROOT"
+    PACK_SOURCE_ROOT="$SLIM_MEDIA_ROOT"
 fi
 
 if [ -e "$OUT_DIR" ]; then
@@ -469,6 +602,7 @@ mkdir -p "$OUT_DIR"
 
 EXPORT_EXE_WIN="$(cygpath -w "$EXPORT_EXE")"
 GODOT_PROJECT_WIN="$(cygpath -w "$GODOT_PROJECT")"
+apply_custom_template
 echo "==> exporting Godot release"
 "$GODOT" --headless --path "$GODOT_PROJECT_WIN" \
     --export-release "$PRESET_NAME" "$EXPORT_EXE_WIN"
@@ -524,9 +658,11 @@ VERIFY_ARGS=(
     --extra "media.pak"
 )
 PACK_ARGS=(
-    --root "$(cygpath -w "$DATA_ROOT")"
+    --root "$(cygpath -w "$PACK_SOURCE_ROOT")"
     --manifest "$(cygpath -w "$MANIFEST")"
     --output "$(cygpath -w "$MEDIA_PAK")"
+    --compression auto
+    --zstd-level 9
 )
 for prefix in "${MEDIA_PREFIXES[@]}"; do
     STAGE_ARGS+=(--exclude-prefix "$prefix")
@@ -538,7 +674,7 @@ SAVE_EXTRA="$(find "$OUT_DIR/Data/Save" -maxdepth 1 -type f ! -iname 'System.sav
 [ -z "$SAVE_EXTRA" ] || die "release Data/Save must contain only System.sav: $SAVE_EXTRA"
 [ ! -e "$MEDIA_PAK" ] || die "media.pak already exists before packing: $MEDIA_PAK"
 
-echo "==> packing media into Data/media.pak"
+echo "==> packing $RELEASE_PROFILE media into Data/media.pak"
 "$MEDIA_PACK_BIN" "${PACK_ARGS[@]}"
 [ -s "$MEDIA_PAK" ] || die "media packer did not create a non-empty file: $MEDIA_PAK"
 for prefix in "${MEDIA_PREFIXES[@]}"; do
@@ -553,7 +689,8 @@ BUILT="$(date -u +%Y-%m-%d)"
 echo "==> writing README.txt"
 sed 's/$/\r/' > "$OUT_DIR/README.txt" <<EOF
 ========================================================================
- 妹！生活 ～单色～ Godot  —  Windows 发布包  v$VERSION
+ 妹！生活 ～单色～ Godot  —  Windows 发布包（$RELEASE_PROFILE）  v$VERSION
+ 发布类型：$PROFILE_LABEL
  构建日期（UTC）：$BUILT
 ========================================================================
 
@@ -566,11 +703,14 @@ sed 's/$/\r/' > "$OUT_DIR/README.txt" <<EOF
   Data\             ← 发行数据：media.pak + BasicData/MapData/Save/字体明文
   README.txt        ← 本说明
   按键功能指引.txt  ← F4/F11/F8/F5 等快捷键与游戏操作说明
-  checksums.txt     ← 发布包文件 SHA-256
+  checksums.txt     ← 发布包内部文件 SHA-256
+  发布目录中的 SHA256SUMS.txt ← 当前版本安装包/便携包的 SHA-256
 
 【Data 与 media.pak】
   Data\media.pak 是媒体只读包，集中 Picture/cg/BGM/SE/CharaChip/
-  SystemFile/BalloonBase_CafeLatte 的发行文件，使用固定密钥 XOR 混淆。
+  SystemFile/BalloonBase_CafeLatte 的发行文件，使用固定密钥 XOR 混淆，
+  并对能受益的条目按条启用 zstd 压缩。
+  $PROFILE_NOTE
   这是提高直接浏览门槛的混淆，不是强加密。
   Data\BasicData、MapData、Save 和字体仍为明文；
   Mod 仍可沿用原来的 Data 目录结构放置同名散文件覆盖。
@@ -587,7 +727,7 @@ sed 's/$/\r/' > "$OUT_DIR/README.txt" <<EOF
 
 【说明】
   这是《妹！生活》的 Rust + Godot 重写版运行包，仅用于本地游玩与验证。
-  版本：v$VERSION    构建：$BUILT
+  版本：v$VERSION    发布类型：$RELEASE_PROFILE    构建：$BUILT
 EOF
 
 echo "==> writing keyboard guide"
@@ -597,11 +737,12 @@ sed 's/$/\r/' "$KEYBOARD_GUIDE_SOURCE" > "$OUT_DIR/按键功能指引.txt"
 echo "==> writing checksums.txt"
 (
     cd "$OUT_DIR"
+    printf '# release profile: %s\n' "$RELEASE_PROFILE" > .checksums.tmp
     find . -type f ! -name 'checksums.txt' ! -name '.checksums.tmp' -print0 \
         | LC_ALL=C sort -z \
         | while IFS= read -r -d '' file; do
             sha256sum -- "$file"
-        done > .checksums.tmp
+        done >> .checksums.tmp
     mv .checksums.tmp checksums.txt
 )
 
@@ -713,6 +854,8 @@ if [ "$MAKE_SETUP" -eq 1 ]; then
     )
 fi
 
+publish_sha256sums "$ZIP_DIR" "${WINDOWS_ARTIFACT_NAMES[@]}"
+
 echo "==> package contents"
 find "$OUT_DIR" -maxdepth 2 -type f -printf '%12s  %P\n' | sort -k2 | sed -n '1,80p'
 du -sh "$OUT_DIR"
@@ -722,6 +865,18 @@ fi
 if [ -f "$SETUP_PATH" ]; then
     ls -lh "$SETUP_PATH" "$SETUP_PATH.sha256"
 fi
+if [ -f "$ZIP_DIR/SHA256SUMS.txt" ]; then
+    ls -lh "$ZIP_DIR/SHA256SUMS.txt"
+fi
 echo
-echo "Godot package ready: $OUT_DIR"
+echo "Godot $RELEASE_PROFILE package ready: $OUT_DIR"
+if [ -f "$ZIP_PATH" ]; then
+    echo "Portable zip: $ZIP_PATH"
+fi
+if [ -f "$SETUP_PATH" ]; then
+    echo "Installer: $SETUP_PATH"
+fi
+if [ -f "$ZIP_DIR/SHA256SUMS.txt" ]; then
+    echo "Artifact checksums: $ZIP_DIR/SHA256SUMS.txt"
+fi
 echo "Double-click: $OUT_DIR/Imouto Life.exe"

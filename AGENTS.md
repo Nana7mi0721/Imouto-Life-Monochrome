@@ -12,11 +12,11 @@
 ## 1. 每次 bash 的固定开头
 
 ```bash
-cd '/e/Study/github program/Imouto Life Monochrome' && source tools/env.sh >/dev/null 2>&1
+cd "$(git rev-parse --show-toplevel)" && source tools/env.sh >/dev/null 2>&1
 ```
 
-- 路径用 msys 形式（/e/...）；PowerShell 路径只在 env.ps1 等 Windows 脚本里用。
-- 保持 C:/Users/REISEN/.cargo/config.toml 里的 [http] proxy=''；不要开 sccache（会破坏 MSVC 链接）。
+- 路径优先使用脚本自动推导的仓库根目录；PowerShell 路径只在 env.ps1 等 Windows 脚本里用。
+- 保持 `$HOME/.cargo/config.toml` 里的 `[http] proxy=''`；不要开 sccache（会破坏 MSVC 链接）。
 - 临时输出放 work/out/，不要用 /tmp（Windows 上 bash 子进程写 /tmp 会 PermissionDenied）。
 - Python 补丁脚本写 newline='' 并先写 .new 再 os.replace。
 
@@ -48,7 +48,7 @@ cd '/e/Study/github program/Imouto Life Monochrome' && source tools/env.sh >/dev
 
 - 仓库是 Cargo workspace，9 个 crate：wolf-format / wolf-save / wolf-vm / wolf-render / wolf-audio / wolf-game / wolf-cli / wolf-launcher / wolf-gdext。Godot 前端代码在 `godot/`（GDScript + 工程文件），不是 Cargo crate。
 - 不新增外部依赖，除非有充分理由并先问 lead。`wolf-gdext` 的 `godot`（gdext）依赖是 Godot 迁移的既定选择，版本锁定 0.5.5 + `api-4-7`。
-- 提交身份：仓库拥有者 `Nana7mi0721 <linxin070410@gmail.com>`；建议在仓库内固定 `git config user.name 'Nana7mi0721'` 与 `git config user.email 'linxin070410@gmail.com'`，或按命令传入 `git -c user.name='Nana7mi0721' -c user.email='linxin070410@gmail.com' commit -F <msgfile>`。不要使用 `imoto lead <lead@imoto.local>`。
+- 提交身份使用仓库本地已配置的维护者身份；不要把个人邮箱写进脚本、文档或示例命令。不要把提交身份配置成共享占位账号。
 - push：全局 http.proxy 是死代理，必须 `git -c http.proxy= -c https.proxy= push origin master`。
 - 不要提交 work/、tools/bin|cmake|ffmpeg、*.exe、prt sc/、docs/相关链接.txt。
 - 不要提交 Godot 生成物：`godot/.godot/`、`godot/bin/*.dll`、`godot/bin/*.pdb`；`godot/bin/wolf_gdext.gdextension` 与 `godot/` 下的脚本/场景要提交。
@@ -65,7 +65,7 @@ cd '/e/Study/github program/Imouto Life Monochrome' && source tools/env.sh >/dev
 
 - 常规清理（保留可运行的 debug 产物）：
   ```bash
-  cd '/e/Study/github program/Imouto Life'
+  cd "$(git rev-parse --show-toplevel)"
   rm -rf target/debug/incremental target/release target/ver6 work/out/saveprobe
   find work/out -maxdepth 1 -type f \( -name '*.pdb' -o -name '*_probe.exe' -o -name '*probe*.pdb' \) -delete
   du -sh . work work/Data target 2>/dev/null
