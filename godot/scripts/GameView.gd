@@ -498,6 +498,10 @@ var diagnostics_printed := false
 ## every selection or cancellation so a platform picker never outlives its turn.
 var _save_transfer_dialog: FileDialog
 var _save_transfer_dialog_mode := ""
+## iOS uses a UIKit bridge instead of Godot's built-in FileDialog fallback.
+var _ios_picker_mode := ""
+var _ios_picker_export_temp := ""
+var _ios_picker_export_count := 0
 ## A validated zip waits here while the overwrite confirmation is on screen.
 var _save_transfer_pending_zip := ""
 var _save_transfer_pending_entries: Array = []
@@ -1795,8 +1799,9 @@ func _save_transfer_visible() -> bool:
 
 ## Opens the platform file picker for one transfer action.
 ##
-## `FileDialog.use_native_dialog` is always requested.  Godot falls back to its
-## built-in picker on a host without a native implementation; headless runs get
+## `FileDialog.use_native_dialog` is always requested.  iOS has no native
+## Godot backend in 4.7.2, so `wolf-gdext` presents the system Files panel;
+## other hosts use Godot's picker or its built-in fallback.  Headless runs get
 ## a readable message instead of a hidden window.  Only one dialog exists at a
 ## time and it is freed by `_dispose_save_transfer_dialog`.
 func _open_save_transfer_picker(mode: String) -> void:
@@ -1813,6 +1818,12 @@ func _open_save_transfer_picker(mode: String) -> void:
 			"当前运行环境没有可用的系统文件选择器。",
 			false
 		)
+		return
+	if _ios_native_picker_available():
+		if mode == "import":
+			_start_ios_import_picker()
+		else:
+			_start_ios_export_picker()
 		return
 	var dialog := FileDialog.new()
 	_save_transfer_dialog = dialog
@@ -1844,6 +1855,116 @@ func _open_save_transfer_picker(mode: String) -> void:
 		dialog.current_file = _default_save_archive_name()
 	dialog.popup_centered_ratio(0.8)
 	print("ui: save transfer picker opened for ", mode)
+
+
+func _ios_native_picker_available() -> bool:
+	return (
+		OS.has_feature("ios")
+		and wolf != null
+		and wolf.has_method("ios_file_picker_available")
+		and bool(wolf.ios_file_picker_available())
+	)
+
+
+func _start_ios_import_picker() -> void:
+	if not _ios_picker_mode.is_empty():
+		return
+	_ios_picker_mode = "import"
+	var callback := Callable(self, "_on_ios_file_picker_result")
+	if not bool(wolf.ios_pick_import_file(callback)):
+		_ios_picker_mode = ""
+		_show_save_transfer_result(
+			false,
+			"无法打开文件",
+			"系统文件选择器不可用或正在使用。",
+			false
+		)
+		return
+	print("ui: iOS Files import picker opened")
+
+
+func _start_ios_export_picker() -> void:
+	if not _ios_picker_mode.is_empty():
+		return
+	var temp_path := _new_save_transfer_temp_path("ios-export", "zip")
+	var exported: Dictionary = _export_save_archive(temp_path)
+	if not bool(exported.get("ok", false)):
+		_show_save_transfer_result(
+			false,
+			"导出失败",
+			str(exported.get("message", "无法导出存档备份。")),
+			false
+		)
+		return
+	_ios_picker_mode = "export"
+	_ios_picker_export_temp = temp_path
+	_ios_picker_export_count = int(exported.get("count", 0))
+	var callback := Callable(self, "_on_ios_file_picker_result")
+	if not bool(
+		wolf.ios_export_file(
+			ProjectSettings.globalize_path(temp_path),
+			_default_save_archive_name(),
+			callback
+		)
+	):
+		_cleanup_ios_export_temp()
+		_ios_picker_mode = ""
+		_show_save_transfer_result(
+			false,
+			"无法打开文件",
+			"系统文件选择器不可用或正在使用。",
+			false
+		)
+		return
+	print("ui: iOS Files export picker opened")
+
+
+func _on_ios_file_picker_result(path: String, status: int) -> void:
+	var mode := _ios_picker_mode
+	_ios_picker_mode = ""
+	if mode == "import":
+		if status == 0 and not path.is_empty():
+			_begin_save_import(path)
+			if FileAccess.file_exists(path):
+				DirAccess.remove_absolute(path)
+		elif status == 2:
+			_show_save_transfer_result(
+				false,
+				"导入失败",
+				path if not path.is_empty() else "无法读取所选文件。",
+				false
+			)
+		else:
+			print("ui: iOS save import canceled")
+		return
+	if mode == "export":
+		var count := _ios_picker_export_count
+		_cleanup_ios_export_temp()
+		if status == 0:
+			_show_save_transfer_result(
+				true,
+				"导出完成",
+				"已导出 %d 个存档文件。" % count,
+				false
+			)
+		elif status == 2:
+			_show_save_transfer_result(
+				false,
+				"导出失败",
+				path if not path.is_empty() else "无法导出存档备份。",
+				false
+			)
+		else:
+			print("ui: iOS save export canceled")
+
+
+func _cleanup_ios_export_temp() -> void:
+	if _ios_picker_export_temp.is_empty():
+		return
+	if FileAccess.file_exists(_ios_picker_export_temp):
+		DirAccess.remove_absolute(_ios_picker_export_temp)
+	_ios_picker_export_temp = ""
+	_ios_picker_export_count = 0
 
 
 func _default_save_archive_name() -> String:
@@ -2702,6 +2823,7 @@ func _notification(what: int) -> void:
 
 func _exit_tree() -> void:
 	_join_android_stage_thread()
+	_cleanup_ios_export_temp()
 	if _save_transfer_dialog != null and is_instance_valid(_save_transfer_dialog):
 		_save_transfer_dialog.queue_free()
 	_save_transfer_dialog = null

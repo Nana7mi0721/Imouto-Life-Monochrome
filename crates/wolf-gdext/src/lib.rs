@@ -24,6 +24,8 @@ use godot::builtin::VarDictionary;
 use godot::classes::{FileAccess, Image, RefCounted};
 use godot::prelude::*;
 
+#[cfg(target_os = "ios")]
+mod ios_file_picker;
 mod localclock;
 
 use wolf_format::media_pack::{MediaPack, PackSource};
@@ -148,6 +150,26 @@ impl WolfGame {
             }
         }
     }
+}
+
+#[cfg(target_os = "ios")]
+fn ios_pick_import_file(callback: Callable) -> bool {
+    ios_file_picker::pick_import(callback)
+}
+
+#[cfg(not(target_os = "ios"))]
+fn ios_pick_import_file(_callback: Callable) -> bool {
+    false
+}
+
+#[cfg(target_os = "ios")]
+fn ios_export_file(source_path: &str, suggested_name: &str, callback: Callable) -> bool {
+    ios_file_picker::export_file(source_path, suggested_name, callback)
+}
+
+#[cfg(not(target_os = "ios"))]
+fn ios_export_file(_source_path: &str, _suggested_name: &str, _callback: Callable) -> bool {
+    false
 }
 
 #[godot_api]
@@ -958,6 +980,36 @@ impl WolfGame {
     #[func]
     fn validate_save_bytes(&self, bytes: PackedByteArray) -> bool {
         wolf_save::SaveFile::parse(bytes.as_slice()).is_ok()
+    }
+
+    /// True when the build has the iOS system file picker bridge.
+    #[func]
+    fn ios_file_picker_available(&self) -> bool {
+        cfg!(target_os = "ios")
+    }
+
+    /// Presents the iOS Files picker for importing one archive or `.sav`.
+    ///
+    /// The callback receives `(path, status)`: status 0 is success, 1 is a
+    /// user cancel, and 2 carries an error message in `path`.
+    #[func]
+    fn ios_pick_import_file(&self, callback: Callable) -> bool {
+        ios_pick_import_file(callback)
+    }
+
+    /// Presents the iOS Files export panel for an already-written archive.
+    #[func]
+    fn ios_export_file(
+        &self,
+        source_path: GString,
+        suggested_name: GString,
+        callback: Callable,
+    ) -> bool {
+        ios_export_file(
+            &source_path.to_string(),
+            &suggested_name.to_string(),
+            callback,
+        )
     }
 
     /// Sends the live session back to the title screen.

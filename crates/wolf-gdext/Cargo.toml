@@ -15,3 +15,6 @@ wolf-format = { workspace = true }
 wolf-vm = { workspace = true }
 wolf-save = { workspace = true }
 wolf-game = { path = "../wolf-game", default-features = false }
+
+[build-dependencies]
+cc = "1"

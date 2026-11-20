@@ -129,10 +129,14 @@ PRESET_FILE="$REPO/godot/export_presets.cfg"
 GDEXT_FILE="$REPO/godot/bin/wolf_gdext.gdextension"
 IOS_LIB="$REPO/godot/bin/ios/libwolf_gdext.a"
 BUILD_SCRIPT="$REPO/tools/build-ios.sh"
+IOS_ICON="$REPO/godot/icon_android.png"
 [ -f "$PRESET_FILE" ] || die "missing export preset file: $PRESET_FILE"
 [ -f "$GDEXT_FILE" ] || die "missing GDExtension manifest: $GDEXT_FILE"
+[ -f "$IOS_ICON" ] || die "missing iOS app icon: $IOS_ICON"
 grep -Fq 'name="iOS"' "$PRESET_FILE" || die "missing iOS export preset in: $PRESET_FILE"
 grep -Fq 'platform="iOS"' "$PRESET_FILE" || die "iOS export preset has no iOS platform"
+grep -Fq 'icons/icon_1024x1024="res://icon_android.png"' "$PRESET_FILE" || \
+    die "iOS export preset must use res://icon_android.png"
 grep -Fq 'application/export_project_only=true' "$PRESET_FILE" || \
     die "iOS export preset must set application/export_project_only=true"
 grep -Eq '^ios\.release\.arm64[[:space:]]*=' "$GDEXT_FILE" || \

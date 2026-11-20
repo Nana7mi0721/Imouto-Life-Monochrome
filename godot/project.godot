@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Imouto Life (Godot)"
+config/name="妹！生活 ～单色～"
 config/description="Godot front-end for the WOLF RPG Editor runtime."
 run/main_scene="res://main.tscn"
 config/quit_on_go_back=false
