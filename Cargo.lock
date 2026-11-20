@@ -3285,6 +3285,7 @@ dependencies = [
  "godot",
  "wolf-format",
  "wolf-game",
+ "wolf-save",
  "wolf-vm",
 ]
 

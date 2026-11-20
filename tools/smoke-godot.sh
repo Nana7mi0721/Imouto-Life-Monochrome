@@ -70,6 +70,9 @@ fi
 "$GODOT" --headless --path godot --script res://tests/save_roundtrip.gd -- \
     --data-root="$DATA_ROOT" --save-path="$PWD/work/out/godot_roundtrip.sav"
 
+"$GODOT" --headless --path godot --script res://tests/save_transfer.gd -- \
+    --root="$PWD/work/out/save_transfer_test" --data-root="$DATA_ROOT"
+
 "$GODOT" --headless --path godot --script res://tests/audit_probe_smoke.gd -- \
     --data-root="$DATA_ROOT"
 

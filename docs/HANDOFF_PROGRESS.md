@@ -2351,3 +2351,48 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `docs/HANDOFF_M0.md` §11.1 更新当前状态。
   * **未做**：未 commit；§5.2 FFI 扁平化、图集增量上传、大图/音频异步解码
     与大型模块拆分仍为后续项。
+
+* 2026-11-20（iOS 私有构建、移动端存档导入/导出，未发布）：
+  * **iOS 工程**：`wolf-gdext` 增加 `staticlib`；GDExtension 注册
+    `ios.debug.arm64` / `ios.release.arm64`；新增 `[preset.2]` iOS 预设
+    （Bundle ID `com.inusuku.imoutolife`、0.1.1/build 2、iPhone+iPad、
+    iOS 15.0、横屏、Files/iTunes 文件共享、仅导出 Xcode 工程）。
+  * **iOS 启动**：无 `--data-root` 时从可执行文件旁 `Data/` 读取；
+    存档固定到 `user://Save`；缺数据时显示明确错误；优先加载注入的
+    `NotoSansCJKsc-Bold.otf`，回退 PingFang/Hiragino/Noto 系统字体；
+    解码纹理缓存上限 64 MiB。
+  * **iOS 流水线**：新增 `tools/build-ios.sh`、`tools/package-ios.sh`、
+    `tools/inject-ios-data.sh`、`tools/package/ios_inject_data.py` 与
+    `.github/workflows/ios-unsigned.yml`；模板检查修正为 Godot 4.7.2
+    实际文件名 `ios.zip`；文档为 `docs/release/IOS_PRIVATE_BUILD.md`。
+  * **存档导入/导出**：标题存档页在提醒框右下角新增
+    `Rect2(800,330,90,70)` / `Rect2(898,330,90,70)` 两个横排按钮，
+    深色面板 + 白边 + 20 px 粗体标签；鼠标与触摸点击均在 CE131 之前拦截。
+    导出生成 `System.sav`、`SaveDataNN.sav` 与 `manifest.txt` 的 ZIP；
+    导入接受 ZIP 或单个 `.sav`。单个 `.sav` 先弹“选择目标存档槽”
+    （系统/槽 1–4/取消），再弹覆盖确认；ZIP 只接受直接 `.sav`/`manifest.txt`，
+    拒绝路径穿越。两种导入都会先备份 `Save/`，临时文件原子替换；ZIP
+    会移除包中不存在的编号槽，单个 `.sav` 只替换所选目标并保留其他槽位。
+    完成后可重新加载场景。
+  * **文件选择器**：`FileDialog.use_native_dialog=true`。Android 走系统
+    DocumentsUI，并对 `content://` URI 做私有临时文件桥接后读写；
+    iOS 4.7.2 的 Apple Embedded DisplayServer 未实现
+    `FEATURE_NATIVE_DIALOG_FILE`，自动回退内嵌选择器；iOS `user://`
+    即应用 Documents，可由 Files/iTunes 共享访问。
+  * **验证**：`smoke-godot.sh` 全过，新增 `save_transfer` 用例覆盖按钮热区、
+    ZIP/单档往返、`validate_save_bytes`、穿越拒绝、备份、槽位替换、
+    单档保留其他槽位与未知文件保留、ZIP 二次确认取消后不写盘且不生成备份、
+    非法 `.sav` 在目标槽弹窗前被拒绝；
+    `cargo fmt --all -- --check`、`cargo check -q --workspace`、
+    `cargo check -q -p wolf-gdext --target aarch64-apple-ios`、
+    `cargo test -q -p wolf-gdext`（3 passed）通过；`bash -n` 三个 iOS 脚本、
+    `py_compile` 注入器、workflow YAML 解析通过；标题存档页
+    1024×576 视口截图确认两个按钮位置与样式，未绘制旧“结束”按钮。
+  * **Android 真机复验**：OnePlus PJZ110 / Android 15（adb `700a70e2`），
+    同一 release keystore 覆盖安装 0.1.1 后数据保留；DocumentsUI 导入/导出
+    均实际打开，单 `.sav` 选择目标槽、覆盖确认、导入成功；导出 ZIP
+    352380 B、CRC 正常，`SaveData02.sav` 与源文件逐字节一致且其他槽位保留。
+  * **未做**：未 commit/push；未触发 iOS CI、未产出 IPA、未发布；
+    iPhone 真机尚未验证（当前无本地 Mac，需先跑 `ios-unsigned.yml`）。
+    临时探针与 `work/out/save_transfer_test` 已清理；
+    当前工作区仍含 `work/` 数据与 `work/out/dist` 构建产物（未删除）。

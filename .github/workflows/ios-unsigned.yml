@@ -1,0 +1,77 @@
+name: iOS Unsigned IPA
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  GODOT_VERSION: "4.7.2"
+  GODOT_RELEASE: "4.7.2-stable"
+
+jobs:
+  build:
+    name: Build unsigned arm64 IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust iOS target
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-apple-ios
+
+      - name: Download Godot editor and iOS export templates
+        run: |
+          set -euo pipefail
+          TOOLS_DIR="$RUNNER_TEMP/godot-ios"
+          mkdir -p "$TOOLS_DIR"
+
+          EDITOR_ZIP="$TOOLS_DIR/godot-editor.zip"
+          TEMPLATES_TPZ="$TOOLS_DIR/godot-export-templates.tpz"
+          BASE_URL="https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}"
+
+          echo "==> download Godot ${GODOT_VERSION} macOS editor"
+          curl -L --fail --retry 3 \
+            -o "$EDITOR_ZIP" \
+            "${BASE_URL}/Godot_v${GODOT_RELEASE}_macos.universal.zip"
+          unzip -q "$EDITOR_ZIP" -d "$TOOLS_DIR/editor"
+
+          GODOT_BIN="$TOOLS_DIR/editor/Godot.app/Contents/MacOS/Godot"
+          chmod +x "$GODOT_BIN"
+          mkdir -p "$TOOLS_DIR/bin"
+          ln -sf "$GODOT_BIN" "$TOOLS_DIR/bin/godot"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+          echo "$TOOLS_DIR/bin" >> "$GITHUB_PATH"
+
+          echo "==> download Godot ${GODOT_VERSION} export templates"
+          curl -L --fail --retry 3 \
+            -o "$TEMPLATES_TPZ" \
+            "${BASE_URL}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+          unzip -q "$TEMPLATES_TPZ" -d "$TOOLS_DIR/templates"
+
+          TEMPLATE_DIR="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$TEMPLATE_DIR"
+          cp -R "$TOOLS_DIR/templates/templates/." "$TEMPLATE_DIR/"
+
+          test -f "$TEMPLATE_DIR/ios.zip"
+          echo "installed iOS export templates into $TEMPLATE_DIR"
+
+      - name: Build GDExtension iOS static library
+        run: bash tools/build-ios.sh
+
+      - name: Package unsigned IPA
+        run: bash tools/package-ios.sh --skip-build --unsigned --force
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImoutoLife-0.1.1-ios-arm64-unsigned
+          path: |
+            work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned.ipa
+            work/out/dist/ios/0.1.1/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

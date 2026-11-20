@@ -4,6 +4,29 @@
 
 ---
 
+## [未发布]
+
+### 新增（Added）
+- **iOS 私有构建链路**：新增 iOS 导出预设、arm64 GDExtension 静态库构建、
+  GitHub Actions `macos-latest` 无签名 IPA 产出、Windows 侧 `Data`/字体注入
+  与 Sideloadly 安装文档。产物命名沿用
+  `ImoutoLife-<version>-ios-arm64-unsigned[-full].ipa`。
+- **移动端存档导入/导出**：标题存档页新增横排“导入”“导出”按钮。导出为
+  ZIP（`System.sav`、`SaveDataNN.sav`、`manifest.txt`）；导入同时接受 ZIP
+  和单个 `.sav`，单个文件先选择系统/槽 1–4，再显示覆盖确认。导入前校验
+  路径/格式、自动备份 `Save/`、原子写入并在完成后提示重启。
+- **Android 系统文件选择器**：导入/导出优先调用系统文档选择器，并增加
+  `content://` URI 到 ZIP 构建/读取的桥接；iOS 4.7.2 无原生文件对话框时
+  自动回退到应用内选择器，`user://` 仍通过 Files/iTunes 文件共享可见。
+
+### 优化与修复（Fixed）
+- iOS 使用 64 MiB 解码纹理缓存上限，降低 3 GB 设备浏览大图时的后台终止风险。
+- iOS 优先使用注入的 `NotoSansCJKsc-Bold.otf`，缺失时回退 PingFang 等系统字体。
+- 修正 iOS Actions 模板检查为 Godot 4.7.2 实际产出的 `ios.zip`，并修正文档中的
+  `SHA256SUMS.txt` 校验文件名。
+
+---
+
 ## [0.1.1] - 2026-11-20
 
 ### 发布（Release）

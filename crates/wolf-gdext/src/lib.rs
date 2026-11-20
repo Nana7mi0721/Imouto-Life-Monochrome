@@ -951,6 +951,15 @@ impl WolfGame {
         }
     }
 
+    /// Returns true when `bytes` is a complete, checksum-valid WOLF `.sav`.
+    ///
+    /// The front-end uses this before a direct single-save import so a renamed
+    /// ZIP or an unrelated binary cannot be written into a save slot.
+    #[func]
+    fn validate_save_bytes(&self, bytes: PackedByteArray) -> bool {
+        wolf_save::SaveFile::parse(bytes.as_slice()).is_ok()
+    }
+
     /// Sends the live session back to the title screen.
     ///
     /// The runtime tears the running map down at the end of the frame that
@@ -1462,6 +1471,13 @@ const ANDROID_FONT_METRIC_CANDIDATES: [&str; 10] = [
     "/system/fonts/DroidSansFallback.ttf",
 ];
 
+/// CJK faces bundled next to the iOS executable. Godot tries the Bold file
+/// before its system font; Regular is a metrics-only fallback for packages
+/// that omit Bold.
+#[cfg_attr(target_os = "android", allow(dead_code))]
+const IOS_BUNDLED_FONT_METRIC_CANDIDATES: [&str; 2] =
+    ["NotoSansCJKsc-Bold.otf", "NotoSansCJKsc-Regular.otf"];
+
 /// Installs the game's real font metrics for text-picture anchor maths.
 ///
 /// The retail face is `Microsoft YaHei UI Bold` from `Game.dat`; the data root also
@@ -1489,7 +1505,11 @@ fn install_font_metrics(game: &mut Game, root: &Path) {
     }
     #[cfg(not(target_os = "android"))]
     {
-        let mut candidates = vec![PathBuf::from("C:/Windows/Fonts/msyhbd.ttc")];
+        let mut candidates = Vec::new();
+        for name in IOS_BUNDLED_FONT_METRIC_CANDIDATES {
+            candidates.push(root.join(name));
+        }
+        candidates.push(PathBuf::from("C:/Windows/Fonts/msyhbd.ttc"));
         for name in [
             "◆GenJyuuGothicX-P-Bold.ttf",
             "07やさしさゴシックボールド.ttf",

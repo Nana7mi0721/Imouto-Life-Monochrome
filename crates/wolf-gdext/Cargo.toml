@@ -7,10 +7,11 @@ publish.workspace = true
 description = "Godot 4 GDExtension facade for the WOLF RPG Editor runtime"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 godot = { version = "0.5.5", features = ["api-4-7", "lazy-function-tables"] }
 wolf-format = { workspace = true }
 wolf-vm = { workspace = true }
+wolf-save = { workspace = true }
 wolf-game = { path = "../wolf-game", default-features = false }

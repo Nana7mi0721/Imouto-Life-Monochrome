@@ -85,6 +85,7 @@ Godot 4 GDExtension 混合前端设计、视口呈现与运行时调试指南：
 
 - [release/README.md](release/README.md) — 发布流水线总览
 - [release/PACKAGING.md](release/PACKAGING.md) — **全平台打包指南**（Windows 便携包/NSIS 安装包、Android Release APK 签名流水线）
+- [release/IOS_PRIVATE_BUILD.md](release/IOS_PRIVATE_BUILD.md) — iOS 未签名 IPA 私有构建、Data 注入与 Sideloadly 安装
 - [release/ASSETS.md](release/ASSETS.md) — 素材导出工具 `wolf-cli assets`、媒体清单与数据库资源提取规范
 - [release/PROJECT_ASSETS.md](release/PROJECT_ASSETS.md) — 仓库资产盘点与清理台账
 

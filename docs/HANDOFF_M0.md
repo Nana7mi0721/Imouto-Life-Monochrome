@@ -263,7 +263,24 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-20）
 
-* **2026-11-20 0.1.1 六包发布与 Android 真机验证（当前最新）**：在 OnePlus
+* **2026-11-20 iOS 私有构建与移动端存档传输（未发布）**：新增 iOS export
+  preset、`wolf-gdext` iOS arm64 静态库配置、`tools/build-ios.sh`、
+  `tools/package-ios.sh`、`tools/inject-ios-data.sh`、
+  `.github/workflows/ios-unsigned.yml` 与 `docs/release/IOS_PRIVATE_BUILD.md`。
+  标题存档页新增 90×70 横排“导入/导出”按钮；Android 优先调用系统文档选择器，
+  并处理 SAF `content://` URI；iOS 4.7.2 无原生文件对话框后端，自动回退到
+  应用内选择器，`user://` 通过 Files/iTunes 共享可见。导入支持 ZIP 或单个
+  `.sav`：单个文件先选系统/槽 1–4，再弹覆盖确认；ZIP 只接受直接 `.sav`
+  与 `manifest.txt`，拒绝路径穿越。所有导入都会先备份 `Save/`。iOS 解码
+  缓存上限为 64 MiB。验证：Godot smoke 全绿（含 `save_transfer` ZIP/单档
+  往返、ZIP 确认取消不写盘、非法 `.sav` 拒绝）、
+  `cargo fmt/check`、`wolf-gdext` 3 tests、`aarch64-apple-ios` check、
+  iOS 脚本语法与注入器 `py_compile` 通过；标题存档页 1024×576 实机截图
+  已核对按钮位置/样式，无旧“结束”贴图。Android OnePlus PJZ110 真机已验证
+  系统导入/导出、单档目标槽与导出 ZIP 字节一致；iPhone 真机尚未验证。
+  尚未 commit/push，也未发布新包。
+
+* **2026-11-20 0.1.1 六包发布与 Android 真机验证**：在 OnePlus
   PJZ110（Android 15 / SDK 35 / arm64-v8a）完成标准与 slim APK 的覆盖安装、
   冷启动与标题/剧情渲染验证；`versionName=0.1.1`、`versionCode=2`，
   沿用 0.1.0 release 证书，`user://` 数据保留。六个产物（Windows 标准/slim

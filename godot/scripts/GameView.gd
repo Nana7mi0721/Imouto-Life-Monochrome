@@ -10,6 +10,9 @@ extends Control
 
 const LOGICAL_SIZE := Vector2(1024.0, 576.0)
 const APP_WINDOW_TITLE := "妹！生活 ～单色～ Godot"
+## Manifest fallback when project.godot has no application/config/version.
+## Keep this in sync with godot/export_presets.cfg.
+const APP_VERSION_FALLBACK := "0.1.1"
 const WINDOW_BASE_SIZE := Vector2i(1024, 576)
 const TITLEBAR_ICON_SMALL_SIZES := [16, 20, 24, 32, 40, 48]
 ## F8 reports the measured render/physics rates and the active display tier.
@@ -25,6 +28,11 @@ const SAVE_NOTICE_Z := 99990
 const SAVE_NOTICE_RECT := Rect2(716.0, 96.0, 276.0, 216.0)
 ## The save-page "return to title" button, drawn just above the album icon.
 const SAVE_RETURN_RECT := Rect2(892.0, 330.0, 90.0, 70.0)
+## On the title save page the return button is replaced by two transfer buttons
+## aligned under the notice's right edge.  The panel is drawn by
+## `_SaveTransferUI`, so no baked "结束" text from `endbutton.png` is shown.
+const SAVE_TRANSFER_IMPORT_RECT := Rect2(800.0, 330.0, 90.0, 70.0)
+const SAVE_TRANSFER_EXPORT_RECT := Rect2(898.0, 330.0, 90.0, 70.0)
 ## Preferred UI faces on Windows.  Missing files are skipped, never assumed.
 const WINDOWS_FONT_BOLD := "C:/Windows/Fonts/msyhbd.ttc"
 const WINDOWS_FONT_REGULAR := "C:/Windows/Fonts/msyh.ttc"
@@ -51,6 +59,17 @@ const ANDROID_SYSTEM_FONT_NAMES: Array[String] = [
 	"Noto Sans SC",
 	"sans-serif",
 ]
+## CJK face bundled next to the iOS executable.  The Rust metrics path reads
+## the same file so text rendering and anchor maths share one face.
+const IOS_BUNDLED_FONT_NAME := "NotoSansCJKsc-Bold.otf"
+## iOS's system CJK stack, used only when the bundled face is unavailable.
+const IOS_SYSTEM_FONT_NAMES: Array[String] = [
+	"PingFang SC",
+	"Hiragino Sans GB",
+	"Noto Sans CJK SC",
+	"Noto Sans SC",
+	"sans-serif",
+]
 ## Symbol-only fallback attached to both primary faces.  Microsoft YaHei has no
 ## U+266A (the message "♪" glyph), so the shaper must be able to reach a face that
 ## does.  The list is probed by the platform, not assumed to exist.
@@ -73,6 +92,73 @@ const TOUCH_TWO_FINGER_MAX_MOVE := 36.0
 ## Android first-run staging chunk size (1 MiB) and decoded texture cache budget.
 const ANDROID_STAGING_CHUNK_BYTES := 1024 * 1024
 const ANDROID_ASSET_CACHE_BYTES := 128 * 1024 * 1024
+## iPhone XR and similar 3 GB devices can be killed while browsing large CGs if
+## the decoded texture cache grows without bound. Keep the iOS budget below the
+## Android one; the retail atlas remains fully usable at 64 MiB.
+const IOS_ASSET_CACHE_BYTES := 64 * 1024 * 1024
+## Save archives are normally well under a megabyte; this bound keeps a corrupt
+## or hostile zip from allocating without limit before the user confirms.
+const SAVE_ARCHIVE_MAX_BYTES := 256 * 1024 * 1024
+const SAVE_TRANSFER_COPY_CHUNK_BYTES := 1024 * 1024
+
+class _SaveTransferUI:
+	## The two title-page buttons share the old return button's footprint.  A
+	## static helper lets both the ordinary draw path and `_BlendBatch` use the
+	## exact same panel, label metrics and hit rectangles.
+	const IMPORT_RECT := Rect2(800.0, 330.0, 90.0, 70.0)
+	const EXPORT_RECT := Rect2(898.0, 330.0, 90.0, 70.0)
+	const LABEL_PX := 20.0
+	const TextScript := preload("res://scripts/WolfText.gd")
+
+	static func button_at(local: Vector2) -> String:
+		if IMPORT_RECT.has_point(local):
+			return "import"
+		if EXPORT_RECT.has_point(local):
+			return "export"
+		return ""
+
+	static func draw(target: CanvasItem, bold: Font, regular: Font) -> void:
+		draw_button(target, IMPORT_RECT, "导入", bold, regular)
+		draw_button(target, EXPORT_RECT, "导出", bold, regular)
+
+	static func draw_button(
+		target: CanvasItem,
+		rect: Rect2,
+		label: String,
+		bold: Font,
+		regular: Font
+	) -> void:
+		target.draw_rect(rect, Color(0.09, 0.09, 0.11, 0.94), true)
+		target.draw_rect(rect, Color(0.82, 0.82, 0.86, 0.95), false, 1.5)
+		var font := bold if bold != null else regular
+		if font == null:
+			return
+		var px := maxi(1, int(round(LABEL_PX)))
+		var width := font.get_string_size(
+			label,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			px
+		).x
+		var pitch: float = TextScript.line_pitch(LABEL_PX)
+		var origin := Vector2(
+			rect.position.x + maxf(0.0, (rect.size.x - width) * 0.5),
+			rect.position.y + (rect.size.y - pitch) * 0.5
+		)
+		TextScript.draw_text(
+			target,
+			{
+				"text": label,
+				"rect": Rect2(origin, Vector2(width + 8.0, pitch)),
+				"font_px": LABEL_PX,
+				"weight": 700,
+				"colour": Color(0.96, 0.96, 0.98, 1.0),
+				"alpha": 1.0,
+				"outline": true,
+			},
+			bold,
+			regular
+		)
 
 class _BlendBatch extends Node2D:
 	const LOGICAL_SIZE := Vector2(1024.0, 576.0)
@@ -85,7 +171,12 @@ class _BlendBatch extends Node2D:
 	var bold_font: Font
 	var regular_font: Font
 	var frozen_texture: Texture2D
-	var save_return_texture: Texture2D
+	## The ordinary save pages keep the baked return button; the title save page
+	## sets `save_transfer_visible` and draws the two front-end transfer panels.
+	var save_transfer_texture: Texture2D
+	var save_transfer_visible := false
+	var save_transfer_bold_font: Font
+	var save_transfer_regular_font: Font
 	var ap: Dictionary = {}
 
 	func _draw() -> void:
@@ -158,8 +249,14 @@ class _BlendBatch extends Node2D:
 		]
 		for index in range(lines.size()):
 			_draw_notice_line(lines[index], index)
-		if save_return_texture != null:
-			draw_texture_rect(save_return_texture, SAVE_RETURN_RECT, false)
+		if save_transfer_visible:
+			_SaveTransferUI.draw(
+				self,
+				save_transfer_bold_font,
+				save_transfer_regular_font
+			)
+		elif save_transfer_texture != null:
+			draw_texture_rect(save_transfer_texture, SAVE_RETURN_RECT, false)
 
 	func _draw_notice_line(text: String, index: int) -> void:
 		WolfTextScript.draw_text(
@@ -206,6 +303,7 @@ class _ModalLayer extends Node2D:
 	var error_mode := false
 	var title := ""
 	var body := ""
+	var body_multiline := false
 	var labels: Array[String] = []
 	var focus_index := 0
 	## The banner text; empty means no banner.
@@ -223,12 +321,21 @@ class _ModalLayer extends Node2D:
 		if count <= 0:
 			return rects
 		var panel := panel_rect()
-		var total := float(count) * BUTTON_SIZE.x + float(count - 1) * BUTTON_GAP
-		var left := panel.position.x + (panel.size.x - total) * 0.5
-		var top := panel.position.y + panel.size.y - BUTTON_SIZE.y - 28.0
+		## Two-row grid for the six target choices: System + four slots + cancel.
+		var columns := mini(count, 3) if count > 4 else count
+		var rows := int(ceil(float(count) / float(columns)))
+		var row_gap := 12.0 if rows > 1 else 0.0
+		var grid_height := float(rows) * BUTTON_SIZE.y + float(rows - 1) * row_gap
+		var top := panel.position.y + panel.size.y - grid_height - 18.0
 		for index in range(count):
-			var x := left + float(index) * (BUTTON_SIZE.x + BUTTON_GAP)
-			rects.append(Rect2(Vector2(x, top), BUTTON_SIZE))
+			var row := floori(float(index) / float(columns))
+			var column := index % columns
+			var in_row := mini(columns, count - row * columns)
+			var row_width := float(in_row) * BUTTON_SIZE.x + float(in_row - 1) * BUTTON_GAP
+			var left := panel.position.x + (panel.size.x - row_width) * 0.5
+			var x := left + float(column) * (BUTTON_SIZE.x + BUTTON_GAP)
+			var y := top + float(row) * (BUTTON_SIZE.y + row_gap)
+			rects.append(Rect2(Vector2(x, y), BUTTON_SIZE))
 		return rects
 
 	func _draw() -> void:
@@ -251,6 +358,25 @@ class _ModalLayer extends Node2D:
 							panel.position + Vector2(24.0, 76.0),
 							Vector2(panel.size.x - 48.0, 220.0)
 						)
+					)
+				elif body_multiline:
+					WolfTextScript.draw_text(
+						self,
+						{
+							"text": body,
+							"rect": Rect2(
+								panel.position + Vector2(24.0, 78.0),
+								Vector2(panel.size.x - 48.0, 62.0)
+							),
+							"font_px": 18.0,
+							"weight": 400,
+							"colour": Color(0.82, 0.82, 0.88, 1.0),
+							"alpha": 1.0,
+							"outline": true,
+							"wrap": true,
+						},
+						bold_font,
+						regular_font
 					)
 				else:
 					_draw_label(
@@ -368,6 +494,18 @@ var se_cursor := 0
 var frozen_texture: ImageTexture
 var save_return_texture: ImageTexture
 var diagnostics_printed := false
+## One reusable native file picker for save import/export.  It is freed after
+## every selection or cancellation so a platform picker never outlives its turn.
+var _save_transfer_dialog: FileDialog
+var _save_transfer_dialog_mode := ""
+## A validated zip waits here while the overwrite confirmation is on screen.
+var _save_transfer_pending_zip := ""
+var _save_transfer_pending_entries: Array = []
+var _save_transfer_pending_raw_bytes := PackedByteArray()
+var _save_transfer_pending_kind := ""
+var _save_transfer_pending_target := ""
+var _save_transfer_pending_remove_absent := true
+var _save_transfer_result_can_restart := false
 
 var entry := "boot"
 var load_save_path := ""
@@ -538,9 +676,15 @@ func _ready() -> void:
 	if root.is_empty() and _is_android_runtime():
 		_begin_android_storage_staging()
 		return
+	var save_dir := ""
 	if root.is_empty():
 		root = _resolve_data_root()
-	_finish_startup(root, "")
+		if _is_ios_runtime():
+			save_dir_override = OS.get_user_data_dir().path_join("Save")
+			save_dir = save_dir_override
+	if _is_ios_runtime():
+		print("ios: display_safe_area=", DisplayServer.get_display_safe_area())
+	_finish_startup(root, save_dir)
 
 
 ## Completes startup once a writable data root exists. Android calls this from
@@ -559,10 +703,16 @@ func _finish_startup(root: String, staged_save_dir: String, staged_media_path :=
 	print("startup: godot_fonts_ms=", "%.1f" % ((Time.get_ticks_usec() - fonts_started) / 1000.0))
 
 	if root.is_empty():
-		_fail_startup(
-			"未找到游戏数据目录（缺少包含 BasicData 的 Data 目录）。",
-			"（未指定 --data-root，默认候选目录均不存在）"
-		)
+		if _is_ios_runtime():
+			_fail_startup(
+				"iOS 应用包内缺少 Data 目录（应位于可执行文件同级并包含 BasicData）。",
+				OS.get_executable_path().get_base_dir().path_join("Data")
+			)
+		else:
+			_fail_startup(
+				"未找到游戏数据目录（缺少包含 BasicData 的 Data 目录）。",
+				"（未指定 --data-root，默认候选目录均不存在）"
+			)
 		return
 
 	_setup_audio()
@@ -588,7 +738,11 @@ func _finish_startup(root: String, staged_save_dir: String, staged_media_path :=
 		if wolf.has_method("set_touch_mode"):
 			wolf.set_touch_mode(true)
 		if wolf.has_method("set_asset_cache_bytes"):
-			wolf.set_asset_cache_bytes(ANDROID_ASSET_CACHE_BYTES)
+			var cache_bytes := (
+				IOS_ASSET_CACHE_BYTES if _is_ios_runtime()
+				else ANDROID_ASSET_CACHE_BYTES
+			)
+			wolf.set_asset_cache_bytes(cache_bytes)
 	_enable_live_rng_for_play()
 	if not _is_mobile_touch():
 		_apply_window_titlebar_icon()
@@ -922,6 +1076,14 @@ func _input(event: InputEvent) -> void:
 		# intercepted here, at the very top, before the runtime can see it.
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 			var save_local := get_global_transform_with_canvas().affine_inverse() * mouse_event.position
+			var transfer_action := _save_transfer_button_at(save_local)
+			if not transfer_action.is_empty():
+				# The dialog is front-end only.  Hold the guard until the physical
+				# button comes up so its release cannot confirm a save-grid row.
+				_modal_release_guard = true
+				_open_save_transfer_picker(transfer_action)
+				_mark_input_handled()
+				return
 			if _wolf_save_ui_active() and not _wolf_at_title() and SAVE_RETURN_RECT.has_point(save_local):
 				# Hold the release guard until the button is up so the click
 				# cannot reach CE131 and be read as a grid confirm.
@@ -1082,6 +1244,13 @@ func _handle_screen_touch(event: InputEventScreenTouch) -> void:
 			clampi(int(tap_point.y), 0, int(LOGICAL_SIZE.y) - 1)
 		)
 		_touch_last_pos = local_pos
+		var transfer_action := _save_transfer_button_at(Vector2(local_pos))
+		if not transfer_action.is_empty():
+			# A tap is already a complete press/release pair, so the guard mainly
+			# protects the synthetic left-button latch below.
+			_modal_release_guard = true
+			_open_save_transfer_picker(transfer_action)
+			return
 		if _wolf_save_ui_active() and not _wolf_at_title() and SAVE_RETURN_RECT.has_point(Vector2(local_pos)):
 			# Hold the guard until the finger is up so the tap cannot reach CE131
 			# and be read as a grid confirm.
@@ -1403,6 +1572,18 @@ func _is_confirm_key(identity: int) -> bool:
 func _close_modal() -> void:
 	if _modal_kind.is_empty():
 		return
+	if (
+		_modal_kind == "save_transfer_import_confirm"
+		or _modal_kind == "save_transfer_target"
+	):
+		_save_transfer_pending_zip = ""
+		_save_transfer_pending_entries = []
+		_save_transfer_pending_raw_bytes = PackedByteArray()
+		_save_transfer_pending_kind = ""
+		_save_transfer_pending_target = ""
+		_save_transfer_pending_remove_absent = true
+	elif _modal_kind == "save_transfer_result":
+		_save_transfer_result_can_restart = false
 	_modal_release_guard = true
 	_modal_kind = ""
 	_modal_actions = []
@@ -1410,6 +1591,7 @@ func _close_modal() -> void:
 	_modal_click = Vector2i(-1, -1)
 	if _modal_layer != null:
 		_modal_layer.open = false
+		_modal_layer.body_multiline = false
 		_modal_layer.queue_redraw()
 
 
@@ -1442,6 +1624,20 @@ func _activate_modal_focus() -> void:
 				_quit_app()
 		"save_slot":
 			_activate_save_slot(action)
+		"save_transfer_target":
+			_choose_sav_import_target(action)
+		"save_transfer_import_confirm":
+			var import_path := _save_transfer_pending_zip
+			var import_entries: Array = _save_transfer_pending_entries
+			var remove_absent := _save_transfer_pending_remove_absent
+			_close_modal()
+			if action == "import":
+				_run_save_import(import_path, import_entries, remove_absent)
+		"save_transfer_result":
+			var restart := _save_transfer_result_can_restart and action == "reload"
+			_close_modal()
+			if restart:
+				_reload_after_save_transfer()
 		"android_staging":
 			pass
 		_:
@@ -1579,6 +1775,893 @@ func _wolf_save_slot_at(x: int, y: int) -> Dictionary:
 	return wolf.save_slot_at(x, y)
 
 
+## Returns "import" or "export" when `local` hits a title-page transfer button.
+##
+## The buttons exist only while the title screen's save/load page is open.  The
+## same helper is called before the save-grid hit test on mouse and touch paths.
+func _save_transfer_button_at(local: Vector2) -> String:
+	if not _save_transfer_visible():
+		return ""
+	return _SaveTransferUI.button_at(local)
+
+
+func _save_transfer_visible() -> bool:
+	return (
+		wolf != null
+		and _wolf_at_title()
+		and _wolf_save_ui_active()
+	)
+
+
+## Opens the platform file picker for one transfer action.
+##
+## `FileDialog.use_native_dialog` is always requested.  Godot falls back to its
+## built-in picker on a host without a native implementation; headless runs get
+## a readable message instead of a hidden window.  Only one dialog exists at a
+## time and it is freed by `_dispose_save_transfer_dialog`.
+func _open_save_transfer_picker(mode: String) -> void:
+	if mode != "import" and mode != "export":
+		return
+	if _save_transfer_dialog != null and is_instance_valid(_save_transfer_dialog):
+		_save_transfer_dialog.grab_focus()
+		return
+	_save_transfer_dialog = null
+	if DisplayServer.get_name() == "headless":
+		_show_save_transfer_result(
+			false,
+			"无法打开文件选择器",
+			"当前运行环境没有可用的系统文件选择器。",
+			false
+		)
+		return
+	var dialog := FileDialog.new()
+	_save_transfer_dialog = dialog
+	_save_transfer_dialog_mode = mode
+	dialog.use_native_dialog = true
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	# On iOS Godot 4.7 has no native picker backend, but user:// is the app's
+	# Documents directory and is exposed through Files/iTunes sharing. Starting
+	# inside it makes the built-in fallback usable without typing a sandbox path.
+	dialog.current_dir = OS.get_user_data_dir()
+	dialog.file_selected.connect(_on_save_transfer_file_selected)
+	dialog.canceled.connect(_on_save_transfer_dialog_canceled)
+	add_child(dialog)
+	if mode == "import":
+		dialog.title = "导入存档备份"
+		dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		dialog.filters = PackedStringArray([
+			"*.zip ; ZIP 存档备份",
+			"*.sav ; 单个 WOLF 存档",
+		])
+	else:
+		dialog.title = "导出存档备份"
+		dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+		# Android returns a content:// document URI, and FileDialog appends the
+		# filter extension when the URI does not literally end in .zip. That
+		# turns a valid document ID into a non-existent URI. The default name
+		# already ends in .zip, so an export filter would only corrupt the URI.
+		dialog.filters = PackedStringArray()
+		dialog.current_file = _default_save_archive_name()
+	dialog.popup_centered_ratio(0.8)
+	print("ui: save transfer picker opened for ", mode)
+
+
+func _default_save_archive_name() -> String:
+	return "ImoutoLife-saves-%s.zip" % _save_transfer_timestamp()
+
+
+func _save_transfer_timestamp() -> String:
+	var now := Time.get_datetime_dict_from_system()
+	return "%04d%02d%02d-%02d%02d%02d" % [
+		int(now.get("year", 0)),
+		int(now.get("month", 1)),
+		int(now.get("day", 1)),
+		int(now.get("hour", 0)),
+		int(now.get("minute", 0)),
+		int(now.get("second", 0)),
+	]
+
+
+## Android's Storage Access Framework returns a content:// document URI rather
+## than a filesystem path. FileAccess understands that scheme, but ZIPReader and
+## rename/remove helpers do not, so URI sources are copied to a private temp file
+## first. The caller deletes the staged copy as soon as validation has the bytes.
+func _stage_save_import_source(path: String) -> Dictionary:
+	if not _is_document_uri(path):
+		return {"ok": true, "path": path, "staged": false}
+	var source := FileAccess.open(path, FileAccess.READ)
+	if source == null:
+		return {
+			"ok": false,
+			"message": "无法读取所选存档备份（错误码 %d）。" % FileAccess.get_open_error(),
+		}
+	var size := source.get_length()
+	if size <= 0:
+		source.close()
+		return {"ok": false, "message": "所选存档备份为空或不可读。"}
+	if size > SAVE_ARCHIVE_MAX_BYTES:
+		source.close()
+		return {"ok": false, "message": "存档压缩包过大，已中止导入。"}
+	var temp_path := _new_save_transfer_temp_path("import", "bin")
+	var dest := FileAccess.open(temp_path, FileAccess.WRITE)
+	if dest == null:
+		source.close()
+		return {
+			"ok": false,
+			"message": "无法创建导入临时文件（错误码 %d）。" % FileAccess.get_open_error(),
+		}
+	var read_failed := false
+	while source.get_position() < size:
+		var remaining := size - source.get_position()
+		var chunk_len := mini(SAVE_TRANSFER_COPY_CHUNK_BYTES, remaining)
+		var buffer := source.get_buffer(chunk_len)
+		if buffer.size() != chunk_len:
+			read_failed = true
+			break
+		dest.store_buffer(buffer)
+		if dest.get_error() != OK:
+			read_failed = true
+			break
+	dest.flush()
+	var write_err := dest.get_error()
+	dest.close()
+	source.close()
+	if read_failed or write_err != OK:
+		DirAccess.remove_absolute(temp_path)
+		return {
+			"ok": false,
+			"message": "无法读取所选存档备份（错误码 %d）。" % write_err,
+		}
+	return {"ok": true, "path": temp_path, "staged": true}
+
+
+func _new_save_transfer_temp_path(tag: String, extension := "zip") -> String:
+	return "user://save-transfer-%s-%s-%d.%s" % [
+		tag,
+		_save_transfer_timestamp(),
+		Time.get_ticks_usec(),
+		extension,
+	]
+
+
+func _is_document_uri(path: String) -> bool:
+	return path.to_lower().begins_with("content://")
+
+
+func _discard_save_import_source(source: Dictionary) -> void:
+	if bool(source.get("staged", false)):
+		var staged_path := str(source.get("path", ""))
+		if not staged_path.is_empty() and FileAccess.file_exists(staged_path):
+			DirAccess.remove_absolute(staged_path)
+
+
+## A direct `.sav` does not have a ZIP directory entry, so inspect the magic and
+## validate the bytes through `wolf-gdext` before showing any target dialog.
+func _inspect_save_import_source(path: String) -> Dictionary:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {
+			"ok": false,
+			"message": "无法读取所选存档（错误码 %d）。" % FileAccess.get_open_error(),
+		}
+	var length := file.get_length()
+	if length <= 0:
+		file.close()
+		return {"ok": false, "message": "所选存档为空或不可读。"}
+	var head := file.get_buffer(mini(4, length))
+	file.close()
+	var is_zip := (
+		head.size() >= 4
+		and head[0] == 0x50 and head[1] == 0x4B
+		and head[2] == 0x03 and head[3] == 0x04
+	)
+	if is_zip:
+		var zip_result := _validate_save_archive(path)
+		if bool(zip_result.get("ok", false)):
+			zip_result["kind"] = "zip"
+		return zip_result
+
+	var raw := _read_file_bytes_limited(path, SAVE_ARCHIVE_MAX_BYTES)
+	if not bool(raw.get("ok", false)):
+		return raw
+	var bytes: PackedByteArray = raw.get("bytes", PackedByteArray())
+	if wolf != null and wolf.has_method("validate_save_bytes"):
+		if not bool(wolf.validate_save_bytes(bytes)):
+			return {"ok": false, "message": "所选文件不是有效的 WOLF .sav 存档。"}
+	elif bytes.size() <= 0x14:
+		return {"ok": false, "message": "所选文件不是有效的 WOLF .sav 存档。"}
+	return {"ok": true, "kind": "sav", "bytes": bytes}
+
+
+func _read_file_bytes_limited(path: String, limit: int) -> Dictionary:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {
+			"ok": false,
+			"message": "无法读取所选文件（错误码 %d）。" % FileAccess.get_open_error(),
+		}
+	var size := file.get_length()
+	if size <= 0:
+		file.close()
+		return {"ok": false, "message": "所选文件为空或不可读。"}
+	if size > limit:
+		file.close()
+		return {"ok": false, "message": "所选存档过大，已中止导入。"}
+	var bytes := file.get_buffer(size)
+	file.close()
+	if bytes.size() != size:
+		return {"ok": false, "message": "读取所选存档不完整。"}
+	return {"ok": true, "bytes": bytes}
+
+
+func _dispose_save_transfer_dialog() -> String:
+	var mode := _save_transfer_dialog_mode
+	_save_transfer_dialog_mode = ""
+	if _save_transfer_dialog != null and is_instance_valid(_save_transfer_dialog):
+		_save_transfer_dialog.queue_free()
+	_save_transfer_dialog = null
+	return mode
+
+
+func _on_save_transfer_file_selected(path: String) -> void:
+	if _save_transfer_dialog == null:
+		return
+	var mode := _dispose_save_transfer_dialog()
+	if mode == "import":
+		_begin_save_import(path)
+	elif mode == "export":
+		_run_save_export(path)
+
+
+func _on_save_transfer_dialog_canceled() -> void:
+	if _save_transfer_dialog == null:
+		return
+	_dispose_save_transfer_dialog()
+
+
+## Validates the chosen archive before asking to overwrite anything, then keeps
+## the validated bytes in memory so the file cannot change during confirmation.
+func _begin_save_import(path: String) -> void:
+	var source := _stage_save_import_source(path)
+	if not bool(source.get("ok", false)):
+		_show_save_transfer_result(
+			false,
+			"导入失败",
+			str(source.get("message", "存档压缩包无效。")),
+			false
+		)
+		return
+	var inspected := _inspect_save_import_source(str(source.get("path", "")))
+	_discard_save_import_source(source)
+	if not bool(inspected.get("ok", false)):
+		_show_save_transfer_result(
+			false,
+			"导入失败",
+			str(inspected.get("message", "存档文件无效。")),
+			false
+		)
+		return
+	_save_transfer_pending_zip = path
+	_save_transfer_pending_target = ""
+	_save_transfer_pending_kind = str(inspected.get("kind", "zip"))
+	if _save_transfer_pending_kind == "sav":
+		_save_transfer_pending_raw_bytes = inspected.get("bytes", PackedByteArray())
+		_save_transfer_pending_entries = []
+		_save_transfer_pending_remove_absent = false
+		_show_sav_target_picker()
+		return
+	_save_transfer_pending_raw_bytes = PackedByteArray()
+	_save_transfer_pending_entries = inspected.get("entries", [])
+	_save_transfer_pending_remove_absent = true
+	_show_save_import_confirm(
+		"导入存档备份",
+		"将覆盖当前 Save/ 中的存档：System.sav 与编号槽位都会替换，"
+		+ "压缩包中不存在的 .sav 会被移除。\n"
+		+ "导入前会自动备份到同级 Save-backup-* 目录。是否继续？"
+	)
+	print("ui: save import zip confirmation opened for ", path)
+
+
+func _show_sav_target_picker() -> void:
+	_ensure_modal_layer()
+	_modal_kind = "save_transfer_target"
+	_modal_actions = [
+		"system", "slot1", "slot2", "slot3", "slot4", "cancel",
+	]
+	_modal_slot = {}
+	_modal_click = Vector2i(-1, -1)
+	_modal_layer.error_mode = false
+	_modal_layer.title = "选择目标存档槽"
+	_modal_layer.body = "单个 .sav 将写入所选位置；当前存档会先备份。"
+	_modal_layer.body_multiline = false
+	_modal_layer.labels = ["系统", "槽 1", "槽 2", "槽 3", "槽 4", "取消"]
+	_modal_layer.focus_index = _modal_layer.labels.size() - 1
+	_modal_layer.toast = ""
+	_modal_layer.open = true
+	_modal_layer.queue_redraw()
+	_reset_modal_input()
+	print("ui: save target slot picker opened")
+
+
+func _sav_target_filename(action: String) -> String:
+	match action:
+		"system":
+			return "System.sav"
+		"slot1":
+			return "SaveData01.sav"
+		"slot2":
+			return "SaveData02.sav"
+		"slot3":
+			return "SaveData03.sav"
+		"slot4":
+			return "SaveData04.sav"
+	return ""
+
+
+func _choose_sav_import_target(action: String) -> void:
+	if action == "cancel":
+		_close_modal()
+		return
+	var target_filename := _sav_target_filename(action)
+	var raw_bytes := _save_transfer_pending_raw_bytes
+	var source_path := _save_transfer_pending_zip
+	_close_modal()
+	if target_filename.is_empty() or raw_bytes.is_empty():
+		_show_save_transfer_result(
+			false,
+			"导入失败",
+			"所选存档为空或目标槽位无效。",
+			false
+		)
+		return
+	_save_transfer_pending_kind = "sav"
+	_save_transfer_pending_zip = source_path
+	_save_transfer_pending_raw_bytes = raw_bytes
+	_save_transfer_pending_target = target_filename
+	_save_transfer_pending_entries = [{
+		"name": target_filename,
+		"bytes": raw_bytes,
+	}]
+	_save_transfer_pending_remove_absent = false
+	_show_save_import_confirm(
+		"导入单个存档",
+		"将覆盖 %s。导入前会自动备份当前 Save/。是否继续？"
+		% target_filename
+	)
+
+
+func _show_save_import_confirm(title: String, body: String) -> void:
+	_ensure_modal_layer()
+	_modal_kind = "save_transfer_import_confirm"
+	_modal_actions = ["import", "cancel"]
+	_modal_slot = {}
+	_modal_click = Vector2i(-1, -1)
+	_modal_layer.error_mode = false
+	_modal_layer.title = title
+	_modal_layer.body = body
+	_modal_layer.body_multiline = true
+	_modal_layer.labels = ["导入", "取消"]
+	_modal_layer.focus_index = 1
+	_modal_layer.toast = ""
+	_modal_layer.open = true
+	_modal_layer.queue_redraw()
+	_reset_modal_input()
+
+
+func _run_save_export(path: String) -> void:
+	var result := _export_save_archive(path)
+	if bool(result.get("ok", false)):
+		_show_save_transfer_result(
+			true,
+			"导出完成",
+			"已导出 %d 个存档文件。" % int(result.get("count", 0)),
+			false
+		)
+		print("ui: save backup exported to ", result.get("path", path))
+	else:
+		_show_save_transfer_result(
+			false,
+			"导出失败",
+			str(result.get("message", "无法导出存档备份。")),
+			false
+		)
+
+
+func _run_save_import(
+	path: String,
+	entries: Array,
+	remove_absent := true
+) -> void:
+	_save_transfer_pending_zip = ""
+	_save_transfer_pending_entries = []
+	var result := _apply_save_import(path, entries, remove_absent)
+	if bool(result.get("ok", false)):
+		var backup := str(result.get("backup", ""))
+		if not backup.is_empty():
+			print("ui: save import backup at ", backup)
+		_show_save_transfer_result(
+			true,
+			"导入完成",
+			"存档已导入，重启游戏后生效。",
+			true
+		)
+	else:
+		var message := str(result.get("message", "无法导入存档备份。"))
+		var backup := str(result.get("backup", ""))
+		if not backup.is_empty():
+			message += "\n原存档备份：%s" % backup
+			print("ui: failed save import backup at ", backup)
+		_show_save_transfer_result(false, "导入失败", message, false)
+
+
+func _show_save_transfer_result(
+	ok: bool,
+	title: String,
+	body: String,
+	can_restart: bool
+) -> void:
+	_ensure_modal_layer()
+	_modal_kind = "save_transfer_result"
+	_modal_actions = ["reload", "cancel"] if can_restart else ["cancel"]
+	_modal_slot = {}
+	_modal_click = Vector2i(-1, -1)
+	_save_transfer_result_can_restart = can_restart
+	_modal_layer.error_mode = not ok and body.contains("\n")
+	_modal_layer.title = title
+	_modal_layer.body = body
+	_modal_layer.body_multiline = body.contains("\n")
+	_modal_layer.labels = ["重启游戏", "稍后"] if can_restart else ["知道了"]
+	_modal_layer.focus_index = _modal_layer.labels.size() - 1
+	_modal_layer.toast = ""
+	_modal_layer.open = true
+	_modal_layer.queue_redraw()
+	_reset_modal_input()
+	print("ui: save transfer result: ", title)
+
+
+func _reload_after_save_transfer() -> void:
+	_clear_held_input()
+	var err := get_tree().reload_current_scene()
+	if err != OK:
+		_show_save_transfer_result(
+			false,
+			"重启失败",
+			"无法重新加载游戏场景（错误码 %d）。" % err,
+			false
+		)
+	else:
+		print("ui: game reloaded after save import")
+
+
+func _save_dir_path() -> String:
+	if not save_dir_override.is_empty():
+		return save_dir_override
+	if data_root.is_empty():
+		return ""
+	return data_root.path_join("Save")
+
+
+func _save_backup_dir(save_dir: String) -> String:
+	var parent := _save_dir_parent(save_dir)
+	var stem := "Save-backup-%s" % _save_transfer_timestamp()
+	var candidate := parent.path_join(stem)
+	var suffix := 2
+	while DirAccess.dir_exists_absolute(candidate):
+		candidate = parent.path_join("%s-%d" % [stem, suffix])
+		suffix += 1
+	return candidate
+
+
+func _save_dir_parent(path: String) -> String:
+	var normalised := path.replace("\\", "/").trim_suffix("/")
+	if normalised.begins_with("user://"):
+		var relative := normalised.substr("user://".length())
+		var slash := relative.rfind("/")
+		if slash < 0:
+			return "user://"
+		var parent_rel := relative.substr(0, slash)
+		return "user://" if parent_rel.is_empty() else "user://" + parent_rel
+	if normalised.begins_with("res://"):
+		var relative := normalised.substr("res://".length())
+		var slash := relative.rfind("/")
+		if slash < 0:
+			return "res://"
+		var parent_rel := relative.substr(0, slash)
+		return "res://" if parent_rel.is_empty() else "res://" + parent_rel
+	var slash := normalised.rfind("/")
+	if slash < 0:
+		return "."
+	return normalised.substr(0, slash)
+
+
+func _save_archive_manifest_text() -> String:
+	var app_name := str(
+		ProjectSettings.get_setting("application/config/name", "Imouto Life")
+	).strip_edges()
+	var app_version := str(
+		ProjectSettings.get_setting(
+			"application/config/version",
+			APP_VERSION_FALLBACK
+		)
+	).strip_edges()
+	if app_version.is_empty():
+		app_version = APP_VERSION_FALLBACK
+	return "app=%s\nversion=%s\ncreated=%s\n" % [
+		app_name,
+		app_version,
+		Time.get_datetime_string_from_system(false, true),
+	]
+
+
+## Exports the direct `.sav` files in the writable save directory.  Unknown
+## files are intentionally not copied because the importer only accepts save
+## data plus its own manifest.
+##
+## Android's save picker returns a content:// document URI. The archive is built
+## in private storage and validated first, then copied through FileAccess because
+## SAF document providers do not support rename/atomic replacement.
+func _export_save_archive(target_path: String) -> Dictionary:
+	var save_dir := _save_dir_path()
+	if save_dir.is_empty():
+		return {"ok": false, "message": "未找到可写的存档目录。"}
+	var dir := DirAccess.open(save_dir)
+	if dir == null:
+		return {
+			"ok": false,
+			"message": "无法打开存档目录（错误码 %d）。" % DirAccess.get_open_error(),
+		}
+	var names: Array[String] = []
+	for file_name in dir.get_files():
+		if file_name.get_extension().to_lower() != "sav":
+			continue
+		if dir.is_link(save_dir.path_join(file_name)):
+			continue
+		names.append(file_name)
+	names.sort()
+	if names.is_empty():
+		return {"ok": false, "message": "存档目录中没有可导出的 .sav 文件。"}
+
+	var requested_target := target_path
+	if requested_target.is_empty():
+		return {"ok": false, "message": "未选择备份文件保存位置。"}
+	var document_uri := _is_document_uri(requested_target)
+	var target := requested_target
+	var tmp_path := ""
+	if document_uri:
+		tmp_path = _new_save_transfer_temp_path("export")
+	else:
+		if target.begins_with("user://") or target.begins_with("res://"):
+			target = ProjectSettings.globalize_path(target)
+		if target.get_extension().to_lower() != "zip":
+			target += ".zip"
+		var parent := target.get_base_dir()
+		if not parent.is_empty():
+			var parent_err := DirAccess.make_dir_recursive_absolute(parent)
+			if parent_err != OK:
+				return {
+					"ok": false,
+					"message": "无法创建备份目录（错误码 %d）。" % parent_err,
+				}
+		tmp_path = target + ".part.zip"
+	if FileAccess.file_exists(tmp_path):
+		DirAccess.remove_absolute(tmp_path)
+	var packer := ZIPPacker.new()
+	var open_err := packer.open(tmp_path)
+	if open_err != OK:
+		return {
+			"ok": false,
+			"message": "无法创建 ZIP 备份（错误码 %d）。" % open_err,
+		}
+	var failure := ""
+	if packer.start_file("manifest.txt") != OK:
+		failure = "无法写入备份清单。"
+	else:
+		packer.write_file(_save_archive_manifest_text().to_utf8_buffer())
+		packer.close_file()
+	if failure.is_empty():
+		for file_name in names:
+			var bytes := FileAccess.get_file_as_bytes(save_dir.path_join(file_name))
+			if bytes.is_empty():
+				failure = "无法读取存档文件：%s" % file_name
+				break
+			if packer.start_file(file_name) != OK:
+				failure = "无法写入存档文件：%s" % file_name
+				break
+			packer.write_file(bytes)
+			packer.close_file()
+	packer.close()
+	if not failure.is_empty():
+		DirAccess.remove_absolute(tmp_path)
+		return {"ok": false, "message": failure}
+	var validation := _validate_save_archive(tmp_path)
+	if not bool(validation.get("ok", false)):
+		DirAccess.remove_absolute(tmp_path)
+		return {
+			"ok": false,
+			"message": "备份校验失败：%s" % str(validation.get("message", "")),
+		}
+	var validated_entries: Array = validation.get("entries", [])
+	if validated_entries.size() != names.size():
+		DirAccess.remove_absolute(tmp_path)
+		return {"ok": false, "message": "备份写入不完整。"}
+	if document_uri:
+		var copy_err := _copy_file_to_document_uri(tmp_path, target)
+		DirAccess.remove_absolute(tmp_path)
+		if copy_err != OK:
+			return {
+				"ok": false,
+				"message": "无法写入所选备份位置（错误码 %d）。" % copy_err,
+			}
+		return {
+			"ok": true,
+			"path": target,
+			"count": names.size(),
+			"entries": names.size(),
+		}
+	var replace_err := _replace_file_atomic(tmp_path, target)
+	if replace_err != OK:
+		DirAccess.remove_absolute(tmp_path)
+		return {
+			"ok": false,
+			"message": "无法保存 ZIP 备份（错误码 %d）。" % replace_err,
+		}
+	return {
+		"ok": true,
+		"path": target,
+		"count": names.size(),
+		"entries": names.size(),
+	}
+
+
+func _copy_file_to_document_uri(source_path: String, document_uri: String) -> Error:
+	var source := FileAccess.open(source_path, FileAccess.READ)
+	if source == null:
+		return ERR_FILE_CANT_READ
+	var dest := FileAccess.open(document_uri, FileAccess.WRITE)
+	if dest == null:
+		source.close()
+		return FileAccess.get_open_error()
+	var total := source.get_length()
+	while source.get_position() < total:
+		var remaining := total - source.get_position()
+		var chunk_len := mini(SAVE_TRANSFER_COPY_CHUNK_BYTES, remaining)
+		var buffer := source.get_buffer(chunk_len)
+		if buffer.size() != chunk_len:
+			source.close()
+			dest.close()
+			return ERR_FILE_CANT_READ
+		dest.store_buffer(buffer)
+		var write_err := dest.get_error()
+		if write_err != OK:
+			source.close()
+			dest.close()
+			return write_err
+	dest.flush()
+	var final_err := dest.get_error()
+	dest.close()
+	source.close()
+	return final_err
+
+
+## Reads and validates every payload before it can reach the save directory.
+## The manifest is optional; any other non-`.sav` entry is rejected.
+func _validate_save_archive(path: String) -> Dictionary:
+	if path.is_empty():
+		return {"ok": false, "message": "未选择存档压缩包。"}
+	if not FileAccess.file_exists(path):
+		return {"ok": false, "message": "所选压缩包不存在或不可读。"}
+	var reader := ZIPReader.new()
+	var open_err := reader.open(path)
+	if open_err != OK:
+		reader.close()
+		return {
+			"ok": false,
+			"message": "无法打开 ZIP 存档备份（错误码 %d）。" % open_err,
+		}
+	var entries: Array = []
+	var seen: Dictionary = {}
+	var total_bytes := 0
+	for raw_name in reader.get_files():
+		var parsed := _normalise_save_archive_entry(raw_name)
+		if not bool(parsed.get("ok", false)):
+			reader.close()
+			return {
+				"ok": false,
+				"message": "压缩包包含非法路径或非存档文件：%s" % raw_name,
+			}
+		var key := str(parsed.get("name", "")).to_lower()
+		if seen.has(key):
+			reader.close()
+			return {"ok": false, "message": "压缩包包含重复文件：%s" % raw_name}
+		seen[key] = true
+		if str(parsed.get("kind", "")) == "manifest":
+			continue
+		var bytes := reader.read_file(raw_name)
+		if bytes.is_empty():
+			reader.close()
+			return {
+				"ok": false,
+				"message": "存档文件为空或无法读取：%s" % raw_name,
+			}
+		total_bytes += bytes.size()
+		if total_bytes > SAVE_ARCHIVE_MAX_BYTES:
+			reader.close()
+			return {"ok": false, "message": "存档压缩包过大，已中止导入。"}
+		entries.append({
+			"name": str(parsed.get("name", "")),
+			"bytes": bytes,
+		})
+	reader.close()
+	if entries.is_empty():
+		return {"ok": false, "message": "压缩包中没有 .sav 存档文件。"}
+	return {"ok": true, "entries": entries}
+
+
+func _normalise_save_archive_entry(value: Variant) -> Dictionary:
+	if not (value is String):
+		return {"ok": false}
+	var raw := str(value)
+	if raw.is_empty() or raw.length() > 255:
+		return {"ok": false}
+	for index in range(raw.length()):
+		if raw.unicode_at(index) < 0x20:
+			return {"ok": false}
+	var name := raw.replace("\\", "/")
+	if name.begins_with("/") or name.contains("/") or name.contains(":"):
+		return {"ok": false}
+	if name == "." or name == "..":
+		return {"ok": false}
+	var lower := name.to_lower()
+	if lower == "manifest.txt":
+		return {"ok": true, "kind": "manifest", "name": name}
+	if not lower.ends_with(".sav") or name.length() <= 4:
+		return {"ok": false}
+	if name.get_basename().to_lower() != lower.trim_suffix(".sav"):
+		return {"ok": false}
+	return {"ok": true, "kind": "sav", "name": name}
+
+
+func _apply_save_import(
+	path: String,
+	entries: Array,
+	remove_absent := true
+) -> Dictionary:
+	if entries.is_empty():
+		var validation := _validate_save_archive(path)
+		if not bool(validation.get("ok", false)):
+			return validation
+		entries = validation.get("entries", [])
+	var save_dir := _save_dir_path()
+	if save_dir.is_empty():
+		return {"ok": false, "message": "未找到可写的存档目录。"}
+	var make_err := DirAccess.make_dir_recursive_absolute(save_dir)
+	if make_err != OK and not DirAccess.dir_exists_absolute(save_dir):
+		return {
+			"ok": false,
+			"message": "无法创建存档目录（错误码 %d）。" % make_err,
+		}
+	var backup_dir := _save_backup_dir(save_dir)
+	var backup := _copy_dir_tree(save_dir, backup_dir)
+	if not bool(backup.get("ok", false)):
+		return {
+			"ok": false,
+			"message": "无法备份当前存档（错误码 %d）。" % int(backup.get("error", FAILED)),
+		}
+
+	var temp_paths: Array[String] = []
+	var imported_names: Array[String] = []
+	for entry in entries:
+		var file_name := str(entry.get("name", ""))
+		var bytes: PackedByteArray = entry.get("bytes", PackedByteArray())
+		var temp_path := save_dir.path_join(file_name + ".import-tmp")
+		if FileAccess.file_exists(temp_path):
+			DirAccess.remove_absolute(temp_path)
+		var file := FileAccess.open(temp_path, FileAccess.WRITE)
+		if file == null:
+			_cleanup_import_temps(temp_paths)
+			return {
+				"ok": false,
+				"message": "无法写入导入临时文件：%s" % file_name,
+				"backup": backup_dir,
+			}
+		file.store_buffer(bytes)
+		file.flush()
+		var write_err := file.get_error()
+		file.close()
+		if write_err != OK:
+			DirAccess.remove_absolute(temp_path)
+			_cleanup_import_temps(temp_paths)
+			return {
+				"ok": false,
+				"message": "写入导入临时文件失败（错误码 %d）：%s" % [write_err, file_name],
+				"backup": backup_dir,
+			}
+		temp_paths.append(temp_path)
+		imported_names.append(file_name)
+
+	for index in range(temp_paths.size()):
+		var destination := save_dir.path_join(imported_names[index])
+		var replace_err := _replace_file_atomic(temp_paths[index], destination)
+		if replace_err != OK:
+			_cleanup_import_temps(temp_paths)
+			_restore_save_backup(save_dir, backup_dir)
+			return {
+				"ok": false,
+				"message": "替换存档文件失败（错误码 %d）：%s" % [
+					replace_err,
+					imported_names[index],
+				],
+				"backup": backup_dir,
+			}
+	imported_names.sort()
+	if remove_absent:
+		_remove_other_save_files(save_dir, imported_names)
+	return {
+		"ok": true,
+		"count": imported_names.size(),
+		"backup": backup_dir,
+	}
+
+
+func _cleanup_import_temps(paths: Array[String]) -> void:
+	for path in paths:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+
+
+func _remove_other_save_files(save_dir: String, keep_names: Array[String]) -> void:
+	var keep: Dictionary = {}
+	for name in keep_names:
+		keep[name.to_lower()] = true
+	var dir := DirAccess.open(save_dir)
+	if dir == null:
+		return
+	for file_name in dir.get_files():
+		if file_name.get_extension().to_lower() != "sav":
+			continue
+		if keep.has(file_name.to_lower()):
+			continue
+		var path := save_dir.path_join(file_name)
+		if dir.is_link(path):
+			continue
+		DirAccess.remove_absolute(path)
+
+
+func _restore_save_backup(save_dir: String, backup_dir: String) -> void:
+	var dir := DirAccess.open(save_dir)
+	if dir != null:
+		for file_name in dir.get_files():
+			if file_name.get_extension().to_lower() == "sav":
+				DirAccess.remove_absolute(save_dir.path_join(file_name))
+	_copy_dir_tree(backup_dir, save_dir)
+
+
+func _copy_dir_tree(src_dir: String, dst_dir: String) -> Dictionary:
+	if not DirAccess.dir_exists_absolute(src_dir):
+		return {"ok": false, "error": ERR_FILE_NOT_FOUND}
+	var make_err := DirAccess.make_dir_recursive_absolute(dst_dir)
+	if make_err != OK and not DirAccess.dir_exists_absolute(dst_dir):
+		return {"ok": false, "error": make_err}
+	var dir := DirAccess.open(src_dir)
+	if dir == null:
+		return {"ok": false, "error": DirAccess.get_open_error()}
+	for file_name in dir.get_files():
+		var src_path := src_dir.path_join(file_name)
+		if dir.is_link(src_path):
+			continue
+		var copy_err := _copy_file_chunked(src_path, dst_dir.path_join(file_name))
+		if copy_err != OK:
+			return {"ok": false, "error": copy_err, "path": src_path}
+	for child_name in dir.get_directories():
+		var child_src := src_dir.path_join(child_name)
+		if dir.is_link(child_src):
+			continue
+		var child := _copy_dir_tree(child_src, dst_dir.path_join(child_name))
+		if not bool(child.get("ok", false)):
+			return child
+	return {"ok": true}
+
+
 ## The packet's sprite list without the runtime's pointers.
 ##
 ## Picture 2999 is the pointer the game script paints (the night raid), 2998
@@ -1619,6 +2702,9 @@ func _notification(what: int) -> void:
 
 func _exit_tree() -> void:
 	_join_android_stage_thread()
+	if _save_transfer_dialog != null and is_instance_valid(_save_transfer_dialog):
+		_save_transfer_dialog.queue_free()
+	_save_transfer_dialog = null
 	if not _is_mobile_touch():
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_save_settings_on_exit()
@@ -2053,6 +3139,7 @@ func _draw() -> void:
 			batch.overlays.clear()
 			batch.ap = {}
 			batch.frozen_texture = null
+			batch.save_transfer_visible = false
 			batch.visible = false
 		for item in items:
 			if item.has("sprite"):
@@ -2129,7 +3216,10 @@ func _draw() -> void:
 		batch.bold_font = bold_font
 		batch.regular_font = regular_font
 		batch.frozen_texture = frozen_texture
-		batch.save_return_texture = save_return_texture if not _wolf_at_title() else null
+		batch.save_transfer_texture = save_return_texture if not _wolf_at_title() else null
+		batch.save_transfer_visible = _save_transfer_visible()
+		batch.save_transfer_bold_font = bold_font
+		batch.save_transfer_regular_font = regular_font
 		batch.ap = b_info["ap"]
 		batch.visible = true
 		batch.queue_redraw()
@@ -2140,7 +3230,8 @@ func _draw() -> void:
 		unused.overlays.clear()
 		unused.ap = {}
 		unused.frozen_texture = null
-		unused.save_return_texture = null
+		unused.save_transfer_texture = null
+		unused.save_transfer_visible = false
 		unused.visible = false
 	_record_draw_time(draw_started)
 
@@ -2222,7 +3313,9 @@ func _draw_save_notice() -> void:
 	]
 	for index in range(lines.size()):
 		_draw_save_notice_line(lines[index], index)
-	if save_return_texture != null and not _wolf_at_title():
+	if _save_transfer_visible():
+		_SaveTransferUI.draw(self, bold_font, regular_font)
+	elif save_return_texture != null and not _wolf_at_title():
 		draw_texture_rect(save_return_texture, SAVE_RETURN_RECT, false)
 
 
@@ -2631,6 +3724,10 @@ func _is_mobile_touch() -> bool:
 
 func _is_android_runtime() -> bool:
 	return OS.has_feature("android") or not android_data_src.is_empty()
+
+
+func _is_ios_runtime() -> bool:
+	return OS.has_feature("ios")
 
 
 func _explicit_data_root_arg() -> String:
@@ -3175,10 +4272,11 @@ func _parse_args() -> void:
 
 ## Load the bold or regular UI face.
 ##
-## Candidate order: the Windows Microsoft YaHei file, the faces bundled in the
-## data root, then a SystemFont lookup.  A SystemFont is always constructible, so
-## this never returns null and text never disappears on a host without YaHei.
-## Every departure from the first choice is logged, including which candidate won.
+## Candidate order: iOS's bundled Noto face, the Windows Microsoft YaHei file,
+## the faces bundled in the data root, then a SystemFont lookup.  A SystemFont is
+## always constructible, so this never returns null and text never disappears on
+## a host without YaHei. Every departure from the first choice is logged,
+## including which candidate won.
 func _load_font(is_bold: bool) -> Font:
 	var kind := "bold" if is_bold else "regular"
 	if _is_android_runtime():
@@ -3188,6 +4286,21 @@ func _load_font(is_bold: bool) -> Font:
 			% [kind, str(ANDROID_SYSTEM_FONT_NAMES)]
 		)
 		return android
+	if _is_ios_runtime():
+		if not data_root.is_empty():
+			var ios_font_path := data_root.path_join(IOS_BUNDLED_FONT_NAME)
+			if FileAccess.file_exists(ios_font_path):
+				var ios_font := FontFile.new()
+				if ios_font.load_dynamic_font(ios_font_path) == OK:
+					print("font: %s <- iOS %s" % [kind, ios_font_path])
+					return ios_font
+				push_warning("font: cannot load iOS bundled font %s" % ios_font_path)
+		var ios_system := _make_system_ui_font(is_bold)
+		push_warning(
+			"font: no bundled iOS font for %s, using SystemFont %s"
+			% [kind, str(IOS_SYSTEM_FONT_NAMES)]
+		)
+		return ios_system
 	var candidates: Array[String] = []
 	candidates.append(WINDOWS_FONT_BOLD if is_bold else WINDOWS_FONT_REGULAR)
 	if not data_root.is_empty():
@@ -3211,7 +4324,11 @@ func _load_font(is_bold: bool) -> Font:
 
 func _make_system_ui_font(is_bold: bool) -> Font:
 	var system := SystemFont.new()
-	var names := ANDROID_SYSTEM_FONT_NAMES if _is_android_runtime() else SYSTEM_FONT_NAMES
+	var names := SYSTEM_FONT_NAMES
+	if _is_android_runtime():
+		names = ANDROID_SYSTEM_FONT_NAMES
+	elif _is_ios_runtime():
+		names = IOS_SYSTEM_FONT_NAMES
 	system.font_names = PackedStringArray(names)
 	system.font_weight = 700 if is_bold else 400
 	system.allow_system_fallback = true
