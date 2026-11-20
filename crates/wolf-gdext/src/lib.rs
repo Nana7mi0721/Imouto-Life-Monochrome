@@ -129,6 +129,8 @@ impl WolfGame {
             Ok(mut game) => {
                 let load_ms = started.elapsed().as_secs_f64() * 1000.0;
                 game.set_touch_mode(self.touch_mode);
+                // iOS rejects self-termination, so the title's quit row is removed there.
+                game.set_title_quit_enabled(!cfg!(target_os = "ios"));
                 if let Some(limit) = self.asset_cache_bytes {
                     game.set_asset_cache_bytes(limit);
                 }

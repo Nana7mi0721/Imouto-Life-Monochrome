@@ -569,3 +569,42 @@ slim 包为 PNG→无损 WebP / JPEG→Q90 WebP 后的逐条 zstd。
   --quit-after 180` 直接加载包内 `Data/media.pak`，`exit=0`；
   `wolf-gdext ... [build v0.1.1]`、字体、首帧音效命令均正常。
 
+### 8.9 0.1.1 iOS 退出项修复后的六包重打（2026-11-21）
+
+iOS 不允许应用主动终止进程；标题页第三项“退出游戏”触发 opcode 175 后，
+旧前端只能停在最后一帧。游戏层新增宿主开关，iOS 在打开会话时关闭该行：
+标题选项只保留 `menu1`/`menu2`，CE43 的 `Picture/menu3_b.png`（图片槽 5）
+同步隐藏，鼠标/方向键也不会命中第三行。Windows 与 Android 保持原三行菜单，
+`menu3` 仍会正常发出退出请求。
+
+六个 Windows/Android 产物已用同一源码重新构建并汇总到
+`work/out/dist/release-assets/0.1.1/`：
+
+| 产物 | 字节数 | SHA-256 |
+|---|---:|---|
+| `ImoutoLife-0.1.1-windows-amd64-setup.exe` | 122,380,899 | `d8577234e24072112d2b46cefdf5ddf42577727538ffd3e96a8ea6fe5a2ee51a` |
+| `ImoutoLife-0.1.1-windows-amd64.zip` | 128,689,509 | `c2ffd32930856635bc8a3404976d0710a6ca98af6bc1308eca6365b2b6daa00e` |
+| `ImoutoLife-0.1.1-windows-amd64-setup-slim.exe` | 93,908,231 | `94a75d42d91e25f4d92b0907cf75dbd429895595dc5684e340d7fb1f9f0d7015` |
+| `ImoutoLife-0.1.1-windows-amd64-slim.zip` | 100,622,445 | `ecd784115d71a295b4ae8c5c6deb2787398118998776c852415d1d1dd243c398` |
+| `ImoutoLife-0.1.1-android-arm64.apk` | 125,778,249 | `8e920ff1b321bd54e51b97386ab7ba22f0e8d0382fda3816213d8686eaa42a99` |
+| `ImoutoLife-0.1.1-android-arm64-slim.apk` | 97,712,457 | `5d09d447dcbd004c721a61013241f39719a86db007e588002e86152304210aa5` |
+
+验证：
+
+- `cargo fmt --all -- --check`、`cargo check -q --workspace` 与
+  `cargo check -q -p wolf-gdext --target aarch64-apple-ios` 通过；
+- 新增两项回归：两项标题菜单仍识别为固定图片按钮布局；关闭退出行后
+  选项/源索引为 `menu1,menu2` / `0,1`，槽 5 隐藏且第三行无命中；
+- `bash tools/smoke-godot.sh` 全绿；
+- 四个 Windows ZIP/APK 内的 GDExtension 二进制哈希分别与本次
+  `godot/bin/wolf_gdext.dll` / `godot/bin/android/arm64-v8a/libwolf_gdext.so`
+  一致；Android APK 通过 `verify-apk` 与 release 签名检查；
+- Windows 标准/slim 成品均执行 `Imouto Life.exe --headless --quit-after 180`，
+  加载包内 `Data/media.pak` 后 `exit=0`。
+
+工作区整包测试仍受既有缺夹具/历史用例影响：
+`m1_title_load::title_menu_load_restores_a_save_into_the_bedroom_hud` 与
+`m18_t18_regressions::hidden_and_transparent_pictures_do_not_report_hover`
+各失败 1 条，均不在本次标题退出过滤路径上；本轮相关测试
+`m1_title_load` 5 条中除上述既有加载夹具用例外均通过。
+

@@ -248,7 +248,7 @@ pub fn layout_at_sized(
     // The original title menu is real image buttons painted by event 43; the port must
     // not paint an inferred text panel over them, but it still needs the fixed hit rows.
     if is_title_image_menu(options) {
-        return Some(title_image_layout(cursor));
+        return Some(title_image_layout(cursor, options.len()));
     }
     // The script anchor (`Sys3`/`Sys4`) was tuned for the original fixed window,
     // but it leaves short confirmations floating well above or below the visual
@@ -263,18 +263,22 @@ pub fn layout_at_sized(
     Some(build(options, cursor, cx.round(), cy.round(), font_px))
 }
 
-/// Whether `options` are the three internal keys the shipped title event hands to
-/// opcode `102` (`menu1`/`menu2`/`menu3`).
+/// Whether `options` are the internal keys the shipped title event hands to opcode
+/// `102` (`menu1`/`menu2`/`menu3`, or `menu1`/`menu2` when the quit row is hidden).
 ///
 /// The original title menu is not a text window at all: three hand-drawn image buttons
 /// (`Picture/menu1_a.png` .. `menu3_a.png`) are painted at fixed screen rows by the
 /// conditional title event 43; `_a` is the dark selected button, `_b` the lighter
 /// unselected one, and system variable 20 picks which `_a` overlay is drawn.
-/// Recognising these exact keys lets the port skip the inferred text panel and let the
+/// Recognising these keys lets the port skip the inferred text panel and let the
 /// script's own images be the menu (see [`title_image_layout`] for the hit rows).
 #[must_use]
 pub fn is_title_image_menu(options: &[String]) -> bool {
-    options.len() == 3 && options[0] == "menu1" && options[1] == "menu2" && options[2] == "menu3"
+    matches!(options.len(), 2 | 3)
+        && options
+            .iter()
+            .enumerate()
+            .all(|(index, option)| option == ["menu1", "menu2", "menu3"][index])
 }
 
 /// Fixed screen rows of the original title image-button menu.
@@ -282,19 +286,19 @@ pub fn is_title_image_menu(options: &[String]) -> bool {
 /// CE43 draws `menu1_*`/`menu2_*`/`menu3_*` at x=10, y=400/450/500, each 240x52. These
 /// rectangles are used only for the mouse hit test; the visible menu is the script's own
 /// pictures, so nothing is painted from this layout.
-fn title_image_layout(cursor: usize) -> ChoiceLayout {
+fn title_image_layout(cursor: usize, rows: usize) -> ChoiceLayout {
     const X: f32 = 10.0;
     const Y: f32 = 400.0;
     const W: f32 = 240.0;
     const H: f32 = 52.0;
     const GAP: f32 = 50.0;
-    let mut lines = Vec::with_capacity(3);
-    for index in 0..3 {
+    let mut lines = Vec::with_capacity(rows);
+    for index in 0..rows {
         lines.push([X, Y + index as f32 * GAP, W, H]);
     }
     let cursor_rect = lines.get(cursor).copied().unwrap_or(lines[0]);
     ChoiceLayout {
-        rect: [X, Y, W, H + 2.0 * GAP],
+        rect: [X, Y, W, H + rows.saturating_sub(1) as f32 * GAP],
         lines,
         cursor: cursor_rect,
         // This path is only a mouse hit test; nothing is painted from it.
@@ -463,6 +467,20 @@ mod tests {
         assert_eq!(layout.cursor[1], layout.lines[0][1] - 2.0);
         assert_eq!(layout.cursor[0], layout.rect[0] + ROW_TOP);
         assert_eq!(layout.cursor[3], 28.0);
+    }
+
+    #[test]
+    fn a_two_row_title_menu_keeps_the_fixed_image_hit_rows() {
+        let title = vec!["menu1".to_owned(), "menu2".to_owned()];
+        assert!(is_title_image_menu(&title));
+        let layout = layout_at_sized(&title, 1, 512, 1000, TEXT_PX).expect("fixed title hit rows");
+        assert_eq!(layout.lines.len(), 2);
+        assert_eq!(
+            layout.lines,
+            [[10.0, 400.0, 240.0, 52.0], [10.0, 450.0, 240.0, 52.0]]
+        );
+        assert_eq!(layout.rect, [10.0, 400.0, 240.0, 102.0]);
+        assert_eq!(layout.cursor, layout.lines[1]);
     }
 
     #[test]

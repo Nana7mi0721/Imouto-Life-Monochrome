@@ -25,6 +25,11 @@
   自动回退到应用内选择器，`user://` 仍通过 Files/iTunes 文件共享可见。
 
 ### 优化与修复（Fixed）
+- **iOS 标题退出项**：iOS 不允许应用自行退出，标题菜单现在只显示“开始游戏/
+  读取存档”，隐藏第三张按钮与命中区，避免选择“退出游戏”后停在最后一帧；
+  Windows/Android 仍保留三行菜单与原退出行为。
+- **0.1.1 双版本重打**：Windows 标准/slim setup+zip 与 Android 标准/slim
+  APK 已用本次修复源码重建并重新生成聚合校验和，命名与既有规范一致。
 - iOS 使用 64 MiB 解码纹理缓存上限，降低 3 GB 设备浏览大图时的后台终止风险。
 - iOS 优先使用注入的 `NotoSansCJKsc-Bold.otf`，缺失时回退 PingFang 等系统字体。
 - 修正 iOS Actions 模板检查为 Godot 4.7.2 实际产出的 `ios.zip`，并修正文档中的

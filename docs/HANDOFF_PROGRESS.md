@@ -2425,3 +2425,29 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     注入 `Data`/字体后的 full IPA 153,407,135 B、SHA-256
     `d7e63748…3e5b48`，均位于 `work/out/dist/ios/0.1.1/`。
   * **未做**：尚未在 iPhone XR 上重新安装验证 Files 面板；未发布新包。
+
+* 2026-11-21（iOS 标题退出项修复、正常/slim 六包重打）：
+  * **真机问题**：iPhone XR 上存档导入/导出正常；标题第三项“退出游戏”
+    触发 opcode 175 后，iOS 不执行进程退出，画面停在最后一帧。
+  * **修复**：`Game` 新增 `set_title_quit_enabled`（桌面默认开启），
+    `wolf-gdext` 在 `cfg!(target_os = "ios")` 时关闭；`show_choices`
+    过滤标题 `menu3` 并保留原 `sources` 映射；`is_title_image_menu` 接受
+    两项/三项标题键，`title_image_layout` 按实际行数生成命中区；每帧 VM
+    结束后隐藏 CE43 写入图片槽 5 的第三张按钮。Windows/Android 行为不变。
+  * **回归**：新增两项标题布局测试与“关闭退出行”数据测试；桌面
+    `the_title_quit_option_requests_a_process_exit` 通过；
+    `m3_title_visibility` 4 passed；`cargo fmt --check`、
+    `cargo check --workspace`、`cargo check -p wolf-gdext --target
+    aarch64-apple-ios`、`smoke-godot.sh` 均通过。既有缺夹具用例
+    `m1_title_load::title_menu_load_restores_a_save_into_the_bedroom_hud`
+    与历史 `m18_t18_regressions::hidden_and_transparent_pictures_do_not_report_hover`
+    仍各失败 1 条，与本路径无关。
+  * **六包重打**：Windows 标准/slim setup+zip 与 Android 标准/slim APK
+    已重建到 `work/out/dist/release-assets/0.1.1/`，聚合
+    `SHA256SUMS.txt` 全部校验通过；Windows 标准/slim 成品
+    `--headless --quit-after 180` 均 `exit=0`；ZIP/APK 内
+    GDExtension 哈希与本次 release-dist 产物一致；Android 两包均通过
+    `verify-apk`/release 签名检查。尺寸与哈希见
+    `docs/release/PACKAGING.md` §8.9。
+  * **未做**：iOS engine-only/full IPA 尚未用本次源码重打（需要先推送并
+    触发 Actions）；未提交、未更新 Release。

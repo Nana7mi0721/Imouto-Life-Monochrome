@@ -261,7 +261,21 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 > **[HANDOFF_PROGRESS.md](HANDOFF_PROGRESS.md)**。本节只保留**当前状态摘要**；
 > 新会话判断“现在是什么状态”以本节 + 各专题文档为准，查历史细节再翻日志。
 
-### 11.1 当前状态（2026-11-20）
+### 11.1 当前状态（2026-11-21）
+
+* **2026-11-21 iOS 标题退出项修复与双版本重打（当前状态）**：iPhone XR 上
+  确认系统 Files 存档导入/导出正常，但点击标题第三项“退出游戏”后因 iOS
+  禁止自终止而停在最后一帧。修复放在游戏层：`Game` 新增
+  `set_title_quit_enabled`，`wolf-gdext` 在 iOS 打开会话时关闭该行；
+  `show_choices` 过滤 `menu3`，两项标题菜单仍走 CE43 的固定图片命中布局，
+  图片槽 5（`Picture/menu3_b.png`）每帧隐藏，鼠标/方向键均无法到达第三行。
+  Windows/Android 默认配置不变，`menu3` 仍会触发 opcode 175 退出请求。
+  验证：`cargo fmt/check`、`aarch64-apple-ios` check、新增两项标题菜单回归、
+  `m3_title_visibility` 4 条、Godot smoke 全绿；Windows 标准/slim 成品
+  headless 冒烟 `exit=0`，四个 Windows ZIP/APK 内 GDExtension 哈希与构建
+  产物一致。六个 Windows/Android 0.1.1 包已重打到
+  `work/out/dist/release-assets/0.1.1/`；iOS full IPA 尚未用本次源码重打。
+  详见 `docs/release/PACKAGING.md` §8.9。
 
 * **2026-11-20 iOS 私有构建与移动端存档传输（未发布）**：新增 iOS export
   preset、`wolf-gdext` iOS arm64 静态库配置、`tools/build-ios.sh`、

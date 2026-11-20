@@ -12,7 +12,7 @@
 use std::path::PathBuf;
 
 use wolf_game::game::ENGINE_ALWAYS;
-use wolf_game::Game;
+use wolf_game::{key, Game};
 
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/Data".to_owned());
@@ -201,4 +201,51 @@ fn the_title_quit_option_requests_a_process_exit() {
         "choosing おわる must reach opcode 175 and request an exit"
     );
     assert_eq!(game.stats.warnings, 0, "the quit path is warning-free");
+}
+
+#[test]
+fn disabling_the_title_quit_row_hides_its_button_and_hit_area() {
+    let Some(mut game) = open_game() else { return };
+    game.set_title_quit_enabled(false);
+    game.start_title().expect("the title event exists");
+    for _ in 0..200 {
+        game.frame();
+        if game.choices.is_some() {
+            break;
+        }
+    }
+    for _ in 0..3 {
+        game.frame();
+    }
+
+    let choices = game.choices.as_ref().expect("title prompt should be open");
+    assert_eq!(choices.options, ["menu1", "menu2"]);
+    assert_eq!(choices.sources, [0, 1]);
+
+    let menu3 = game.screen.get(5).expect("CE43 paints the third button");
+    assert_eq!(menu3.file, "Picture/menu3_b.png");
+    assert!(menu3.hidden, "the quit button must not be visible");
+    for number in [3, 4] {
+        let picture = game
+            .screen
+            .get(number)
+            .unwrap_or_else(|| panic!("CE43 paints button slot {number}"));
+        assert!(!picture.hidden, "button slot {number} should stay visible");
+    }
+    assert!(
+        game.choice_row_at(20, 510).is_none(),
+        "the removed third row must not have a hit area"
+    );
+
+    game.key_bits = key::DOWN;
+    game.frame();
+    game.key_bits = 0;
+    game.frame();
+    assert_eq!(game.choice_cursor(), 1);
+    game.key_bits = key::DOWN;
+    game.frame();
+    game.key_bits = 0;
+    game.frame();
+    assert_eq!(game.choice_cursor(), 0, "navigation wraps across two rows");
+    assert!(!game.quit_requested);
 }

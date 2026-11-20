@@ -28,6 +28,10 @@ iOS 导出预设位于 `godot/export_presets.cfg` 的 `[preset.2]`：
 `application/app_store_team_id="XXXXXXXXXX"` 只是 Godot 要求的非空 10 字符占位值。
 本 unsigned 导出不使用真实 Team ID；Sideloadly 会用登录的 Apple ID 生成临时签名。
 
+iOS 不允许应用主动关闭自身，因此 iOS 版标题菜单只保留“开始游戏/读取存档”，
+不显示桌面版的“退出游戏”。退出第三张按钮图与第三行命中区由游戏层同步移除；
+用户仍按系统方式（底部上滑）离开应用。
+
 ## 2. CI：产出 engine-only IPA
 
 手动触发 `.github/workflows/ios-unsigned.yml`（workflow_dispatch）。工作流在
@@ -189,6 +193,8 @@ App”下选择对应 Apple ID/开发者证书 → 信任。随后重新启动�
     哪些存档并提示自动备份；
   - 导出：游戏先生成 ZIP，再打开系统“存储到文件”面板，可选择 iCloud
     Drive 或“我的 iPhone/iPad”中的目标位置。
+- iOS 标题菜单不提供“退出游戏”。该行会让桌面版请求结束进程，而 iOS
+  禁止应用自行退出；iOS 端启动时会从菜单和图片层同时移除它。
 - 覆盖安装时保持相同 Bundle ID (`com.inusuku.imoutolife`) 和同一 Apple ID，通常可
   保留沙盒数据；升级前仍应先复制 `Save/`。
 - 7 天签名过期后不要先删除 App；直接重新签名覆盖安装通常能保留数据。若必须卸载，

@@ -1046,6 +1046,11 @@ pub struct Game {
     /// A port must not close a window from inside the interpreter; the front-end
     /// polls this flag after the frame and quits its own event loop.
     pub quit_requested: bool,
+    /// Whether the title image menu includes its quit row.
+    ///
+    /// iOS does not let an application terminate itself, so that host disables this
+    /// row before the title runs. Desktop and Android keep the shipped three-row menu.
+    title_quit_enabled: bool,
     /// Queued answers for choice prompts (front is delivered first).
     pub replies: std::collections::VecDeque<ChoiceReply>,
     /// When true, messages dismiss immediately.
@@ -1357,6 +1362,7 @@ impl Game {
             stats: GameStats::default(),
             diagnostics: BTreeMap::new(),
             quit_requested: false,
+            title_quit_enabled: true,
             replies: std::collections::VecDeque::new(),
             auto_advance: false,
             auto_choice: false,
@@ -1479,6 +1485,15 @@ impl Game {
     /// Enables or disables touch-mode input and UI adaptations.
     pub fn set_touch_mode(&mut self, enabled: bool) {
         self.touch_mode = enabled;
+    }
+
+    /// Enables or disables the title menu's quit row.
+    ///
+    /// This only affects the image-button title prompt. The underlying script still
+    /// offers `menu3`; disabling it removes that visible row so a host that cannot
+    /// terminate its process never reaches opcode 175.
+    pub fn set_title_quit_enabled(&mut self, enabled: bool) {
+        self.title_quit_enabled = enabled;
     }
 
     /// Whether touch mode is currently enabled.
@@ -5049,6 +5064,26 @@ impl Game {
         }
     }
 
+    /// Hides CE43's third title button when this host disabled the quit row.
+    ///
+    /// Event 43 always paints `Picture/menu3_b.png` into slot 5. Choices and hit rows
+    /// already omit that row, so this hides the stale artwork as well.
+    fn suppress_disabled_title_quit_picture(&mut self) {
+        if self.title_quit_enabled {
+            return;
+        }
+        let title_menu_active = self
+            .choices
+            .as_ref()
+            .is_some_and(|choices| crate::choice::is_title_image_menu(&choices.options));
+        if !title_menu_active {
+            return;
+        }
+        if let Some(menu3) = self.screen.get_mut(5) {
+            menu3.hidden = true;
+        }
+    }
+
     /// Ends the frame's click bookkeeping: a delivered click is spent, an undelivered
     /// one waits for a poll but is dropped after [`PENDING_MOUSE_TTL`] frames.
     fn settle_pending_mouse(&mut self) {
@@ -5208,6 +5243,7 @@ impl Game {
             mouse_consumed: &mut self.mouse_consumed,
             frame_mouse_blocked: self.frame_mouse_blocked,
             touch_mode: self.touch_mode,
+            title_quit_enabled: self.title_quit_enabled,
             story_locked,
             root: &self.root,
             save_dir: &self.save_dir,
@@ -5345,6 +5381,7 @@ impl Game {
             }
         }
         self.suppress_night_data_icon();
+        self.suppress_disabled_title_quit_picture();
         // A prompt belongs to the coroutine that ran opcode 102. A parallel page can
         // terminate that coroutine (forced scene transition, forced release, or a
         // scripted map change) without its `Choice`/`MessageWithChoices` waiter ever
@@ -5882,6 +5919,8 @@ struct GameHost<'a> {
     frame_mouse_blocked: bool,
     /// Touch-mode interaction flag (see [`Game::touch_mode`]).
     touch_mode: bool,
+    /// Whether the title image menu includes its quit row.
+    title_quit_enabled: bool,
     /// A blocking story scene owns the screen this frame (see
     /// [`Game::story_input_locked`]). Host picture polls use it to keep the
     /// parallel album icon from opening over a conversation.
@@ -6136,7 +6175,12 @@ impl Host for GameHost<'_> {
         // case table still maps correctly when a conditional row sits in the middle.
         let mut visible = Vec::with_capacity(options.len());
         let mut sources = Vec::with_capacity(options.len());
+        let hide_title_quit =
+            !self.title_quit_enabled && crate::choice::is_title_image_menu(options);
         for (index, option) in options.iter().enumerate() {
+            if hide_title_quit && index == 2 && option == "menu3" {
+                continue;
+            }
             let translated = self
                 .translator
                 .translate_in(TextContext::Choice, option)
@@ -7730,6 +7774,7 @@ mod tests {
             mouse_consumed: &mut game.mouse_consumed,
             frame_mouse_blocked: game.frame_mouse_blocked,
             touch_mode: game.touch_mode,
+            title_quit_enabled: game.title_quit_enabled,
             story_locked,
             root: &game.root,
             save_dir: &game.save_dir,
