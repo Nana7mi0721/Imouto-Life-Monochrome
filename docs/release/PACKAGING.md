@@ -569,7 +569,7 @@ slim 包为 PNG→无损 WebP / JPEG→Q90 WebP 后的逐条 zstd。
   --quit-after 180` 直接加载包内 `Data/media.pak`，`exit=0`；
   `wolf-gdext ... [build v0.1.1]`、字体、首帧音效命令均正常。
 
-### 8.9 0.1.1 iOS 退出项修复后的六包重打（2026-11-21）
+### 8.9 0.1.1 iOS 退出项修复后的八包发布（2026-11-21）
 
 iOS 不允许应用主动终止进程；标题页第三项“退出游戏”触发 opcode 175 后，
 旧前端只能停在最后一帧。游戏层新增宿主开关，iOS 在打开会话时关闭该行：
@@ -577,7 +577,8 @@ iOS 不允许应用主动终止进程；标题页第三项“退出游戏”触�
 同步隐藏，鼠标/方向键也不会命中第三行。Windows 与 Android 保持原三行菜单，
 `menu3` 仍会正常发出退出请求。
 
-六个 Windows/Android 产物已用同一源码重新构建并汇总到
+六个 Windows/Android 产物已用同一源码重新构建，并与两个 iOS full IPA
+一起汇总到
 `work/out/dist/release-assets/0.1.1/`：
 
 | 产物 | 字节数 | SHA-256 |
@@ -623,8 +624,10 @@ slim full 注入 `dist/godot-slim/0.1.1/Data`（`media.pak` SHA-256
 `36e7ab21c9b3826bf1807fb8cdebb6d3989c2b9e765bcf821e65ec4111b7edc9`）。
 两者均带 `NotoSansCJKsc-Bold.otf`，`Info.plist` 的显示名为
 “妹！生活 ～单色～”、Bundle ID 为 `com.inusuku.imoutolife`，Data/BasicData
-与 ZIP CRC 校验通过。iOS 私有 IPA 不上传公共 Release。
+与 ZIP CRC 校验通过。两个 full IPA 已上传 GitHub Release `v0.1.1`；
+engine-only IPA 保留在 CI artifact/本地。
 
-GitHub Release `v0.1.1` 的六个 Windows/Android 资产与 `SHA256SUMS.txt`
-已替换为上述新文件；GitHub API 返回的 `sha256:` 摘要与本地表逐项一致。
+GitHub Release `v0.1.1` 的六个 Windows/Android 资产、两个 iOS full IPA 与
+`SHA256SUMS.txt` 已同步为本轮文件；聚合校验覆盖八个包，GitHub API 返回的
+`sha256:` 摘要与本地表逐项一致。
 

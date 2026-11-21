@@ -30,9 +30,9 @@
   Windows/Android 仍保留三行菜单与原退出行为。
 - **0.1.1 双版本重打**：Windows 标准/slim setup+zip 与 Android 标准/slim
   APK 已用本次修复源码重建并重新生成聚合校验和，命名与既有规范一致；
-  GitHub Release `v0.1.1` 的六个资产与 `SHA256SUMS.txt` 已同步替换。
-- **iOS 私有双版本**：engine-only IPA、标准 full IPA 与 slim full IPA 已用
-  `fab1413` 重打；full IPA 包含 17 个发行 Data 文件与
+  GitHub Release `v0.1.1` 的八个平台包与 `SHA256SUMS.txt` 已同步更新。
+- **iOS 双版本**：engine-only IPA、标准 full IPA 与 slim full IPA 已用
+  `fab1413` 重打；两个 full IPA 已上传 Release，包含 17 个发行 Data 文件与
   `NotoSansCJKsc-Bold.otf`，slim 使用对应的 WebP 媒体树。
 - iOS 使用 64 MiB 解码纹理缓存上限，降低 3 GB 设备浏览大图时的后台终止风险。
 - iOS 优先使用注入的 `NotoSansCJKsc-Bold.otf`，缺失时回退 PingFang 等系统字体。
@@ -44,8 +44,9 @@
 ## [0.1.1] - 2026-11-20
 
 ### 发布（Release）
-- **六个 0.1.1 发行包**：Windows 标准/slim 的 setup 与 zip，Android 标准/slim 的
-  arm64 APK，统一放在 `work/out/dist/release-assets/0.1.1/`；命名统一为
+- **八个 0.1.1 发行包**：Windows 标准/slim 的 setup 与 zip，Android 标准/slim
+  的 arm64 APK，以及 iOS 标准/slim 的 unsigned full IPA；统一放在
+  `work/out/dist/release-assets/0.1.1/`；命名统一为
   `ImoutoLife-<version>-<platform>-<arch>[-setup][-slim]`。
 - **正式版本号**：Rust workspace 与 Windows 版本资源为 0.1.1，
   Android `versionName=0.1.1`、`versionCode=2`；沿用 0.1.0 的 release 签名

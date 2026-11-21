@@ -65,7 +65,10 @@
 - **Android 用户**：
   - `ImoutoLife-0.1.1-android-arm64.apk`：直接安装至安卓设备。
   - `ImoutoLife-0.1.1-android-arm64-slim.apk`：精简媒体版。
-- 每个平台目录中的 `SHA256SUMS.txt` 提供当前版本发行文件的完整校验值。
+- **iOS 用户**：
+  - `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa`：标准整包，需使用 Sideloadly 或自己的 Apple ID 重签名。
+  - `ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa`：精简媒体整包，签名方式相同。
+- Release 根目录的 `SHA256SUMS.txt` 覆盖当前全部八个平台包。
 
 ### 2. 准备游戏数据
 

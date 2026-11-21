@@ -1,12 +1,12 @@
-# iOS 私有构建与签名安装
+# iOS 构建与签名安装
 
-本页描述仅用于个人/获授权测试的 iOS 构建流程：macOS 或 GitHub Actions 先产出
-不含游戏数据的 engine-only unsigned IPA，Windows 再把本作数据注入 IPA，最后由
-Sideloadly 使用自己的 Apple ID 重签名并安装。
+本页描述 iOS 构建流程：macOS 或 GitHub Actions 先产出不含游戏数据的
+engine-only unsigned IPA，Windows 再把本作数据注入 IPA，最后由 Sideloadly
+使用自己的 Apple ID 重签名并安装。
 
-> **数据权利边界**：`work/Data` 与本作媒体/字体属于原权利方。不要公开上传、
-> 分发或提交完整 IPA、`Data/`、注入后的 IPA，也不要提交 `NotoSansCJKsc-Bold.otf`。
-> 仅为你自己合法持有的数据做私有测试。仓库只提交源码、脚本与文档。
+> **数据权利边界**：`work/Data` 与本作媒体/字体属于原权利方。仓库不提交
+> `Data/`、`NotoSansCJKsc-Bold.otf` 或 IPA 二进制；正式资产只通过 Release
+> 附件分发。下载者仍应仅在自己合法持有本作的前提下使用这些文件。
 
 ## 1. 固定参数
 
@@ -105,7 +105,7 @@ bash tools/package-ios.sh \
 ```
 
 `--data-dir` 会把数据复制到 `.app/Data`。这样得到的仍是 unsigned IPA，签名前
-不要再用注入脚本重复处理。该完整 IPA 只能私有使用，不得分发。
+不要再用注入脚本重复处理。0.1.1 的两个 full IPA 已作为 Release 附件分发。
 
 ## 4. Windows：向 IPA 注入 Data
 
@@ -263,7 +263,8 @@ GitHub Actions `iOS Unsigned IPA` run `44794833504`（提交 `fab1413`）已成�
 `Data/NotoSansCJKsc-Bold.otf`，分别对应标准/slim 媒体包。应用显示名为
 “妹！生活 ～单色～”，图标来自 `icon_android.png`；导入/导出通过
 `wolf-gdext` 的 UIKit 桥接直接打开 iOS「文件」App。iOS 标题菜单只剩
-“开始游戏/读取存档”，不再出现会卡住应用的退出项。
+“开始游戏/读取存档”，不再出现会卡住应用的退出项。两个 full IPA 已上传
+GitHub Release `v0.1.1`，Release 聚合 `SHA256SUMS.txt` 覆盖全部八个平台包。
 
 本轮 IPA 尚未由 Sideloadly 重新签名安装到 iPhone XR；重新签名安装后即可
 验证标题菜单与系统 Files 面板。

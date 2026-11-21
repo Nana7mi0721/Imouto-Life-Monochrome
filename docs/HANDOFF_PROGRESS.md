@@ -2458,9 +2458,9 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `c742d0f4…e12ff6`（标准）与
     `ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa` 125,346,535 B /
     `f44487f7…5759e`（slim）。
-  * **Release 替换**：GitHub Release `v0.1.1` 的 Windows/Android 六包与
-    `SHA256SUMS.txt` 已全部替换为本轮产物；API 返回的 `sha256:` digest 与
-    本地 `SHA256SUMS.txt` 逐项一致。iOS 私有 IPA 不上传公共 Release。
+  * **Release 更新**：GitHub Release `v0.1.1` 的 Windows/Android 六包与
+    `SHA256SUMS.txt` 已替换，两个 iOS full IPA 随后上传；API 返回的
+    `sha256:` digest 与本地八包 `SHA256SUMS.txt` 逐项一致。
   * **验证**：两个 iOS full IPA 的 `CFBundleDisplayName` 均为
     “妹！生活 ～单色～”、Bundle ID 为 `com.inusuku.imoutolife`；标准/slim
     的 `Data/media.pak` 分别与对应 Windows 包内媒体逐字节一致，ZIP CRC 与
