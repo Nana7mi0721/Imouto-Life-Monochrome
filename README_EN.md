@@ -66,8 +66,8 @@ Head to the [Releases page](https://github.com/Nana7mi0721/Imouto-Life-Monochrom
   - `ImoutoLife-0.1.1-android-arm64.apk`: Sideload directly to your Android device.
   - `ImoutoLife-0.1.1-android-arm64-slim.apk`: Slim-media build.
 - **iOS**:
-  - `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa`: Standard full build; re-sign with Sideloadly or your Apple ID.
-  - `ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa`: Slim-media full build with the same signing flow.
+  - `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa`: Standard full build; re-sign with Sideloadly or your Apple ID.
+  - `ImoutoLife-0.1.1-ios-arm64-unsigned-slim.ipa`: Slim-media full build with the same signing flow.
 - The release-root `SHA256SUMS.txt` covers all eight platform packages.
 
 ### 2. Prepare Game Data

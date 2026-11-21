@@ -50,8 +50,27 @@ static UIViewController *WolfRootViewController(void) {
 	return controller;
 }
 
+static NSError *WolfPickerError(NSString *message) {
+	return [NSError errorWithDomain:@"ImoutoLifeFilePicker"
+		code:1
+		userInfo:@{ NSLocalizedDescriptionKey: message }];
+}
+
 static NSString *WolfCopyIntoAppTemp(NSURL *source, NSError **error) {
 	BOOL scoped = [source startAccessingSecurityScopedResource];
+	// The directory bit is only reliable inside the security scope: for a
+	// document-provider URL the path is not readable before the grant.
+	NSNumber *isDirectory = nil;
+	[source getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:NULL];
+	if (isDirectory.boolValue) {
+		if (scoped) {
+			[source stopAccessingSecurityScopedResource];
+		}
+		if (error) {
+			*error = WolfPickerError(@"请选择存档文件，而不是文件夹。");
+		}
+		return nil;
+	}
 	NSString *name = source.lastPathComponent.length ? source.lastPathComponent : @"import.sav";
 	NSString *destination = [NSTemporaryDirectory() stringByAppendingPathComponent:
 			[NSString stringWithFormat:@"ImoutoLife-import-%@-%@", NSUUID.UUID.UUIDString, name]];
@@ -104,12 +123,6 @@ static void WolfReportError(NSString *message) {
 		[self finishWithStatus:2 path:@"没有选择存档文件。"];
 		return;
 	}
-	BOOL isDirectory = NO;
-	[[NSFileManager defaultManager] fileExistsAtPath:source.path isDirectory:&isDirectory];
-	if (isDirectory) {
-		[self finishWithStatus:2 path:@"请选择存档文件，而不是文件夹。"];
-		return;
-	}
 	NSError *error = nil;
 	NSString *copied = WolfCopyIntoAppTemp(source, &error);
 	if (!copied) {
@@ -151,10 +164,23 @@ extern "C" void wolf_ios_present_import_picker(void) {
 		picker.delegate = delegate;
 		picker.allowsMultipleSelection = NO;
 		picker.modalPresentationStyle = UIModalPresentationFormSheet;
+		// Set the dismissal delegate before present: if UIKit refuses the
+		// presentation, no later completion path will run.
+		picker.presentationController.delegate = delegate;
 
 		g_activePicker = delegate;
 		[root presentViewController:picker animated:YES completion:^{
+			// `presentationController` can be nil before presentation, so set it
+			// again once UIKit has created it.
 			picker.presentationController.delegate = delegate;
+			dispatch_async(dispatch_get_main_queue(), ^{
+				// Guard against a transition that silently swallowed the
+				// presentation: without this the global picker slot would
+				// stay occupied for the rest of the session.
+				if (g_activePicker == delegate && root.presentedViewController != picker) {
+					[delegate finishWithStatus:2 path:@"无法显示文件选择器，请稍后重试。"];
+				}
+			});
 		}];
 	});
 }
@@ -216,10 +242,16 @@ extern "C" void wolf_ios_present_export_picker(const char *source_path,
 #pragma clang diagnostic pop
 		picker.delegate = delegate;
 		picker.modalPresentationStyle = UIModalPresentationFormSheet;
+		picker.presentationController.delegate = delegate;
 
 		g_activePicker = delegate;
 		[root presentViewController:picker animated:YES completion:^{
 			picker.presentationController.delegate = delegate;
+			dispatch_async(dispatch_get_main_queue(), ^{
+				if (g_activePicker == delegate && root.presentedViewController != picker) {
+					[delegate finishWithStatus:2 path:@"无法显示文件选择器，请稍后重试。"];
+				}
+			});
 		}];
 	});
 }

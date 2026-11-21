@@ -21,9 +21,8 @@
   `ImoutoLife-<version>-android-arm64.apk` / `-slim.apk`。
   `media.pak` 以未压缩的 `.blob.cfb` 留在 APK 内并由运行时直接随机读取，
   首次启动不再复制第二份到应用数据目录。
-- **iOS IPA**：`work/out/dist/ios/<version>/`，engine-only 文件名为
-  `ImoutoLife-<version>-ios-arm64-unsigned.ipa`；在 Windows 注入数据后为
-  `ImoutoLife-<version>-ios-arm64-unsigned-full.ipa`（标准）或
-  `ImoutoLife-<version>-ios-arm64-unsigned-full-slim.ipa`（slim）。两个 full
-  IPA 作为 Release 附件分发，engine-only IPA 保留在 CI artifact/本地；
-  IPA 与注入后的 Data 均不提交仓库。
+- **iOS IPA**：`work/out/dist/ios/<version>/`。CI 产出 engine-only
+  `ImoutoLife-<version>-ios-arm64-unsigned-engine.ipa`；注入数据后的 Release
+  附件为标准 `ImoutoLife-<version>-ios-arm64-unsigned.ipa` 与 slim
+  `ImoutoLife-<version>-ios-arm64-unsigned-slim.ipa`。engine-only IPA
+  保留在 CI artifact/本地；IPA 与注入后的 Data 均不提交仓库。

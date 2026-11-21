@@ -111,6 +111,9 @@ bash tools/package-ios.sh \
 
 Windows 侧不需要 `zip` 命令，脚本使用 Python 3 的 `zipfile`。输入必须是尚未签名
 的 engine-only IPA；**必须在 Sideloadly 签名之前注入**，否则注入会使已有签名失效。
+CI 产物默认名为 `ImoutoLife-<version>-ios-arm64-unsigned.ipa`；注入标准包前先
+保留一份 engine-only 副本为 `ImoutoLife-<version>-ios-arm64-unsigned-engine.ipa`，
+避免输出与输入同名。
 
 仓库根目录（Git Bash）：
 
@@ -119,10 +122,10 @@ cd "$(git rev-parse --show-toplevel)"
 source tools/env.sh >/dev/null 2>&1
 
 bash tools/inject-ios-data.sh \
-  "work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned.ipa" \
+  "work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned-engine.ipa" \
   "work/out/dist/godot/0.1.1/Data" \
   --font "path/to/NotoSansCJKsc-Bold.otf" \
-  --out "work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa"
+  --out "work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned.ipa"
 ```
 
 如果数据目录中已经有正确的 `NotoSansCJKsc-Bold.otf`，可以省略 `--font`；没有该
@@ -138,19 +141,21 @@ bash tools/inject-ios-data.sh \
 - 原条目的 Unix mode 通过 `ZipInfo.external_attr` 保留（可执行位不丢失）；
 - 输出前检查 `Payload/*.app`、`Data/BasicData` 和 ZIP CRC。
 
-默认输出名是输入名去掉 `.ipa` 后加 `-full.ipa`。成功时会打印 SHA-256。期望文件：
+不传 `--out` 时，默认输出名是输入名去掉 `.ipa` 后加 `-full.ipa`；Release
+构建应显式传入上面的标准名。成功时会打印 SHA-256。期望文件：
 
 ```text
-work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa
+work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned-engine.ipa
+work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned.ipa
 ```
 
 标准与 slim 同时私有构建时，使用同一份 engine-only IPA，分别注入对应 Data：
 
 ```text
-ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa
+ImoutoLife-0.1.1-ios-arm64-unsigned.ipa
   源 Data: work/out/dist/godot/0.1.1/Data
 
-ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa
+ImoutoLife-0.1.1-ios-arm64-unsigned-slim.ipa
   源 Data: work/out/dist/godot-slim/0.1.1/Data
 ```
 
@@ -162,7 +167,7 @@ slim 后缀保持在文件名末尾，符合
 
 ```bash
 bash tools/inject-ios-data.sh \
-  "work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned.ipa" \
+  "work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned-engine.ipa" \
   "work/out/dist/godot/0.1.1/Data" \
   --font "path/to/NotoSansCJKsc-Bold.otf"
 ```
@@ -171,7 +176,7 @@ bash tools/inject-ios-data.sh \
 
 1. 在 Windows 安装 Apple 设备驱动（iTunes/Apple Devices）和 Sideloadly，USB 连接
    iPhone/iPad，解锁并选择“信任此电脑”。
-2. 把 `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` 拖入 Sideloadly。
+2. 把 `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` 拖入 Sideloadly。
 3. 输入自己的 Apple ID，按提示完成免费开发者签名；不要使用他人的账号。
 4. 选择设备并开始安装。若系统要求开发者模式，按下一节开启后重试。
 5. 安装完成后首次启动可能提示“不受信任的开发者”，按下一节信任证书。
@@ -242,7 +247,7 @@ shasum -a 256 -c SHA256SUMS.txt
 Windows 可对注入后的 IPA 计算并比对 SHA-256：
 
 ```powershell
-certutil -hashfile "work\out\dist\ios\0.1.1\ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa" SHA256
+certutil -hashfile "work\out\dist\ios\0.1.1\ImoutoLife-0.1.1-ios-arm64-unsigned.ipa" SHA256
 ```
 
 发布检查只需确认最终 IPA 文件名、SHA-256、注入后的 `Payload/*.app/Data/BasicData`
@@ -254,9 +259,9 @@ GitHub Actions `iOS Unsigned IPA` run `44794833504`（提交 `fab1413`）已成�
 
 | 产物 | 大小 | SHA-256 |
 | --- | ---: | --- |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 32,405,233 B | `17224984a19e29ea82822a0fe2d5ba00e55eec90e2b08b25de1ac9086fec29ff` |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` | 153,404,823 B | `c742d0f4dfff48eda40ed749859e1b67bb66eeb32685e14706a89cf483e12ff6` |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa` | 125,346,535 B | `f44487f7af9ad4f127e9397570e3e8443c0238c7d0298dbae0d6e354a995759e` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-engine.ipa` | 32,405,233 B | `17224984a19e29ea82822a0fe2d5ba00e55eec90e2b08b25de1ac9086fec29ff` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 153,404,823 B | `c742d0f4dfff48eda40ed749859e1b67bb66eeb32685e14706a89cf483e12ff6` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-slim.ipa` | 125,346,535 B | `f44487f7af9ad4f127e9397570e3e8443c0238c7d0298dbae0d6e354a995759e` |
 
 三个文件位于 `work/out/dist/ios/0.1.1/`，同目录 `SHA256SUMS.txt` 覆盖全部。
 两个 full IPA 均包含 `Payload/ImoutoLife.app/Data/BasicData` 与

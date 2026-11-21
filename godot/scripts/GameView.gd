@@ -99,6 +99,10 @@ const IOS_ASSET_CACHE_BYTES := 64 * 1024 * 1024
 ## Save archives are normally well under a megabyte; this bound keeps a corrupt
 ## or hostile zip from allocating without limit before the user confirms.
 const SAVE_ARCHIVE_MAX_BYTES := 256 * 1024 * 1024
+const SAVE_ARCHIVE_MAX_ENTRIES := 256
+const SAVE_ARCHIVE_MAX_ENTRY_BYTES := 32 * 1024 * 1024
+const ZIP_EOCD_SIGNATURE := 0x06054B50
+const ZIP_CENTRAL_SIGNATURE := 0x02014B50
 const SAVE_TRANSFER_COPY_CHUNK_BYTES := 1024 * 1024
 
 class _SaveTransferUI:
@@ -1958,6 +1962,16 @@ func _on_ios_file_picker_result(path: String, status: int) -> void:
 			print("ui: iOS save export canceled")
 
 
+## UIKit queues the answer on its own thread; drain it here on the scene
+## thread so the GDScript callback never has to run cross-thread.
+func _poll_ios_file_picker() -> void:
+	if _ios_picker_mode.is_empty():
+		return
+	if wolf == null or not wolf.has_method("poll_ios_picker_result"):
+		return
+	wolf.poll_ios_picker_result()
+
+
 func _cleanup_ios_export_temp() -> void:
 	if _ios_picker_export_temp.is_empty():
 		return
@@ -2571,6 +2585,9 @@ func _validate_save_archive(path: String) -> Dictionary:
 		return {"ok": false, "message": "未选择存档压缩包。"}
 	if not FileAccess.file_exists(path):
 		return {"ok": false, "message": "所选压缩包不存在或不可读。"}
+	var limits := _check_save_archive_limits(path)
+	if not bool(limits.get("ok", false)):
+		return limits
 	var reader := ZIPReader.new()
 	var open_err := reader.open(path)
 	if open_err != OK:
@@ -2604,6 +2621,19 @@ func _validate_save_archive(path: String) -> Dictionary:
 				"ok": false,
 				"message": "存档文件为空或无法读取：%s" % raw_name,
 			}
+		if bytes.size() > SAVE_ARCHIVE_MAX_ENTRY_BYTES:
+			reader.close()
+			return {
+				"ok": false,
+				"message": "存档文件超过单文件大小上限：%s" % raw_name,
+			}
+		if wolf != null and wolf.has_method("validate_save_bytes"):
+			if not bool(wolf.validate_save_bytes(bytes)):
+				reader.close()
+				return {
+					"ok": false,
+					"message": "压缩包内的文件不是有效的 WOLF .sav 存档：%s" % raw_name,
+				}
 		total_bytes += bytes.size()
 		if total_bytes > SAVE_ARCHIVE_MAX_BYTES:
 			reader.close()
@@ -2616,6 +2646,87 @@ func _validate_save_archive(path: String) -> Dictionary:
 	if entries.is_empty():
 		return {"ok": false, "message": "压缩包中没有 .sav 存档文件。"}
 	return {"ok": true, "entries": entries}
+
+
+## Rejects an archive from its central directory before ZIPReader inflates it.
+##
+## The central directory carries the declared uncompressed size of every
+## entry, so a forged or accidental ZIP bomb is refused while still compressed
+## instead of being expanded into memory on a 3 GB phone first.
+func _check_save_archive_limits(path: String) -> Dictionary:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {
+			"ok": false,
+			"message": "无法读取所选压缩包（错误码 %d）。" % FileAccess.get_open_error(),
+		}
+	var file_size := file.get_length()
+	if file_size <= 22:
+		file.close()
+		return {"ok": false, "message": "所选压缩包不是有效的 ZIP 文件。"}
+	var tail_size := mini(int(file_size), 66 * 1024)
+	file.seek(file_size - tail_size)
+	var tail := file.get_buffer(tail_size)
+	var eocd := -1
+	for index in range(tail.size() - 22, -1, -1):
+		if tail.decode_u32(index) == ZIP_EOCD_SIGNATURE:
+			eocd = index
+			break
+	if eocd < 0:
+		file.close()
+		return {"ok": false, "message": "所选压缩包缺少 ZIP 目录。"}
+	var entry_count := tail.decode_u16(eocd + 10)
+	var directory_size := tail.decode_u32(eocd + 12)
+	var directory_offset := tail.decode_u32(eocd + 16)
+	if entry_count > SAVE_ARCHIVE_MAX_ENTRIES:
+		file.close()
+		return {
+			"ok": false,
+			"message": "压缩包条目过多（%d），已中止导入。" % entry_count,
+		}
+	if directory_size > 4 * 1024 * 1024:
+		file.close()
+		return {"ok": false, "message": "压缩包目录异常，已中止导入。"}
+	if directory_offset + directory_size > file_size:
+		file.close()
+		return {"ok": false, "message": "压缩包目录越界，已中止导入。"}
+	file.seek(directory_offset)
+	var directory := file.get_buffer(directory_size)
+	file.close()
+	if directory.size() != directory_size:
+		return {"ok": false, "message": "无法读取压缩包目录。"}
+	var cursor := 0
+	var total := 0
+	for _index in range(entry_count):
+		if cursor + 46 > directory.size():
+			return {"ok": false, "message": "压缩包目录被截断。"}
+		if directory.decode_u32(cursor) != ZIP_CENTRAL_SIGNATURE:
+			return {"ok": false, "message": "压缩包目录损坏。"}
+		var flags := directory.decode_u16(cursor + 8)
+		var method := directory.decode_u16(cursor + 10)
+		var compressed := directory.decode_u32(cursor + 20)
+		var uncompressed := directory.decode_u32(cursor + 24)
+		var name_length := directory.decode_u16(cursor + 28)
+		var extra_length := directory.decode_u16(cursor + 30)
+		var comment_length := directory.decode_u16(cursor + 32)
+		if (flags & 0x1) != 0:
+			return {"ok": false, "message": "压缩包已加密，无法导入。"}
+		if method != 0 and method != 8:
+			return {"ok": false, "message": "压缩包使用了不支持的压缩方式。"}
+		if compressed == 0xFFFFFFFF or uncompressed == 0xFFFFFFFF:
+			return {"ok": false, "message": "不支持 ZIP64 格式的存档包。"}
+		if uncompressed > SAVE_ARCHIVE_MAX_ENTRY_BYTES:
+			return {
+				"ok": false,
+				"message": "压缩包内单个文件超过解压上限，已中止导入。",
+			}
+		if compressed > 0 and uncompressed > compressed * 2048:
+			return {"ok": false, "message": "压缩包解压比异常，已中止导入。"}
+		total += uncompressed
+		if total > SAVE_ARCHIVE_MAX_BYTES:
+			return {"ok": false, "message": "存档压缩包过大，已中止导入。"}
+		cursor += 46 + name_length + extra_length + comment_length
+	return {"ok": true}
 
 
 func _normalise_save_archive_entry(value: Variant) -> Dictionary:
@@ -3154,6 +3265,7 @@ func _mark_input_handled() -> void:
 
 
 func _process(delta: float) -> void:
+	_poll_ios_file_picker()
 	if _poll_android_storage_staging():
 		return
 	if _show_window_info:
@@ -4332,6 +4444,14 @@ func _copy_file_chunked(src_path: String, dst_path: String) -> Error:
 
 
 func _replace_file_atomic(tmp_path: String, dst_path: String) -> Error:
+	# The Rust helper maps to MoveFileExW(MOVEFILE_REPLACE_EXISTING) on Windows,
+	# so an existing destination is swapped in one step instead of being deleted
+	# first. Do not fall back to delete+rename after a real failure: that is the
+	# window this helper exists to close.
+	if wolf != null and wolf.has_method("replace_file_atomic"):
+		if int(wolf.replace_file_atomic(tmp_path, dst_path)) == OK:
+			return OK
+		return FAILED
 	var err := DirAccess.rename_absolute(tmp_path, dst_path)
 	if err == OK:
 		return OK

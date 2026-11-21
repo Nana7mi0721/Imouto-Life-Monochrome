@@ -2466,3 +2466,67 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     的 `Data/media.pak` 分别与对应 Windows 包内媒体逐字节一致，ZIP CRC 与
     字体存在性通过。尚未用 Sideloadly 重新签名安装到 iPhone XR。
   * **未做**：iOS 真机安装复验；`m18` 与缺存档夹具的既有失败未处理。
+
+* 2026-11-21（工作区清理、发布校验清单修正）：
+  * **清理**：删除整个 `target/`（约 16 GB）及 `work/out` 下 108 个一次性
+    条目，包括 `godot-template/`、`godot-src/`、`public-audit-4f77b128/`、
+    `device-test/`、`portable/`、`slim/`、iOS 中间产物/ZIP、
+    `android/media.pak`、NSIS 临时目录、研究用 HTML/JSON/C++ 文件、
+    发布 API 响应、临时脚本、`tools/__pycache__` 与 `.recon`。删除前逐项
+    校验目标位于仓库内且不与保留路径重叠，109 个条目零失败。
+  * **保留**：`work/out/dist/`（全部 0.1.0/0.1.1 发布物）、`work/Data/`、
+    `_archive/`、Android release keystore、iOS 私有字体、`retail_saves/`、
+    `m14_visual/`、`m3_*_settings_backup/`、用户截图与全部 `docs/`。
+  * **空间**：仓库 20 GB → **2.9 GB**；`work` 2.8 GB（`work/out/dist`
+    2.6 GB、`work/Data` 209 MB），`target/` 已不存在。
+  * **清单修正**：发布校验发现 `release-assets/0.1.1/SHA256SUMS.txt` 把两个
+    iOS 附件误写为 `...unsigned-full.ipa` / `...unsigned-full-slim.ipa`，
+    实际 Release 附件为 `...unsigned.ipa` / `...unsigned-slim.ipa`。同步修正
+    聚合清单、`dist/ios/0.1.1/SHA256SUMS.txt` 与 README/iOS 发布文档中的
+    文件名；替换 GitHub Release 的 `SHA256SUMS.txt`（新 asset id
+    `775158539`，850 B），重新下载与本地逐字节一致。
+  * **验证**：`release-assets/0.1.1` 八包 `sha256sum -c` 全 OK；iOS 三个
+    文件本地校验全 OK；`git status --short` 仅显示本次文档修改。
+
+* 2026-11-21（`bedd7a1` 全量静态审查收口，未重新打包）：
+  * **H1 iOS 选择器跨线程**：`ios_file_picker.rs` 不再把 `Callable` 交给
+    UIKit 线程。Objective-C++ 只把 `(path,status)` 写进全局互斥队列，
+    GDScript 在 `_process` 调 `wolf.poll_ios_picker_result()` 上抛回调；
+    重复结果只保留第一条，超过 10 分钟未取走则允许下一次请求替换旧槽。
+  * **H2 ZIP 导入**：`_validate_save_archive` 先读 ZIP 中央目录，限制
+    256 条目、单条 32 MiB、总量 256 MiB、解压比 2048×、拒绝加密/ZIP64；
+    每个 `.sav` 解压后都过 `wolf.validate_save_bytes`，与单文件导入同一
+    校验。实测：真实存档 ZIP 通过，伪造 `.sav` 的 ZIP 被拒。
+  * **H3 media.pak**：zstd 改用 `decompress_with_limit`（上限即索引里的
+    `raw_size`）；头部索引上限 32 MiB、单条 `raw_size` 上限 512 MiB；
+    新增两个单元测试覆盖超限索引与超限解码尺寸。
+  * **M1**：`ios_file_picker.mm` 在呈现前/后都设置
+    `presentationController.delegate`，呈现未生效时回错误并释放
+    `g_activePicker`；目录判定移入 `startAccessingSecurityScopedResource`
+    作用域并使用 `NSURLIsDirectoryKey`。
+  * **M2**：`wolf-audio` 3 处裸 `mixer.lock().unwrap()` 改为 `self.lock()`
+    （锁毒化可恢复，`panic=abort` 发行版不再直接终止）。
+  * **M3**：新增 `wolf.replace_file_atomic`（`std::fs::rename`，Windows
+    映射 `MoveFileExW(MOVEFILE_REPLACE_EXISTING)`），`GameView` 优先走它，
+    不再先删目标再改名。实测覆盖已有目标文件成功。
+  * **M4**：标题栏图标缓存键改为 `(width<<32)|height`，`u32` 转换统一
+    `try_from`。
+  * **L2**：确认 `addons/godot_ai/export/mcp_export_plugin.gd` 在
+    `_export_begin` 临时移除 `_mcp_game_helper` Autoload，导出包不会带
+    悬空 Autoload，无需改 `project.godot`。
+  * **L3**：`ios-unsigned.yml` 从 `Cargo.toml` 读取版本号，不再硬编码
+    `0.1.1`。`ubuntu-latest` 交叉 check 未加入（本地无法验证 Linux 条件
+    编译，避免引入红色流水线），记为后续项。
+  * **L1**：`GameView.gd` 拆分未做，仍是后续重构项。
+  * **验证**：`cargo fmt --check`；`cargo test -q -p wolf-format
+    -p wolf-audio` 全绿（含 media_pack 46 条）；`cargo check -p wolf-gdext`
+    与 `--target aarch64-apple-ios` 通过；Godot 4.7.2 headless
+    `--check-only` 解析 `GameView.gd` 通过；三个临时探针分别验证 ZIP
+    限额、真实存档 ZIP/伪造 `.sav`、`replace_file_atomic` 覆盖写。
+  * **已知既有噪声**：本机 clippy 1.99 对 `wolf-vm`/`wolf-format` 测试
+    报出 4+3 条既有 lint（`too_many_arguments`、`needless_lifetimes`、
+    `useless_conversion` 等），与本次改动无关；`wolf-gdext` 的 4 条
+    既有 warning 亦未变化。
+  * **清理**：本轮验证重建的 `target/`（7.5 GB）已再次删除，仓库回到
+    **2.86 GB**；`godot/bin/wolf_gdext.dll`（2.4 MB，gitignored）保留，
+    项目仍可直接运行。

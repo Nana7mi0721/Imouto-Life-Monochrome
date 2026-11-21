@@ -614,9 +614,9 @@ iOS 私有链路同步用提交 `fab1413` 重建（Actions run `44794833504`，6
 
 | 产物 | 字节数 | SHA-256 |
 |---|---:|---|
-| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 32,405,233 | `17224984a19e29ea82822a0fe2d5ba00e55eec90e2b08b25de1ac9086fec29ff` |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned-full.ipa` | 153,404,823 | `c742d0f4dfff48eda40ed749859e1b67bb66eeb32685e14706a89cf483e12ff6` |
-| `ImoutoLife-0.1.1-ios-arm64-unsigned-full-slim.ipa` | 125,346,535 | `f44487f7af9ad4f127e9397570e3e8443c0238c7d0298dbae0d6e354a995759e` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-engine.ipa` | 32,405,233 | `17224984a19e29ea82822a0fe2d5ba00e55eec90e2b08b25de1ac9086fec29ff` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` | 153,404,823 | `c742d0f4dfff48eda40ed749859e1b67bb66eeb32685e14706a89cf483e12ff6` |
+| `ImoutoLife-0.1.1-ios-arm64-unsigned-slim.ipa` | 125,346,535 | `f44487f7af9ad4f127e9397570e3e8443c0238c7d0298dbae0d6e354a995759e` |
 
 标准 full 注入 `dist/godot/0.1.1/Data`（`media.pak` SHA-256
 `69cedce1b07e024f1856bbecd6a6a324eab316a3fd5646ffa8128152bc7e329c`），

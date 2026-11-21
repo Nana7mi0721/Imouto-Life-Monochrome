@@ -183,7 +183,7 @@ impl Engine {
         // Restarting the voice each time produced an audible retrigger (BUG-17); only a
         // genuinely different track replaces the current one. Volume-only repeats still
         // take effect.
-        if self.mixer.lock().unwrap().bgm_playing() && self.bgm_file.as_deref() == Some(file) {
+        if self.lock().bgm_playing() && self.bgm_file.as_deref() == Some(file) {
             self.lock().set_bgm_volume(volume);
             return Ok(());
         }
@@ -209,7 +209,7 @@ impl Engine {
         volume: f32,
         fade_frames: u32,
     ) -> Result<(), AudioError> {
-        if self.mixer.lock().unwrap().bgm_playing() && self.bgm_file.as_deref() == Some(file) {
+        if self.lock().bgm_playing() && self.bgm_file.as_deref() == Some(file) {
             self.lock().set_bgm_volume(volume);
             return Ok(());
         }
@@ -253,7 +253,7 @@ impl Engine {
         volume: f32,
         fade_frames: u32,
     ) -> Result<(), AudioError> {
-        if self.mixer.lock().unwrap().bgs_playing() && self.bgs_file.as_deref() == Some(file) {
+        if self.lock().bgs_playing() && self.bgs_file.as_deref() == Some(file) {
             return Ok(());
         }
         let audio = self.load(file)?;

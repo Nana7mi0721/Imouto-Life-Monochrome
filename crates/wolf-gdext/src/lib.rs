@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use godot::builtin::VarDictionary;
-use godot::classes::{FileAccess, Image, RefCounted};
+use godot::classes::{FileAccess, Image, ProjectSettings, RefCounted};
 use godot::prelude::*;
 
 #[cfg(target_os = "ios")]
@@ -172,6 +172,29 @@ fn ios_export_file(source_path: &str, suggested_name: &str, callback: Callable) 
 #[cfg(not(target_os = "ios"))]
 fn ios_export_file(_source_path: &str, _suggested_name: &str, _callback: Callable) -> bool {
     false
+}
+
+#[cfg(target_os = "ios")]
+fn ios_poll_picker_result() -> bool {
+    ios_file_picker::poll_result()
+}
+
+#[cfg(not(target_os = "ios"))]
+fn ios_poll_picker_result() -> bool {
+    false
+}
+
+/// Resolves Godot's virtual `res://` / `user://` roots for `std::fs`.
+fn globalize_path(path: &str) -> PathBuf {
+    if path.starts_with("user://") || path.starts_with("res://") {
+        PathBuf::from(
+            ProjectSettings::singleton()
+                .globalize_path(path)
+                .to_string(),
+        )
+    } else {
+        PathBuf::from(path)
+    }
 }
 
 #[godot_api]
@@ -984,6 +1007,29 @@ impl WolfGame {
         wolf_save::SaveFile::parse(bytes.as_slice()).is_ok()
     }
 
+    /// Replaces `destination_path` with `source_path` in one filesystem step.
+    ///
+    /// `std::fs::rename` is `MoveFileExW(MOVEFILE_REPLACE_EXISTING)` on Windows
+    /// and `rename(2)` elsewhere, so an existing destination is swapped without
+    /// the delete-then-rename window the GDScript fallback has. Returns 0
+    /// (`OK`) on success and 1 (`FAILED`) otherwise.
+    #[func]
+    fn replace_file_atomic(&self, source_path: GString, destination_path: GString) -> i32 {
+        let source = globalize_path(&source_path.to_string());
+        let destination = globalize_path(&destination_path.to_string());
+        match std::fs::rename(&source, &destination) {
+            Ok(()) => 0,
+            Err(error) => {
+                eprintln!(
+                    "[wolf-gdext] atomic replace {} -> {} failed: {error}",
+                    source.display(),
+                    destination.display()
+                );
+                1
+            }
+        }
+    }
+
     /// True when the build has the iOS system file picker bridge.
     #[func]
     fn ios_file_picker_available(&self) -> bool {
@@ -1012,6 +1058,16 @@ impl WolfGame {
             &suggested_name.to_string(),
             callback,
         )
+    }
+
+    /// Delivers a queued iOS file-picker answer to the pending GDScript callback.
+    ///
+    /// UIKit runs on its own thread, so the Objective-C++ bridge only stores
+    /// `(path, status)`; the front-end calls this from `_process` to hand the
+    /// result back on the scene thread. Returns true when a result was consumed.
+    #[func]
+    fn poll_ios_picker_result(&self) -> bool {
+        ios_poll_picker_result()
     }
 
     /// Sends the live session back to the title screen.
@@ -1250,7 +1306,7 @@ mod windows_titlebar_icon {
     // HICONs are referenced by the live window until the process exits. Cache one
     // per physical size so a DPI or window-mode change can re-send the matching
     // handle without recreating it.
-    static TITLEBAR_ICONS: OnceLock<Mutex<HashMap<u32, isize>>> = OnceLock::new();
+    static TITLEBAR_ICONS: OnceLock<Mutex<HashMap<u64, isize>>> = OnceLock::new();
 
     pub(super) fn small_icon_size() -> Option<i32> {
         let window = window_handle()?;
@@ -1267,9 +1323,13 @@ mod windows_titlebar_icon {
         let Some(window) = window_handle() else {
             return false;
         };
-        let Ok(key) = u32::try_from(image.get_width()) else {
+        let (Ok(width), Ok(height)) = (
+            u32::try_from(image.get_width()),
+            u32::try_from(image.get_height()),
+        ) else {
             return false;
         };
+        let key = (u64::from(width) << 32) | u64::from(height);
         let cache = TITLEBAR_ICONS.get_or_init(|| Mutex::new(HashMap::new()));
         let mut cached = cache
             .lock()
@@ -1322,12 +1382,21 @@ mod windows_titlebar_icon {
         let mask_bytes = mask_stride.checked_mul(height)?;
         let mut resource = Vec::with_capacity(40 + pixel_bytes + mask_bytes);
         push_u32(&mut resource, 40);
-        push_u32(&mut resource, width as u32);
-        push_u32(&mut resource, height.checked_mul(2)? as u32);
+        let Ok(width_u32) = u32::try_from(width) else {
+            return None;
+        };
+        let Ok(double_height_u32) = u32::try_from(height.checked_mul(2)?) else {
+            return None;
+        };
+        let Ok(pixel_bytes_u32) = u32::try_from(pixel_bytes) else {
+            return None;
+        };
+        push_u32(&mut resource, width_u32);
+        push_u32(&mut resource, double_height_u32);
         push_u16(&mut resource, 1);
         push_u16(&mut resource, 32);
         push_u32(&mut resource, BI_RGB);
-        push_u32(&mut resource, pixel_bytes as u32);
+        push_u32(&mut resource, pixel_bytes_u32);
         push_u32(&mut resource, 0);
         push_u32(&mut resource, 0);
         push_u32(&mut resource, 0);

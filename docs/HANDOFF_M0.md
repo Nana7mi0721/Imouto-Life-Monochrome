@@ -263,7 +263,34 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-21）
 
-* **2026-11-21 iOS 标题退出项修复与双版本重打（当前状态）**：iPhone XR 上
+* **2026-11-21 `bedd7a1` 全量静态审查收口（当前状态，未重打包）**：
+  iOS 文件选择器改为「UIKit 只写结果队列 + GDScript `_process` 轮询」，
+  去掉跨线程 `Callable`；ZIP 导入先按中央目录限制条目/单文件/总量/解压比，
+  再对每个 `.sav` 调 `wolf.validate_save_bytes`；`media.pak` 的 zstd 解码
+  改用带上限的 `decompress_with_limit`，索引与单条 `raw_size` 也加上限；
+  `ios_file_picker.mm` 补呈现失败回滚与安全作用域内的目录判定；
+  `wolf-audio` 3 处裸 `unwrap` 改 `self.lock()`；新增
+  `wolf.replace_file_atomic`（Windows 走 `MoveFileExW` 覆盖语义）并让
+  `GameView` 优先使用；标题栏图标缓存键改为宽高组合。`ios-unsigned.yml`
+  版本号改为从 `Cargo.toml` 读取。验证：`cargo fmt --check`、
+  `cargo test -p wolf-format -p wolf-audio`、`cargo check -p wolf-gdext`
+  及 `aarch64-apple-ios` 目标、Godot headless `--check-only`、三个运行时
+  探针（ZIP 限额、真实/伪造存档 ZIP、原子覆盖写）全部通过。L1 拆分与
+  Linux 交叉 check 仍为后续项；本轮未重新打任何发布包。验证后再次删除
+  `target/`（7.5 GB），仓库 2.86 GB，`godot/bin/wolf_gdext.dll` 保留。
+
+* **2026-11-21 工作区清理与 Release 校验修正（当前状态）**：删除可重建的
+  `target/`（约 16 GB）及 `work/out` 下 108 个打包/审计/真机测试 scratch
+  条目；`work/out/dist/`、`work/Data`、Android keystore、iOS 字体、用户截图
+  与文档全部保留。清理后 `du -sh .` 为 **2.9 GB**（`work` 2.8 GB，其中
+  `work/out/dist` 2.6 GB、`work/Data` 209 MB），`target/` 已不存在。
+  收尾校验发现 Release `v0.1.1` 的 `SHA256SUMS.txt` 将两个实际附件
+  `...unsigned.ipa` / `...unsigned-slim.ipa` 误写成带 `-full` 的名字；已修正
+  本地聚合清单与 iOS 清单，并替换 GitHub Release 的校验和附件。八包
+  `sha256sum -c` 与三个 iOS 产物本地校验均通过，重新下载的 Release 清单与
+  本地逐字节一致。
+
+* **2026-11-21 iOS 标题退出项修复与双版本重打（发布已完成）**：iPhone XR 上
   确认系统 Files 存档导入/导出正常，但点击标题第三项“退出游戏”后因 iOS
   禁止自终止而停在最后一帧。修复放在游戏层：`Game` 新增
   `set_title_quit_enabled`，`wolf-gdext` 在 iOS 打开会话时关闭该行；
@@ -277,7 +304,8 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   `work/out/dist/release-assets/0.1.1/`，并已替换 GitHub Release `v0.1.1`
   的六个 Windows/Android 资产。iOS Actions run `44794833504`
   （commit `fab1413`）成功，engine-only IPA 32,405,233 B；注入标准/slim
-  Data 后得到 full IPA 153,404,823 B / full-slim IPA 125,346,535 B，
+  Data 后得到 `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa` 153,404,823 B /
+  `ImoutoLife-0.1.1-ios-arm64-unsigned-slim.ipa` 125,346,535 B，
   `Info.plist`、Data 内容、媒体包哈希与 SHA 校验均通过；两个 full IPA 已
   上传 Release，聚合 `SHA256SUMS.txt` 覆盖八个包。详见
   `docs/release/PACKAGING.md` §8.9 与

@@ -54,6 +54,18 @@ const INDEX_FIXED_V1: usize = 2 + 8 + 8 + 4;
 /// v2: path length, offset, stored size, raw size, CRC, codec, reserved.
 const INDEX_FIXED: usize = 2 + 8 + 8 + 8 + 4 + 1 + 1;
 
+/// Refuse to allocate an index larger than this when opening a pack.
+///
+/// A real index for this title is well under 1 MiB. The bound keeps a damaged
+/// or hostile header from turning `open()` into a multi-gigabyte allocation
+/// before any entry is validated.
+pub const MAX_INDEX_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Refuse entries that claim an implausible decoded size.
+///
+/// Large background plates are the biggest assets and stay far below this.
+const MAX_ENTRY_RAW_BYTES: u64 = 512 * 1024 * 1024;
+
 /// Below this size zstd's frame overhead usually outweighs the saving.
 pub const ZSTD_MIN_BYTES: usize = 128;
 
@@ -326,6 +338,11 @@ impl Header {
         let index_size = u64::from_le_bytes([
             bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30], bytes[31],
         ]);
+        if index_size > MAX_INDEX_BYTES {
+            return Err(corrupt(format!(
+                "index size {index_size} exceeds the {MAX_INDEX_BYTES}-byte limit"
+            )));
+        }
         if index_offset < HEADER_SIZE {
             return Err(corrupt(format!(
                 "index offset {index_offset} is before the header"
@@ -359,6 +376,7 @@ impl Header {
 /// inside a package (for example Godot's `res://` on Android) provide their own
 /// implementation so the pack can be read without copying it to writable
 /// storage first.
+#[allow(clippy::len_without_is_empty)] // a zero-length pack source is invalid
 pub trait PackSource {
     /// Total number of bytes in the source.
     ///
@@ -550,7 +568,14 @@ impl MediaPack {
         if entry.codec == BodyCodec::Zstd {
             let capacity = usize::try_from(entry.raw_size)
                 .map_err(|_| corrupt(format!("{} is too large for this platform", entry.path)))?;
-            bytes = rusty_zstd::decompress(&bytes).map_err(|error| {
+            // Decode with an explicit output cap: a small damaged frame can
+            // otherwise expand without bound before the length check runs.
+            bytes = rusty_zstd::decompress_with_limit(
+                &bytes,
+                rusty_zstd::DecompressOptions::default(),
+                capacity,
+            )
+            .map_err(|error| {
                 corrupt(format!("{} has an invalid zstd body: {error}", entry.path))
             })?;
             if bytes.len() != capacity {
@@ -650,6 +675,11 @@ fn parse_index(
                 "{path} declares an implausibly small zstd body"
             )));
         }
+        if raw_size > MAX_ENTRY_RAW_BYTES {
+            return Err(corrupt(format!(
+                "{path} declares a {raw_size}-byte body, above the {MAX_ENTRY_RAW_BYTES}-byte limit"
+            )));
+        }
         if !seen.insert(lower_path(&path)) {
             return Err(MediaPackError::DuplicatePath { path });
         }
@@ -733,6 +763,12 @@ pub struct MediaPackWriter {
 struct SourceFile {
     path: String,
     source: PathBuf,
+}
+
+impl Default for MediaPackWriter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MediaPackWriter {
@@ -1109,6 +1145,47 @@ mod tests {
                 .expect("present"),
             b"host source body"
         );
+    }
+
+    fn header_bytes(index_offset: u64, index_size: u64) -> [u8; HEADER_SIZE as usize] {
+        let mut bytes = [0u8; HEADER_SIZE as usize];
+        bytes[0..8].copy_from_slice(&MAGIC);
+        bytes[8..10].copy_from_slice(&VERSION.to_le_bytes());
+        bytes[12..16].copy_from_slice(&0u32.to_le_bytes());
+        bytes[16..24].copy_from_slice(&index_offset.to_le_bytes());
+        bytes[24..32].copy_from_slice(&index_size.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn oversized_index_is_rejected_from_the_header() {
+        let index_offset = HEADER_SIZE;
+        let index_size = MAX_INDEX_BYTES + DATA_ALIGNMENT;
+        let bytes = header_bytes(index_offset, index_size);
+        let file_len = index_offset + index_size;
+        let error = Header::decode(&bytes, file_len).expect_err("oversized index must fail");
+        assert!(matches!(error, MediaPackError::Corrupt { .. }));
+    }
+
+    #[test]
+    fn implausible_decoded_size_is_rejected_while_parsing_the_index() {
+        let path = "Picture/oversized.png";
+        let mut index = Vec::new();
+        index.extend_from_slice(
+            &u16::try_from(path.len())
+                .expect("path length")
+                .to_le_bytes(),
+        );
+        index.extend_from_slice(&32u64.to_le_bytes());
+        index.extend_from_slice(&64u64.to_le_bytes());
+        index.extend_from_slice(&(MAX_ENTRY_RAW_BYTES + 1).to_le_bytes());
+        index.extend_from_slice(&0u32.to_le_bytes());
+        index.push(BodyCodec::Zstd as u8);
+        index.push(0);
+        index.extend_from_slice(path.as_bytes());
+
+        let error = parse_index(&index, 1, 1024, VERSION).expect_err("raw size must be bounded");
+        assert!(matches!(error, MediaPackError::Corrupt { .. }));
     }
 
     struct CursorSource(std::io::Cursor<Vec<u8>>);

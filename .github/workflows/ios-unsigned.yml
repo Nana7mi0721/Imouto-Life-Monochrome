@@ -18,6 +18,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Read workspace version
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Install Rust iOS target
         run: |
           set -euo pipefail
@@ -69,9 +77,9 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ImoutoLife-0.1.1-ios-arm64-unsigned
+          name: ImoutoLife-${{ steps.version.outputs.version }}-ios-arm64-unsigned
           path: |
-            work/out/dist/ios/0.1.1/ImoutoLife-0.1.1-ios-arm64-unsigned.ipa
-            work/out/dist/ios/0.1.1/SHA256SUMS.txt
+            work/out/dist/ios/${{ steps.version.outputs.version }}/ImoutoLife-${{ steps.version.outputs.version }}-ios-arm64-unsigned.ipa
+            work/out/dist/ios/${{ steps.version.outputs.version }}/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
