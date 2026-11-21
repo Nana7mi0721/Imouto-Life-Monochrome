@@ -268,6 +268,7 @@ impl WolfGame {
     /// random-access `FileAccess` and hands it here. The pack is read in place,
     /// so first launch no longer copies ~100 MB into `user://data`.
     #[func]
+    #[allow(clippy::arc_with_non_send_sync)] // host-bound PackSource, single-threaded session
     fn open_with_media_file(
         &mut self,
         root: GString,
@@ -1345,14 +1346,14 @@ mod windows_titlebar_icon {
         };
 
         unsafe {
-            SendMessageW(window, WM_SETICON, ICON_SMALL, icon as isize);
+            SendMessageW(window, WM_SETICON, ICON_SMALL, icon);
         }
         true
     }
 
     fn window_handle() -> Option<isize> {
         let display = DisplayServer::singleton();
-        if display.get_name().to_string() == "headless" {
+        if display.get_name() == "headless" {
             return None;
         }
         let window = display.window_get_native_handle(HandleType::WINDOW_HANDLE);
@@ -1463,7 +1464,7 @@ fn sprite_dict(quad: &SpriteQuad, atlas_size: [u32; 2]) -> VarDictionary {
     // badge covering the inner endpoints of both frames, so keep WOLF's slot
     // order instead of lifting the frames above the decoration.
     let z = sprite_z(quad.number);
-    dict.set("z", z as i64);
+    dict.set("z", z);
     dict.set("blend", quad.blend as i64);
     dict.set("rect", rect2(quad.rect));
     dict.set(

@@ -55,7 +55,7 @@ fn step_wav() -> (PathBuf, PathBuf) {
     std::fs::create_dir_all(&bgm).expect("create fixture root");
     let path = bgm.join("step.wav");
     let mut samples = vec![0i16; 4_000];
-    samples.extend(std::iter::repeat(26_214i16).take(4_000));
+    samples.extend(std::iter::repeat_n(26_214i16, 4_000));
     write_pcm16(&path, 8_000, &samples);
     (root, path)
 }

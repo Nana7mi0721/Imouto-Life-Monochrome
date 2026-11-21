@@ -142,6 +142,7 @@ impl Drop for Scratch {
     }
 }
 
+#[allow(clippy::permissions_set_readonly_false)] // clearing a read-only fixture is the point
 fn clear_readonly(path: &Path) {
     let Ok(meta) = std::fs::metadata(path) else {
         return;
@@ -309,6 +310,7 @@ fn wrong_checksum_is_detected_and_loaded_with_a_warning() {
 }
 
 #[test]
+#[allow(clippy::permissions_set_readonly_false)] // the test must restore writability
 fn unwritable_save_targets_return_err_without_panicking() {
     let Some(_valid) = valid_save_bytes() else {
         return;

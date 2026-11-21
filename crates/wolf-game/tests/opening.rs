@@ -347,9 +347,9 @@ fn a_title_new_game_can_be_saved_and_reloaded_after_the_opening() {
     );
     assert_eq!(game.stats.warnings, 0, "the new-game run produced warnings");
 
-    fn visible_pictures(
-        screen: &wolf_game::picture::Screen,
-    ) -> Vec<(i32, String, i32, i32, u8, i32, (u32, u32), u32)> {
+    type VisiblePicture = (i32, String, i32, i32, u8, i32, (u32, u32), u32);
+
+    fn visible_pictures(screen: &wolf_game::picture::Screen) -> Vec<VisiblePicture> {
         screen
             .iter()
             .filter(|p| p.x < 1024 && p.y < 576 && p.x + 1 > 0 && p.y + 1 > 0)
@@ -399,10 +399,10 @@ fn a_title_new_game_can_be_saved_and_reloaded_after_the_opening() {
         before_playtime,
         "play time changed"
     );
-    for index in 0..800 {
+    for (index, before) in before_vars.iter().enumerate() {
         assert_eq!(
             reloaded.vm.vars.get(index),
-            before_vars[index],
+            *before,
             "normal variable {index} changed"
         );
     }

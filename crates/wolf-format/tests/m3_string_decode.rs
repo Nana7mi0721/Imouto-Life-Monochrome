@@ -98,14 +98,14 @@ fn collect_database(root: &Path, dat: &str, project: &str, out: &mut Vec<Source>
             out,
             &tag,
             "type_name",
-            db.type_name(ty).map(|s| s.to_owned()).into_iter(),
+            db.type_name(ty).map(|s| s.to_owned()),
         );
         for col in 0..table.fields.len() {
             push_all(
                 out,
                 &tag,
                 "field_name",
-                db.field_name(ty, col).map(|s| s.to_owned()).into_iter(),
+                db.field_name(ty, col).map(|s| s.to_owned()),
             );
         }
         for (row, r) in table.rows.iter().enumerate() {
@@ -113,7 +113,7 @@ fn collect_database(root: &Path, dat: &str, project: &str, out: &mut Vec<Source>
                 out,
                 &tag,
                 "row_name",
-                db.row_name(ty, row).map(|s| s.to_owned()).into_iter(),
+                db.row_name(ty, row).map(|s| s.to_owned()),
             );
             push_all(out, &tag, "row_string", r.strings.clone());
         }

@@ -76,7 +76,7 @@ fn smallest_with_ext(dir: &Path, wanted: &str) -> Option<PathBuf> {
             continue;
         }
         let len = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        if best.as_ref().map_or(true, |(best_len, _)| len < *best_len) {
+        if best.as_ref().is_none_or(|(best_len, _)| len < *best_len) {
             best = Some((len, path));
         }
     }

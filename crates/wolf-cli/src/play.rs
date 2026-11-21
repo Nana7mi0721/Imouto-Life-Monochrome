@@ -151,6 +151,7 @@ fn backlog_view(history: &[Message], scroll: usize) -> (String, String) {
 /// A non-zero frame budget makes the window self-closing, which is how the interactive
 /// path gets smoke-tested: the same code that a player drives also has to survive an
 /// unattended run without panicking or wedging the event loop.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     root: &std::path::Path,
     frames: Option<u64>,
@@ -231,14 +232,13 @@ pub fn run(
             // entry has no equivalent of, so resume it explicitly from the snapshot.
             let started = game
                 .load_save(path)
-                .map(|loaded| {
+                .inspect(|loaded| {
                     if !loaded.checksum_valid {
                         eprintln!(
                             "warning: save checksum mismatch in {}; loaded anyway",
                             path.display()
                         );
                     }
-                    loaded
                 })
                 .and_then(|_| game.resume_loaded_map())
                 .map(|_| ())

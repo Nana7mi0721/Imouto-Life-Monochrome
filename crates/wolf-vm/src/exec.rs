@@ -1608,6 +1608,7 @@ impl Vm {
     }
 
     /// Create the child coroutine of a `210`/`300` and block the caller.
+    #[allow(clippy::too_many_arguments)]
     fn spawn_child(
         &mut self,
         caller: usize,
@@ -2340,6 +2341,7 @@ fn compare(lhs: i32, rhs: i32, operator: i32) -> bool {
 }
 
 /// Execute one coroutine until it blocks, ends, or the budget runs out.
+#[allow(clippy::too_many_arguments)]
 fn execute(
     inst: &mut Instance,
     _programs: &ProgramSet,
@@ -2621,11 +2623,7 @@ fn execute(
                     inst.pc += 1;
                     None
                 } else {
-                    let batch_count = if batch_mode {
-                        arg(cmd, 4).max(0) as i32
-                    } else {
-                        0
-                    };
+                    let batch_count = if batch_mode { arg(cmd, 4).max(0) } else { 0 };
                     for offset in 0..=batch_count {
                         let lhs_raw = raw_lhs.wrapping_add(offset);
                         let target = if (flags & 0x10) != 0 {
@@ -3597,10 +3595,7 @@ fn choice_target(inst: &Instance, block: usize, reply: ChoiceReply) -> Option<us
 /// message. Treating the two as independent waits forces the player to click
 /// once before the options even appear. Only opcodes with no observable effect
 /// are skipped: a real command between `101` and `102` still ends the sequence.
-fn next_choice_instruction<'a>(
-    program: &'a Program,
-    mut pc: usize,
-) -> Option<(usize, &'a Command)> {
+fn next_choice_instruction(program: &Program, mut pc: usize) -> Option<(usize, &Command)> {
     while pc < program.len() {
         let Slot::Command(cmd) = &program.slots[pc] else {
             return None;

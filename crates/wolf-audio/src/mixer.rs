@@ -161,10 +161,8 @@ impl Voice {
                 }
             }
             true
-        } else if self.pos >= total {
-            false
         } else {
-            true
+            self.pos < total
         }
     }
 }

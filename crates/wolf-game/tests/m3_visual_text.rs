@@ -187,7 +187,7 @@ fn story_message_types_out() {
     );
     assert_eq!(layout.typed, layout.total, "message finishes revealing");
     assert!(!layout.typing, "typing should be done");
-    assert!(layout.rows.len() >= 1);
+    assert!(!layout.rows.is_empty());
     assert_eq!(layout.total, 6, "…咽口水。 is six characters");
 
     // Reveal count only ever grows, and starts from zero.

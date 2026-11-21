@@ -816,7 +816,7 @@ fn key_bits_for_frame(
         bits |= wolf_game::key::bits_for_code(*code as i32);
     }
     for (every, code) in press_every {
-        if *every > 0 && frame % *every == 0 {
+        if *every > 0 && frame.is_multiple_of(*every) {
             bits |= wolf_game::key::bits_for_code(*code as i32);
         }
     }
@@ -2172,6 +2172,7 @@ fn normalise_var_addr(addr: u32) -> usize {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_dump(
     root: &Path,
     event: Option<u32>,
@@ -2559,6 +2560,7 @@ fn distinct_asset_files(sites: &[AssetSite]) -> usize {
     set.len()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_assets(
     root: &Path,
     include_maps: bool,
@@ -4022,6 +4024,7 @@ fn print_background_report(game: &Game) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_capture(
     root: &Path,
     out: Option<PathBuf>,
@@ -4348,6 +4351,7 @@ fn run_capture(
 /// paints the room's picture layer actually draws it), and `--pointer` /
 /// `--press-frame` / `--key-frame` inject the same one-frame inputs a scripted capture
 /// does. The tile camera is the Game's fixed origin [0, 0] (docs/HSCENE.md 4.3).
+#[allow(clippy::too_many_arguments)]
 fn run_capture_map(
     root: &Path,
     out: Option<PathBuf>,
@@ -4770,7 +4774,7 @@ fn run_blocks(root: &Path, map_name: Option<&str>, event: Option<u32>, page: usi
             "  block {index:>3} {:?} head {:>4} {:?} cases {:?} else {:?} cancel {:?} end {:?}",
             block.kind,
             block.head,
-            head.map(|(opcode, ints)| (opcode, ints)),
+            head,
             block.cases,
             block.else_pc,
             block.cancel_pc,
@@ -5221,11 +5225,11 @@ mod tests {
             later.join("Game.dat")
         );
         assert_eq!(
-            layered_basic_file(&root, &basic, &[first.clone()], "Game.dat"),
+            layered_basic_file(&root, &basic, std::slice::from_ref(&first), "Game.dat"),
             first.join("Game.dat")
         );
         assert_eq!(
-            layered_basic_file(&root, &basic, &[nested.clone()], "Game.dat"),
+            layered_basic_file(&root, &basic, std::slice::from_ref(&nested), "Game.dat"),
             nested.join("BasicData/Game.dat")
         );
         assert_eq!(
@@ -5236,11 +5240,19 @@ mod tests {
         std::fs::create_dir_all(later.join("MapData")).expect("later MapData");
         std::fs::write(later.join("MapData/TitleMap.mps"), b"mod map").expect("mod map");
         assert_eq!(
-            layered_file(&root, &[later.clone()], Path::new("MapData/TitleMap.mps")),
+            layered_file(
+                &root,
+                std::slice::from_ref(&later),
+                Path::new("MapData/TitleMap.mps")
+            ),
             later.join("MapData/TitleMap.mps")
         );
         assert_eq!(
-            layered_file(&root, &[later.clone()], Path::new("MapData/Other.mps")),
+            layered_file(
+                &root,
+                std::slice::from_ref(&later),
+                Path::new("MapData/Other.mps")
+            ),
             root.join("MapData/Other.mps")
         );
 

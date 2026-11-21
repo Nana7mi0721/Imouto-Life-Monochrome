@@ -290,8 +290,8 @@ fn hover_moves_the_highlight_and_left_click_still_hits() {
     // Start on a non-zero row so a follow can be told apart from "stayed put".
     game.set_choice_cursor(4);
     // Move to the centre of each row in turn; the highlight follows the pointer.
-    for row in 0..5usize {
-        let (x, y) = row_centre(&lines[row]);
+    for (row, line) in lines.iter().enumerate() {
+        let (x, y) = row_centre(line);
         game.mouse = [x, y];
         game.frame();
         assert_eq!(

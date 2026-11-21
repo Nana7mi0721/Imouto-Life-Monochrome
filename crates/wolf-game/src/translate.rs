@@ -39,6 +39,8 @@ use std::path::{Path, PathBuf};
 use wolf_format::command::Slot;
 use wolf_format::commonevent::CommonEventData;
 
+type RecordBuckets = BTreeMap<(Context, String), (BTreeSet<u32>, BTreeSet<u32>)>;
+
 /// Where a game string appears, used to scope catalog entries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Context {
@@ -335,8 +337,7 @@ impl SourceScan {
     /// Walks every event and collects opcode 101/102 strings.
     #[must_use]
     pub fn from_common_events(events: &CommonEventData) -> Self {
-        let mut buckets: BTreeMap<(Context, String), (BTreeSet<u32>, BTreeSet<u32>)> =
-            BTreeMap::new();
+        let mut buckets: RecordBuckets = BTreeMap::new();
         for event in &events.events {
             for slot in &event.commands {
                 let Slot::Command(command) = slot else {
@@ -360,7 +361,7 @@ impl SourceScan {
         Self::finish(buckets)
     }
 
-    fn finish(buckets: BTreeMap<(Context, String), (BTreeSet<u32>, BTreeSet<u32>)>) -> Self {
+    fn finish(buckets: RecordBuckets) -> Self {
         Self {
             texts: buckets
                 .into_iter()
@@ -376,12 +377,7 @@ impl SourceScan {
         }
     }
 
-    fn record(
-        buckets: &mut BTreeMap<(Context, String), (BTreeSet<u32>, BTreeSet<u32>)>,
-        context: Context,
-        event: u32,
-        raw: &str,
-    ) {
+    fn record(buckets: &mut RecordBuckets, context: Context, event: u32, raw: &str) {
         // `expand` with a lookup that knows nothing replaces variable escapes with
         // `0`/empty; when it changes the string the site is value-dependent. Display
         // markup (`\c[6]`, `\n`, `@1`) passes through untouched.

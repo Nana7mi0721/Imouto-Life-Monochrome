@@ -88,7 +88,7 @@ struct Quiet;
 
 impl Host for Quiet {}
 
-fn auto_event<'a>(events: &'a [AutoEvent], id: u32) -> &'a AutoEvent {
+fn auto_event(events: &[AutoEvent], id: u32) -> &AutoEvent {
     events
         .iter()
         .find(|event| event.id == id)
@@ -174,7 +174,7 @@ fn op176_real_events_compile_cleanly_and_counted_continue_closes() {
         900,
         vec![
             cmd(179, &[4]),
-            cmd(121, &[VAR_BASE + 0, 1, 0, 0x0104]),
+            cmd(121, &[VAR_BASE, 1, 0, 0x0104]),
             cmd(176, &[]),
             cmd(121, &[VAR_BASE + 1, 1, 0, 0x0104]),
             cmd(498, &[]),

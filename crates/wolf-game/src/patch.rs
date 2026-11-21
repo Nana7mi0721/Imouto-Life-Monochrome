@@ -164,11 +164,7 @@ impl PatchSet {
     ///
     /// PatchError::LengthMismatch, PatchError::OutOfRange or PatchError::Mismatch
     /// when a patch does not fit the file.
-    pub fn apply_bytes(
-        &self,
-        data: &mut Vec<u8>,
-        candidates: &[&str],
-    ) -> Result<usize, PatchError> {
+    pub fn apply_bytes(&self, data: &mut [u8], candidates: &[&str]) -> Result<usize, PatchError> {
         let mut plan: Vec<(usize, &[u8])> = Vec::new();
         for op in &self.ops {
             let PatchOp::Bytes {
@@ -745,7 +741,7 @@ mod tests {
             "file = DataBase.dat\ntype = 2\nrow = 3\ncolumn = 4\nnumber = 7\n",
         )
         .unwrap();
-        let set = PatchSet::load_from_overlays(&[dir.clone()]).unwrap();
+        let set = PatchSet::load_from_overlays(std::slice::from_ref(&dir)).unwrap();
         assert_eq!(set.len(), 2);
         assert!(matches!(
             &set.ops()[0],

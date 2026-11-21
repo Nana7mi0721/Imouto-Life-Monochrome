@@ -272,9 +272,8 @@ impl AutoEvents {
             return report;
         }
         for event in &self.events {
-            let header_condition = condition_value(vm, event.variable).map_or(false, |left| {
-                condition_met(event.operator, left, event.value)
-            });
+            let header_condition = condition_value(vm, event.variable)
+                .is_some_and(|left| condition_met(event.operator, left, event.value));
             // Event 43 is the title menu renderer: only run it while the title menu is up.
             let now = header_condition && (event.id != 43 || self.title_menu_active);
             let alive = self

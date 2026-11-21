@@ -224,9 +224,10 @@ fn two_vm_instances_share_a_single_consumer_edge() {
     let mut second = vm_with(vec![event(2, 2, 12)]);
     first.start_event(1).expect("first event");
     second.start_event(2).expect("second event");
-    let mut host = SharedClickHost::default();
-
-    host.buttons = 1;
+    let mut host = SharedClickHost {
+        buttons: 1,
+        ..SharedClickHost::default()
+    };
     host.frame_begin();
     first.step_frame(&mut host);
     second.step_frame(&mut host);

@@ -278,6 +278,10 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
   探针（ZIP 限额、真实/伪造存档 ZIP、原子覆盖写）全部通过。L1 拆分与
   Linux 交叉 check 仍为后续项；本轮未重新打任何发布包。验证后再次删除
   `target/`（7.5 GB），仓库 2.86 GB，`godot/bin/wolf_gdext.dll` 保留。
+  随后清掉了整仓 `cargo clippy --workspace --all-targets -- -D warnings`
+  的全部告警（`wolf-vm`/`wolf-audio`/`wolf-game`/`wolf-render`/
+  `wolf-cli`/`wolf-gdext` 及测试），fmt 与 Clippy 现均以 0 退出；本地
+  工作区测试仍只剩 6 个已知夹具失败（CI 无数据目录时自动 skip）。
 
 * **2026-11-21 工作区清理与 Release 校验修正（当前状态）**：删除可重建的
   `target/`（约 16 GB）及 `work/out` 下 108 个打包/审计/真机测试 scratch

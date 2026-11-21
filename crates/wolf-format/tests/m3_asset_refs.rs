@@ -130,6 +130,7 @@ struct RefRecord {
     raw: String,
     /// "CE <id> <title>" or "Map <file> ev<id> <name>".
     origin: String,
+    #[allow(dead_code)] // kept in the debug dump when a reference drifts
     opcode: u32,
 }
 

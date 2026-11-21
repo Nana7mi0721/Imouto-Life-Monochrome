@@ -669,6 +669,7 @@ impl TextRenderer {
     /// outline buffer is shaped exactly like the body it decorates and therefore
     /// breaks lines identically. `colour` lands on `Attrs` for the reason given
     /// in `prepare`.
+    #[allow(clippy::too_many_arguments)]
     fn shape_buffer(
         &mut self,
         text: &str,

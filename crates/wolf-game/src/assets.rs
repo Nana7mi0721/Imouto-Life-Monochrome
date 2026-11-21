@@ -49,6 +49,9 @@ pub struct ImageData {
     pub rgba: Vec<u8>,
 }
 
+type AlphaBoundsKey = ([u32; 4], u8);
+type AlphaBoundsCache = HashMap<String, HashMap<AlphaBoundsKey, Option<[u32; 4]>>>;
+
 impl ImageData {
     /// Wraps raw pixels, rejecting a buffer whose length disagrees with the size.
     #[must_use]
@@ -147,7 +150,6 @@ impl ImageData {
         {
             return None;
         }
-        let threshold = threshold.min(255);
         let mut left = region_right;
         let mut top = region_bottom;
         let mut right = region_x;
@@ -283,7 +285,7 @@ pub struct Assets {
     /// one 330x576 panel scan walks 190,080 pixels, so the answer is kept until
     /// `clear()` drops the decoded images it was derived from. Two levels rather
     /// than one flat key so a hit borrows the name instead of allocating it.
-    alpha_bounds_cache: HashMap<String, HashMap<([u32; 4], u8), Option<[u32; 4]>>>,
+    alpha_bounds_cache: AlphaBoundsCache,
 }
 
 #[derive(Clone, Debug)]
@@ -306,6 +308,7 @@ impl Assets {
     /// newest overlay first, then in the base root. The first hit wins, so an overlay
     /// only has to carry the files it replaces.
     #[must_use]
+    #[allow(clippy::arc_with_non_send_sync)] // host-bound PackSource, single-threaded Assets
     pub fn with_overlays(root: impl Into<PathBuf>, overlays: Vec<PathBuf>) -> Self {
         let root = root.into();
         let media_path = root.join("media.pak");
@@ -430,7 +433,7 @@ impl Assets {
         region: [u32; 4],
         threshold: u8,
     ) -> Option<[u32; 4]> {
-        let key = (region, threshold.min(255));
+        let key = (region, threshold);
         if let Some(cached) = self
             .alpha_bounds_cache
             .get(name)

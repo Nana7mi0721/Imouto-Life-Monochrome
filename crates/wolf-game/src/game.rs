@@ -1804,7 +1804,7 @@ impl Game {
                 *hold = 0;
                 continue;
             }
-            if *hold == 0 || (*hold >= delay && (*hold - delay) % interval == 0) {
+            if *hold == 0 || (*hold >= delay && (*hold - delay).is_multiple_of(interval)) {
                 out |= bit;
             }
             *hold = hold.saturating_add(1);
@@ -3754,6 +3754,7 @@ impl Game {
     }
 
     /// Lays one text picture out into its quad list; the cache calls it on a miss.
+    #[allow(clippy::too_many_arguments)]
     fn build_text_picture(
         &self,
         picture: &crate::picture::Picture,
@@ -4427,15 +4428,14 @@ impl Game {
     /// opener that is still resident, or the drawer can finish its slide back in
     /// after the player has explicitly closed it.
     fn start_panel_event(&mut self, event: u32, show: i32) {
-        if show != 0 {
-            if self
+        if show != 0
+            && self
                 .vm
                 .instances()
                 .iter()
                 .any(|instance| instance.event == event)
-            {
-                return;
-            }
+        {
+            return;
         }
         let _ = self.vm.start_event_with_args(event, &[show], &[]);
     }
@@ -6225,7 +6225,7 @@ impl Host for GameHost<'_> {
         let settled = self
             .choices
             .as_ref()
-            .map_or(true, |choices| choices.frames >= self.auto_choice_delay);
+            .is_none_or(|choices| choices.frames >= self.auto_choice_delay);
         if self.auto_choice && settled {
             let source = self
                 .choices

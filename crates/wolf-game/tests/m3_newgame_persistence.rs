@@ -308,11 +308,11 @@ fn save_and_verify(source: &mut Game, path: &std::path::Path) {
     );
     assert_eq!(
         screen_snapshot(&loaded),
-        screen_snapshot(&source),
+        screen_snapshot(source),
         "screen 图片几何应一致"
     );
     let loaded_db = db_snapshot(&loaded);
-    let source_db = db_snapshot(&source);
+    let source_db = db_snapshot(source);
     // 已知引擎限制（已报 Lead）：Game::new 的 base_save 模板 vardb 与静态 CData 的
     // type 6 列布局不一致，save_to 的 write_into 对该 cell 的 set_num 失败（missed），
     // 因而该 cell 不被持久化；重新载入后回落到静态 .dat 的 12。此处只豁免这一个

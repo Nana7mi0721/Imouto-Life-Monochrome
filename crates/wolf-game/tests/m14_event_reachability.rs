@@ -637,7 +637,7 @@ fn every_event_is_reachable_or_explained() {
     // The table is the deliverable; the companion document is written from it.
     let out_dir = repo_root().join("work/out/event_reach");
     std::fs::create_dir_all(&out_dir).expect("create work/out/event_reach");
-    let mut tsv = String::from(Row::tsv_header());
+    let mut tsv = Row::tsv_header();
     tsv.push('\n');
     for row in &rows {
         println!(

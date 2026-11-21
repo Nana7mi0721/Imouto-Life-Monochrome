@@ -269,7 +269,7 @@ fn ce245_action_tea() {
     let mut opened = false;
     for _ in 0..120 {
         game.frame();
-        absorb(&mut seen, &mut game);
+        absorb(&mut seen, &game);
         if game.choices.is_some() {
             opened = true;
             break;
@@ -308,7 +308,7 @@ fn ce245_action_bath_dispatches_ce249() {
     let mut events = BTreeSet::new();
     for _ in 0..40 {
         game.frame();
-        absorb(&mut seen, &mut game);
+        absorb(&mut seen, &game);
         events.extend(live_events(&game));
         if events.contains(&249) && game.choices.is_some() {
             break;
@@ -336,7 +336,7 @@ fn ce245_action_shop_dispatches_ce250() {
     let mut events = BTreeSet::new();
     for _ in 0..40 {
         game.frame();
-        absorb(&mut seen, &mut game);
+        absorb(&mut seen, &game);
         events.extend(live_events(&game));
         if events.contains(&250) && game.choices.is_some() {
             break;
@@ -369,7 +369,7 @@ fn ce245_action_sleep() {
     let mut opened = false;
     for _ in 0..120 {
         game.frame();
-        absorb(&mut seen, &mut game);
+        absorb(&mut seen, &game);
         if game.choices.is_some() {
             opened = true;
             break;
@@ -447,7 +447,7 @@ fn ce246_dispatch_tv_and_game() {
     let mut events = BTreeSet::new();
     for _ in 0..40 {
         game.frame();
-        absorb(&mut seen, &mut game);
+        absorb(&mut seen, &game);
         events.extend(live_events(&game));
     }
     assert!(
@@ -468,7 +468,7 @@ fn ce246_dispatch_tv_and_game() {
     let mut events = BTreeSet::new();
     for _ in 0..40 {
         game.frame();
-        absorb(&mut seen, &mut game);
+        absorb(&mut seen, &game);
         events.extend(live_events(&game));
     }
     assert!(
@@ -591,12 +591,7 @@ fn ce248_game_menu_and_branches() {
             run.messages.contains(&first_message.to_owned()),
             "game option {index} should say {first_message:?}"
         );
-        for number in [300] {
-            assert!(
-                run.pictures.contains(&number),
-                "game branch keeps picture {number}"
-            );
-        }
+        assert!(run.pictures.contains(&300), "game branch keeps picture 300");
         assert_eq!(game.stats.warnings, 0, "game option {index}");
     }
 }

@@ -139,8 +139,10 @@ pub fn load_into(game: &mut Game, path: &Path) -> Result<LoadedSave, String> {
 
 /// Applies an already parsed save. Kept separate so tests can build a \`SaveFile\` in memory.
 pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
-    let mut loaded = LoadedSave::default();
-    loaded.checksum_valid = save.checksum_ok();
+    let mut loaded = LoadedSave {
+        checksum_valid: save.checksum_ok(),
+        ..LoadedSave::default()
+    };
 
     // Keep the save we loaded from as the template for the next save_to: it carries the
     // full runtime variable database (vardb, ~84 KB in SaveData01) plus the current map
@@ -340,7 +342,7 @@ pub fn picture_from_record(record: &SavePart5_1) -> Option<Picture> {
         let columns = u32::try_from(w).unwrap_or(1).max(1);
         let rows = u32::try_from(h).unwrap_or(1).max(1);
         picture.split = (columns, rows);
-        picture.pattern_index = u32::try_from(v[4]).unwrap_or(1).max(1);
+        picture.pattern_index = v[4].max(1);
     }
     picture.anchor = record.var4 as u8;
 
@@ -388,11 +390,13 @@ pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
 
 /// The record the canonical encoder produces from the live fields alone.
 fn canonical_record(picture: &Picture) -> SavePart5_1 {
-    let mut record = SavePart5_1::default();
-    record.var1 = picture.number as u32;
-    record.var4 = u16::from(picture.anchor);
-    record.var5 = u8::from(picture.kind.is_text());
-    record.var6 = u8::from(picture.kind.is_window());
+    let mut record = SavePart5_1 {
+        var1: picture.number as u32,
+        var4: u16::from(picture.anchor),
+        var5: u8::from(picture.kind.is_text()),
+        var6: u8::from(picture.kind.is_window()),
+        ..SavePart5_1::default()
+    };
     record.md1 = if picture.kind.is_text() {
         // A picture loaded from a save keeps its original byte stream while the text is
         // untouched. The encoder below only covers the canonical spellings; the shipped
@@ -575,13 +579,11 @@ pub fn decode_picture_text(bytes: &[u8]) -> String {
                     }
                 }
             }
-            6 => {
-                if payload.first() == Some(&2) {
-                    if let Some(code) = payload.get(3) {
-                        let index = if *code == 0x0f { 0 } else { *code as i32 - 14 };
-                        if (0..=30).contains(&index) {
-                            out.push_str(&format!("\\c[{index}]"));
-                        }
+            6 if payload.first() == Some(&2) => {
+                if let Some(code) = payload.get(3) {
+                    let index = if *code == 0x0f { 0 } else { *code as i32 - 14 };
+                    if (0..=30).contains(&index) {
+                        out.push_str(&format!("\\c[{index}]"));
                     }
                 }
             }

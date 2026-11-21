@@ -94,7 +94,7 @@ fn boot_reaches_the_three_option_title_menu() {
 }
 
 #[test]
-fn title_menu_new_game_passes_through_the_Map003_hook_into_SampleMapA() {
+fn title_menu_new_game_passes_through_the_map003_hook_into_sample_map_a() {
     let Some(mut game) = open_game() else { return };
     game.auto_advance = true;
     game.set_choice_cursor(0);

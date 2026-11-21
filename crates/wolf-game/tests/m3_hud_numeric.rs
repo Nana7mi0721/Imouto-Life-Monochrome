@@ -240,7 +240,10 @@ fn ce244_status_panel_numeric_slots_still_render() {
 /// keyed by picture slot. The VM expands those escapes while decoding the
 /// picture, so the runtime screen no longer carries the `\cdb` spelling; the
 /// program strings are the stable place to enumerate the references.
-fn program_cell_refs(game: &Game, event: u32) -> Vec<(i32, Vec<(bool, i32, i32, i32)>)> {
+type CellRef = (bool, i32, i32, i32);
+type PictureCellRefs = (i32, Vec<CellRef>);
+
+fn program_cell_refs(game: &Game, event: u32) -> Vec<PictureCellRefs> {
     let Some(program) = game.vm.programs.event(event) else {
         return Vec::new();
     };

@@ -111,9 +111,11 @@ fn run_one(id: u32, frames: u32) -> Result<EventReport, String> {
     game.screen.clear();
 
     let before: Vec<u32> = game.vm.instances().iter().map(|inst| inst.id).collect();
-    let mut report = EventReport::default();
-    report.warn_base = warnings_before;
-    report.started = game.start_event(id);
+    let mut report = EventReport {
+        warn_base: warnings_before,
+        started: game.start_event(id),
+        ..EventReport::default()
+    };
     if !report.started {
         return Ok(report);
     }

@@ -2530,3 +2530,12 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * **清理**：本轮验证重建的 `target/`（7.5 GB）已再次删除，仓库回到
     **2.86 GB**；`godot/bin/wolf_gdext.dll`（2.4 MB，gitignored）保留，
     项目仍可直接运行。
+  * **CI Clippy 收口**：清掉 Clippy 1.99 在
+    `cargo clippy --workspace --all-targets -- -D warnings` 下的全部告警：
+    `wolf-vm` 的 4 条（两处 `too_many_arguments` 加 allow、去掉冗余
+    `as i32`、生命周期省略），以及 `wolf-audio`、`wolf-game`（含测试）、
+    `wolf-render`、`wolf-cli`、`wolf-gdext` 的同类风格项（`is_multiple_of`、
+    `is_none_or`、`from_ref`、`field_reassign_with_default` 等）。
+    现在 `cargo fmt --check` 与整仓 Clippy 均以 0 退出。工作区测试只剩
+    已知的 6 个夹具失败（`m18` 透明图 hover + 缺 `SaveData01.sav` 的
+    5 个用例），CI 无 `work/Data` 时会走 skip 分支。
