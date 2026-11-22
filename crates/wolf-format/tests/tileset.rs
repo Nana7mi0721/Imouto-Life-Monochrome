@@ -200,9 +200,9 @@ fn tags_match_the_measured_distribution() {
     // Tilesets 0-2 use no tags at all; tileset 3 tags 185 tiles with 0 and one
     // tile with each of 1..=15; tilesets 4 and 5 are mostly untagged but use
     // tags 1..=8 and 1..=15 respectively.
-    for index in 0..3 {
+    for (index, tileset) in parsed.tilesets[..3].iter().enumerate() {
         assert!(
-            parsed.tilesets[index].tags.iter().all(|&tag| tag == 0),
+            tileset.tags.iter().all(|&tag| tag == 0),
             "tileset {index} has no tags"
         );
     }
