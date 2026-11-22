@@ -1134,10 +1134,13 @@ pub struct Game {
     /// Frames the pending edge has waited without a poll; dropped after the TTL so a
     /// click can never fire a menu that appears much later.
     pending_mouse_age: u32,
-    /// Set when this frame either polled keys or consumed the click itself (message
-    /// dismissal, choice row). The pending edge is then spent and is cleared at the
-    /// end of the frame instead of surviving into the next one.
-    mouse_consumed: bool,
+    /// Mouse edge bits already spent by this frame's first consumer.
+    ///
+    /// A single frame can carry both a left and a right edge (for example a
+    /// right-click carried over from an earlier frame plus a fresh left click).
+    /// Tracking the bits separately keeps a poll that only accepts CANCEL from
+    /// clearing the still-unused decide edge.
+    mouse_consumed_bits: u32,
     frame_mouse_blocked: bool,
     pending_return_to_title: bool,
     reserved_events: std::collections::VecDeque<(u32, Vec<i32>, Vec<String>)>,
@@ -1393,7 +1396,7 @@ impl Game {
             previous_mouse_buttons: 0,
             pending_mouse: 0,
             pending_mouse_age: 0,
-            mouse_consumed: false,
+            mouse_consumed_bits: 0,
             frame_mouse_blocked: false,
             pending_return_to_title: false,
             reserved_events: std::collections::VecDeque::new(),
@@ -3417,7 +3420,7 @@ impl Game {
         self.frame_mouse_blocked = false;
         self.pending_mouse = 0;
         self.pending_mouse_age = 0;
-        self.mouse_consumed = false;
+        self.mouse_consumed_bits = 0;
     }
 
     /// The newest 101 message, laid out with its inline styling.
@@ -4059,6 +4062,34 @@ impl Game {
         }
     }
 
+    /// Resumes the saved map, falling back to the home map when the snapshot
+    /// cannot be matched.
+    ///
+    /// `220 SaveLoad` has already replaced the picture layer and variables by
+    /// the time this runs. Returning an error without installing any map would
+    /// leave a painted room with zero live map events, so every click would be
+    /// ignored (a soft lock). The save snapshot normally identifies SampleMapA,
+    /// and that map is also the only persistent gameplay room in this title.
+    pub fn resume_loaded_map_with_fallback(&mut self) -> Result<String, String> {
+        match self.resume_loaded_map() {
+            Ok(name) => Ok(name),
+            Err(err) => match self.switch_map("MapData/SampleMapA.mps") {
+                Ok(()) => {
+                    self.diagnostics.insert(
+                        format!("220 SaveLoad: map resume failed ({err}); using SampleMapA"),
+                        1,
+                    );
+                    Ok("SampleMapA".to_owned())
+                }
+                Err(fallback) => {
+                    let message = format!("{err}; fallback to SampleMapA failed: {fallback}");
+                    self.diagnostics.insert(message.clone(), 1);
+                    Err(message)
+                }
+            },
+        }
+    }
+
     /// Stops the title/save-menu call chain that requested a successful `220` load.
     ///
     /// A load is not a submenu that returns: the loaded save replaces the running
@@ -4181,7 +4212,7 @@ impl Game {
                     }
                     self.side_panel_retract_frames = 0;
                     self.side_panel_retract_armed = false;
-                    self.mouse_consumed = true;
+                    self.mouse_consumed_bits |= crate::key::OK;
                     return true;
                 }
             }
@@ -4199,7 +4230,7 @@ impl Game {
             // The visible icon owns the press even when its page condition is not
             // active: falling through would revive a tile rectangle or hit
             // an unrelated hotspot behind the icon.
-            self.mouse_consumed = true;
+            self.mouse_consumed_bits |= crate::key::OK;
             let mut started = self.runtime.action_key_event(&mut self.vm, event);
             if started.is_none() && matches!(event, 5 | 21 | 22 | 28) {
                 // The visible night icons outlive the interaction-mode variable the
@@ -4220,7 +4251,7 @@ impl Game {
         if let Some(event) = self.sister_body_action_event_at(x, y) {
             if let Some(id) = self.runtime.action_key_event(&mut self.vm, event) {
                 self.last_action_event = Some(id);
-                self.mouse_consumed = true;
+                self.mouse_consumed_bits |= crate::key::OK;
                 return false;
             }
         }
@@ -4235,7 +4266,7 @@ impl Game {
                 .action_key_at_excluding(&mut self.vm, x, y, &governed)
             {
                 self.last_action_event = Some(id);
-                self.mouse_consumed = true;
+                self.mouse_consumed_bits |= crate::key::OK;
             }
         }
         false
@@ -4256,7 +4287,7 @@ impl Game {
         }
 
         // The visible handle owns the press even if the script gate is dead.
-        self.mouse_consumed = true;
+        self.mouse_consumed_bits |= crate::key::OK;
         self.side_panel_retract_frames = 0;
         self.side_panel_retract_armed = false;
         if status {
@@ -4584,7 +4615,7 @@ impl Game {
         if clicked {
             if let Some(row) = self.choice_row_at(self.mouse[0], self.mouse[1]) {
                 // The prompt owns the click: it must not also reach a script poll later.
-                self.mouse_consumed = true;
+                self.mouse_consumed_bits |= crate::key::OK;
                 self.reply(ChoiceReply::Index(self.choice_source_index(row)));
                 self.choice_cursor = 0;
                 return;
@@ -4601,7 +4632,7 @@ impl Game {
             // message first (`message_dismissed`), not cancel the prompt and throw the
             // options away. Once the body is gone, outside-click cancellation resumes.
             if self.messages.is_empty() {
-                self.mouse_consumed = true;
+                self.mouse_consumed_bits |= crate::key::OK;
                 if self.choice_cancel_allowed() {
                     self.reply(ChoiceReply::Cancel);
                     self.choice_cursor = 0;
@@ -4616,7 +4647,7 @@ impl Game {
         // once the prompt closes. Like the keyboard, only a fresh press edge counts.
         let right_clicked = self.mouse_buttons & 2 != 0 && self.previous_mouse_buttons & 2 == 0;
         if right_clicked {
-            self.mouse_consumed = true;
+            self.mouse_consumed_bits |= crate::key::CANCEL;
             if self.choice_cancel_allowed() {
                 self.reply(ChoiceReply::Cancel);
                 self.choice_cursor = 0;
@@ -4876,7 +4907,7 @@ impl Game {
 
     /// Spends the current click so the script cannot read it as a second key.
     fn consume_current_click(&mut self) {
-        self.mouse_consumed = true;
+        self.mouse_consumed_bits |= crate::key::OK | crate::key::CANCEL;
         self.pending_mouse = 0;
         self.pending_mouse_age = 0;
         self.previous_mouse_buttons = self.mouse_buttons;
@@ -5087,17 +5118,19 @@ impl Game {
     /// Ends the frame's click bookkeeping: a delivered click is spent, an undelivered
     /// one waits for a poll but is dropped after [`PENDING_MOUSE_TTL`] frames.
     fn settle_pending_mouse(&mut self) {
-        if self.mouse_consumed {
-            self.pending_mouse = 0;
+        if self.mouse_consumed_bits != 0 {
+            self.pending_mouse &= !self.mouse_consumed_bits;
+        }
+        if self.pending_mouse == 0 {
             self.pending_mouse_age = 0;
-        } else if self.pending_mouse != 0 {
+        } else {
             self.pending_mouse_age += 1;
             if self.pending_mouse_age > PENDING_MOUSE_TTL {
                 self.pending_mouse = 0;
                 self.pending_mouse_age = 0;
             }
         }
-        self.mouse_consumed = false;
+        self.mouse_consumed_bits = 0;
     }
 
     /// Advances one frame at 1/60 s.
@@ -5240,7 +5273,7 @@ impl Game {
             previous_mouse_buttons: self.previous_mouse_buttons,
             frame_wheel_delta: self.frame_wheel_delta,
             pending_mouse: &mut self.pending_mouse,
-            mouse_consumed: &mut self.mouse_consumed,
+            mouse_consumed_bits: &mut self.mouse_consumed_bits,
             frame_mouse_blocked: self.frame_mouse_blocked,
             touch_mode: self.touch_mode,
             title_quit_enabled: self.title_quit_enabled,
@@ -5305,7 +5338,7 @@ impl Game {
                             // "load opens the album" path).
                             self.pending_mouse = 0;
                             self.pending_mouse_age = 0;
-                            self.mouse_consumed = true;
+                            self.mouse_consumed_bits |= crate::key::OK | crate::key::CANCEL;
                             self.reserved_events.clear();
                             self.previous_mouse_buttons = self.mouse_buttons;
                             self.diagnostics.insert(
@@ -5321,7 +5354,7 @@ impl Game {
                             // runtime here, otherwise the room/HUD pictures show but no
                             // map event is alive: clicks, the save hotspot and the daily
                             // loop all do nothing.
-                            match self.resume_loaded_map() {
+                            match self.resume_loaded_map_with_fallback() {
                                 Ok(name) => {
                                     self.diagnostics
                                         .insert(format!("220 SaveLoad: resumed map {name}"), 1);
@@ -5913,8 +5946,8 @@ struct GameHost<'a> {
     frame_wheel_delta: i32,
     /// Press edges carried from earlier frames (see `Game::pending_mouse`).
     pending_mouse: &'a mut u32,
-    /// Set when the host consumes the click (message dismissal or a key poll).
-    mouse_consumed: &'a mut bool,
+    /// Mouse edge bits already spent by an earlier host or script consumer.
+    mouse_consumed_bits: &'a mut u32,
     /// A message window owns this frame's mouse press.
     frame_mouse_blocked: bool,
     /// Touch-mode interaction flag (see [`Game::touch_mode`]).
@@ -5999,9 +6032,10 @@ impl GameHost<'_> {
             return false;
         }
         let mouse_edge = crate::key::mouse_bits(self.mouse_buttons, self.previous_mouse_buttons);
-        if mouse_edge & (crate::key::OK | crate::key::CANCEL) != 0 {
+        let matched = mouse_edge & (crate::key::OK | crate::key::CANCEL);
+        if matched != 0 {
             *self.pending_mouse = 0;
-            *self.mouse_consumed = true;
+            *self.mouse_consumed_bits |= matched;
             return true;
         }
         self.key_bits & crate::key::CANCEL != 0
@@ -6012,36 +6046,27 @@ impl GameHost<'_> {
     /// Only a press edge counts (see crate::key::mouse_bits); a held button looks
     /// like nothing so a menu polled every frame fires exactly once.
     fn mouse_key_bits(&mut self, query: wolf_vm::KeyQuery, banned: u32) -> u32 {
-        // A click already spent this frame belongs to the first consumer. Check
-        // before reading pending or marking it consumed again, so overlapping
-        // pollers cannot replay the same edge.
-        if *self.mouse_consumed {
-            return 0;
-        }
         if self.frame_mouse_blocked || !self.messages.is_empty() || self.choices.is_some() {
             return 0;
         }
-        // The poll consumes the click, so a carried-over edge is delivered exactly once
-        // and cleared at the end of the frame. The edge from this frame joins it.
+        // A click already spent this frame belongs to the first consumer. Filter the
+        // spent bits instead of the whole edge: a cancel poll must not erase a decide
+        // click that is still waiting for the command poll.
         let pending = *self.pending_mouse;
         let bits =
             crate::key::mouse_bits(self.mouse_buttons, self.previous_mouse_buttons) | pending;
-        let bits = mouse_click_for_poll(bits, query, banned);
+        let bits = mouse_click_for_poll(bits, query, banned, *self.mouse_consumed_bits);
         if bits == 0 {
             return 0;
         }
-        *self.mouse_consumed = true;
+        *self.mouse_consumed_bits |= bits;
         bits
     }
 }
 
-/// Keeps a mouse edge only when the current `123` poll accepts it.
-fn mouse_click_for_poll(bits: u32, query: wolf_vm::KeyQuery, banned: u32) -> u32 {
-    if bits == 0 || crate::key::code_for(bits, query, banned) == 0 {
-        0
-    } else {
-        bits
-    }
+/// Keeps the mouse edge bits the current `123` poll accepts and has not spent.
+fn mouse_click_for_poll(bits: u32, query: wolf_vm::KeyQuery, banned: u32, consumed: u32) -> u32 {
+    bits & crate::key::accepts(query) & !banned & !consumed
 }
 
 /// WOLF reports a mouse button as 0 released, 1 held, 2 pressed this frame.
@@ -6165,10 +6190,11 @@ impl Host for GameHost<'_> {
         // level-triggered confirm skips every consecutive line the moment it appears.
         let fresh_click = self.mouse_buttons & 1 != 0 && self.previous_mouse_buttons & 1 == 0;
         let carried_click = *self.pending_mouse & crate::key::OK != 0;
-        let clicked = (fresh_click || carried_click) && !*self.mouse_consumed;
+        let clicked =
+            (fresh_click || carried_click) && *self.mouse_consumed_bits & crate::key::OK == 0;
         let confirmed = self.key_bits & !self.previous_keys & crate::key::OK != 0;
         if clicked {
-            *self.mouse_consumed = true;
+            *self.mouse_consumed_bits |= crate::key::OK;
         }
         // A headless run dismisses them immediately so a scripted capture can walk
         // through a conversation.
@@ -7464,7 +7490,11 @@ mod tests {
                 "the carried click was lost"
             );
         }
-        assert!(game.mouse_consumed, "the poll must spend the click");
+        assert_ne!(
+            game.mouse_consumed_bits & key::OK,
+            0,
+            "the poll must spend the decide bit"
+        );
     }
 
     #[test]
@@ -7473,7 +7503,7 @@ mod tests {
         let mut game = Game::new(&root).expect("game");
         game.mouse_buttons = 1;
         game.previous_mouse_buttons = 0;
-        game.mouse_consumed = false;
+        game.mouse_consumed_bits = 0;
 
         let mut host = host(&mut game);
         let ok_query = wolf_vm::KeyQuery {
@@ -7490,7 +7520,51 @@ mod tests {
             0,
             "an overlapping poller must not replay the spent click"
         );
-        assert!(game.mouse_consumed, "the first poll spends the click");
+        assert_ne!(
+            game.mouse_consumed_bits & key::OK,
+            0,
+            "the first poll spends the decide bit"
+        );
+    }
+
+    #[test]
+    fn a_cancel_poll_does_not_spend_the_same_frames_decide_click() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.pending_mouse = key::OK | key::CANCEL;
+
+        {
+            let mut host = host(&mut game);
+            assert_eq!(
+                host.mouse_key_bits(
+                    wolf_vm::KeyQuery {
+                        cancel: true,
+                        ..Default::default()
+                    },
+                    0,
+                ),
+                key::CANCEL,
+                "a cancel-only poll spends only the cancel bit"
+            );
+            assert_eq!(
+                host.mouse_key_bits(
+                    wolf_vm::KeyQuery {
+                        ok: true,
+                        ..Default::default()
+                    },
+                    0,
+                ),
+                key::OK,
+                "the decide bit is still available to the command poll"
+            );
+        }
+        assert_eq!(
+            game.mouse_consumed_bits & (key::OK | key::CANCEL),
+            key::OK | key::CANCEL,
+            "both bits were delivered exactly once"
+        );
+        game.settle_pending_mouse();
+        assert_eq!(game.pending_mouse, 0, "the spent bits left the pending set");
     }
 
     #[test]
@@ -7504,6 +7578,7 @@ mod tests {
                     ..Default::default()
                 },
                 0,
+                0,
             ),
             0,
             "a directions-only poll must ignore a decide click"
@@ -7515,6 +7590,7 @@ mod tests {
                     ok: true,
                     ..Default::default()
                 },
+                0,
                 0,
             ),
             click,
@@ -7528,7 +7604,7 @@ mod tests {
         let mut game = Game::new(&root).expect("game");
         game.mouse_buttons = 1;
         game.previous_mouse_buttons = 0;
-        game.mouse_consumed = false;
+        game.mouse_consumed_bits = 0;
 
         {
             let mut host = host(&mut game);
@@ -7545,7 +7621,7 @@ mod tests {
             );
         }
         assert!(
-            !game.mouse_consumed,
+            game.mouse_consumed_bits == 0,
             "an uninterested poll must not spend the click"
         );
 
@@ -7868,7 +7944,7 @@ mod tests {
             mouse_buttons: game.mouse_buttons,
             previous_mouse_buttons: game.previous_mouse_buttons,
             pending_mouse: &mut game.pending_mouse,
-            mouse_consumed: &mut game.mouse_consumed,
+            mouse_consumed_bits: &mut game.mouse_consumed_bits,
             frame_mouse_blocked: game.frame_mouse_blocked,
             touch_mode: game.touch_mode,
             title_quit_enabled: game.title_quit_enabled,
@@ -8031,14 +8107,15 @@ mod tests {
         });
         game.mouse_buttons = 2;
         game.previous_mouse_buttons = 0;
-        game.mouse_consumed = false;
+        game.mouse_consumed_bits = 0;
         game.handle_choice_input();
         assert!(
             game.replies.is_empty(),
             "a 102 without a 421 marker must not receive CANCEL"
         );
-        assert!(
-            game.mouse_consumed,
+        assert_ne!(
+            game.mouse_consumed_bits & crate::key::CANCEL,
+            0,
             "the prompt must still own the right-button edge"
         );
         assert!(game.choices.is_some(), "the options must stay up");
@@ -8087,7 +8164,7 @@ mod tests {
         game.previous_mouse = [-1, -1];
         game.mouse_buttons = 1;
         game.previous_mouse_buttons = 0;
-        game.mouse_consumed = false;
+        game.mouse_consumed_bits = 0;
 
         game.handle_choice_input();
         assert!(
@@ -8104,8 +8181,9 @@ mod tests {
             host.message_dismissed()
         };
         assert!(dismissed, "the same click did not advance the message");
-        assert!(
-            game.mouse_consumed,
+        assert_ne!(
+            game.mouse_consumed_bits & crate::key::OK,
+            0,
             "the message waiter must spend the click"
         );
     }

@@ -144,3 +144,40 @@ fn loading_a_save_clears_prompts_from_the_replaced_scene() {
     );
     assert_eq!(game.choice_cursor(), 0, "choice cursor reset");
 }
+
+#[test]
+fn an_unmatched_map_snapshot_falls_back_to_the_home_map() {
+    let root = data_root();
+    let save = root.join("Save").join("SaveData01.sav");
+    if !save.is_file() {
+        eprintln!("skipping: missing {}", save.display());
+        return;
+    }
+    let mut game = Game::new(root).expect("game");
+    game.load_save(&save).expect("load SaveData01");
+    {
+        let base = game.base_save.as_mut().expect("loaded save");
+        base.part1.map_width = 1;
+        base.part1.map_height = 1;
+    }
+
+    let resumed = game
+        .resume_loaded_map_with_fallback()
+        .expect("fallback map must install");
+    assert_eq!(resumed, "SampleMapA");
+    assert_eq!(
+        game.current_map_path.as_deref(),
+        Some("MapData/SampleMapA.mps"),
+        "the fallback installs the persistent home map"
+    );
+    assert!(
+        !game.runtime.active_pages(&game.vm).is_empty(),
+        "the fallback must leave live map events instead of a painted soft lock"
+    );
+    assert!(
+        game.diagnostics
+            .keys()
+            .any(|line| line.contains("using SampleMapA")),
+        "the fallback must be visible in diagnostics"
+    );
+}

@@ -263,6 +263,19 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-21）
 
+* **2026-11-22 输入审计核实与两项修复（未重打包）**：对照
+  `input_consumption_and_full_audit_3a89a8a.md` 逐条核对。真实问题两处已修：
+  ① `mouse_consumed` 由全局布尔改为按位 `mouse_consumed_bits`，右键取消不再
+  连带清掉同帧未消费的左键，`settle_pending_mouse()` 只清除已交付位；
+  ② 新增 `resume_loaded_map_with_fallback()`，`220` 读档找不到地图快照时回退
+  到 `SampleMapA`，避免“有画面但零事件”的读档软锁。报告中“非等待 `123`
+  应广播给多个并行事件”与现有单消费者契约冲突，按 `m16_parallel_input`
+  的真实事件 16/26 回归保持单消费者；`INP-02/03/05/06/07/08` 经代码与测试
+  核对为有意门控或非问题（`_clear_held_input()` 已复位 `_modal_release_guard`）。
+  验证：`cargo fmt --check`、整仓 Clippy、`wolf-game --lib` 383 passed、
+  `m16/m17/m3_mouse_menu/m3_title_mouse` 与离线 workspace 全绿；真实
+  `work/Data` 下仅剩已记录的 BAD 比例与 v66=100 夹具漂移。
+
 * **2026-11-22 NSIS Setup Low 完整性修复（未重打包）**：`work/out` 继承的
   Low Mandatory Level 会让 NSIS 安装器以低完整性启动，在写普通 `%TEMP%`
   前失败并报 `Error writing temporary file`。新增

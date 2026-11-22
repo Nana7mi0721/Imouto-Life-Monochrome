@@ -2551,3 +2551,23 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   五个 `*setup*.exe`，`icacls` 均不再显示 Low 标签，`SHA256SUMS.txt` 与
   三个单包校验仍全部 OK。文档同步更新 `docs/release/PACKAGING.md` 与
   `tools/README.md`；未重新生成安装包。
+
+* **2026-11-22 输入消费审计核实与修复**：逐条核对
+  `input_consumption_and_full_audit_3a89a8a.md`。实际修复两项：
+  ① `mouse_consumed: bool` 改为 `mouse_consumed_bits: u32`，
+  `mouse_key_bits()` 只返回当前轮询接受且尚未消费的键位，帧末只清除已交付位；
+  这样右键取消轮询不会再抹掉同帧的左键决定。新增回归
+  `a_cancel_poll_does_not_spend_the_same_frames_decide_click`；
+  ② 新增 `resume_loaded_map_with_fallback()`，`220 SaveLoad` 的地图快照无法
+  匹配时回退安装 `SampleMapA` 并写诊断，避免画面已恢复但没有地图事件运行的
+  软锁；`m4_load_resume` 新增 `an_unmatched_map_snapshot_falls_back_to_the_home_map`。
+  报告中其余项核实为现有契约/非问题：多并行 `123` 仍保持单消费者（真实
+  `SampleMapA` 事件 16/26 回归要求同一次点击不能同时触发两边）；图片热区
+  即使页面条件不满足也由可见图标拥有点击，防止穿透到背后地块；禁止取消的
+  选项仍消费右键，防止弹窗关闭后穿透；滚轮方向不会压过 `OK`（`key::code`
+  决定键优先）；`_clear_held_input()` 已复位 `_modal_release_guard`。
+  验证：`cargo fmt --check`、`cargo clippy --workspace --all-targets --
+  -D warnings`、`wolf-game --lib` 383 passed、`m16/m17/m3_mouse_menu/
+  m3_title_mouse` 通过；离线全 workspace 测试 exit 0。真实 `work/Data` 下
+  `m3_night_interaction_e2e` 的两条失败仍是已记录的 BAD 比例与 v66=100
+  夹具漂移。
