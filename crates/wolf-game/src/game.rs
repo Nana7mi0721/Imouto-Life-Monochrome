@@ -6011,7 +6011,7 @@ impl GameHost<'_> {
     ///
     /// Only a press edge counts (see crate::key::mouse_bits); a held button looks
     /// like nothing so a menu polled every frame fires exactly once.
-    fn mouse_key_bits(&mut self) -> u32 {
+    fn mouse_key_bits(&mut self, query: wolf_vm::KeyQuery, banned: u32) -> u32 {
         // A click already spent this frame belongs to the first consumer. Check
         // before reading pending or marking it consumed again, so overlapping
         // pollers cannot replay the same edge.
@@ -6024,8 +6024,23 @@ impl GameHost<'_> {
         // The poll consumes the click, so a carried-over edge is delivered exactly once
         // and cleared at the end of the frame. The edge from this frame joins it.
         let pending = *self.pending_mouse;
+        let bits =
+            crate::key::mouse_bits(self.mouse_buttons, self.previous_mouse_buttons) | pending;
+        let bits = mouse_click_for_poll(bits, query, banned);
+        if bits == 0 {
+            return 0;
+        }
         *self.mouse_consumed = true;
-        crate::key::mouse_bits(self.mouse_buttons, self.previous_mouse_buttons) | pending
+        bits
+    }
+}
+
+/// Keeps a mouse edge only when the current `123` poll accepts it.
+fn mouse_click_for_poll(bits: u32, query: wolf_vm::KeyQuery, banned: u32) -> u32 {
+    if bits == 0 || crate::key::code_for(bits, query, banned) == 0 {
+        0
+    } else {
+        bits
     }
 }
 
@@ -6855,7 +6870,7 @@ impl Host for GameHost<'_> {
                 } else {
                     self.key_bits
                 };
-                let held = base | self.mouse_key_bits();
+                let held = base | self.mouse_key_bits(query, crate::key::from_wolf_bits(banned));
                 crate::key::code_for(held, query, crate::key::from_wolf_bits(banned))
             }
         }
@@ -6875,7 +6890,9 @@ impl Host for GameHost<'_> {
         } else {
             self.key_bits
         };
-        let held = base | crate::key::from_wolf_bits(auto) | self.mouse_key_bits();
+        let held = base
+            | crate::key::from_wolf_bits(auto)
+            | self.mouse_key_bits(query, crate::key::from_wolf_bits(banned));
         crate::key::code_for(held, query, crate::key::from_wolf_bits(banned))
     }
 
@@ -7436,7 +7453,13 @@ mod tests {
         {
             let mut host = host(&mut game);
             assert_eq!(
-                host.mouse_key_bits() & key::OK,
+                host.mouse_key_bits(
+                    wolf_vm::KeyQuery {
+                        ok: true,
+                        ..Default::default()
+                    },
+                    0,
+                ) & key::OK,
                 key::OK,
                 "the carried click was lost"
             );
@@ -7453,17 +7476,91 @@ mod tests {
         game.mouse_consumed = false;
 
         let mut host = host(&mut game);
+        let ok_query = wolf_vm::KeyQuery {
+            ok: true,
+            ..Default::default()
+        };
         assert_eq!(
-            host.mouse_key_bits() & key::OK,
+            host.mouse_key_bits(ok_query, 0) & key::OK,
             key::OK,
             "the first poller owns the fresh click"
         );
         assert_eq!(
-            host.mouse_key_bits(),
+            host.mouse_key_bits(ok_query, 0),
             0,
             "an overlapping poller must not replay the spent click"
         );
         assert!(game.mouse_consumed, "the first poll spends the click");
+    }
+
+    #[test]
+    fn only_a_poll_that_accepts_the_click_keeps_it() {
+        let click = key::OK;
+        assert_eq!(
+            mouse_click_for_poll(
+                click,
+                wolf_vm::KeyQuery {
+                    directions: 1,
+                    ..Default::default()
+                },
+                0,
+            ),
+            0,
+            "a directions-only poll must ignore a decide click"
+        );
+        assert_eq!(
+            mouse_click_for_poll(
+                click,
+                wolf_vm::KeyQuery {
+                    ok: true,
+                    ..Default::default()
+                },
+                0,
+            ),
+            click,
+            "a poll that accepts decide keeps the click"
+        );
+    }
+
+    #[test]
+    fn a_poll_that_ignores_the_click_leaves_it_for_the_next_poller() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.mouse_buttons = 1;
+        game.previous_mouse_buttons = 0;
+        game.mouse_consumed = false;
+
+        {
+            let mut host = host(&mut game);
+            assert_eq!(
+                host.mouse_key_bits(
+                    wolf_vm::KeyQuery {
+                        directions: 1,
+                        ..Default::default()
+                    },
+                    0,
+                ),
+                0,
+                "a poll that accepts only directions ignores the click"
+            );
+        }
+        assert!(
+            !game.mouse_consumed,
+            "an uninterested poll must not spend the click"
+        );
+
+        let mut host = host(&mut game);
+        assert_eq!(
+            host.mouse_key_bits(
+                wolf_vm::KeyQuery {
+                    ok: true,
+                    ..Default::default()
+                },
+                0,
+            ) & key::OK,
+            key::OK,
+            "the next poll that accepts decide still sees the click"
+        );
     }
 
     #[test]
