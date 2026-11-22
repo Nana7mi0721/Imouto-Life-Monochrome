@@ -139,8 +139,9 @@ impl WolfGame {
                 install_font_metrics(&mut game, &root);
                 let font_ms = font_started.elapsed().as_secs_f64() * 1000.0;
                 godot_print!(
-                    "wolf-gdext: open game={load_ms:.1}ms font={font_ms:.1}ms total={:.1}ms [build v0.1.1]",
-                    started.elapsed().as_secs_f64() * 1000.0
+                    "wolf-gdext: open game={load_ms:.1}ms font={font_ms:.1}ms total={:.1}ms [build v{}]",
+                    started.elapsed().as_secs_f64() * 1000.0,
+                    env!("CARGO_PKG_VERSION")
                 );
                 self.root = Some(root);
                 self.game = Some(game);

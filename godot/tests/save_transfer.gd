@@ -138,7 +138,7 @@ func _check_zip_round_trip(root: String) -> bool:
 	var manifest := reader.read_file("manifest.txt").get_string_from_utf8()
 	reader.close()
 	_check(
-		manifest.contains("version=0.1.1"),
+		manifest.contains("version=0.1.2"),
 		"manifest contains the current app version"
 	)
 	_check(manifest.contains("created="), "manifest contains a timestamp")

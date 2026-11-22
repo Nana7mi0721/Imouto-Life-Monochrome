@@ -4,13 +4,22 @@
 
 ---
 
-## [未发布]
+## [0.1.2] - 2026-11-22
+
+### 发布（Release）
+- **0.1.2 发行包**：Windows 标准/slim 的 setup 与便携 ZIP、Android 标准/slim
+  的 arm64 APK，以及 iOS 标准/slim 的未签名 IPA；命名统一为
+  `ImoutoLife-<version>-<platform>-<arch>[-setup][-slim]`，聚合校验和由
+  Release 根目录 `SHA256SUMS.txt` 覆盖。
+- **正式版本号**：Rust workspace、Windows 版本资源与 iOS 短版本均为
+  `0.1.2`；Android `versionName=0.1.2`、`versionCode=3`，继续使用 0.1.0
+  起的同一 release 签名证书，可覆盖升级且不丢存档。
 
 ### 新增（Added）
 - **iOS 私有构建链路**：新增 iOS 导出预设、arm64 GDExtension 静态库构建、
   GitHub Actions `macos-latest` 无签名 IPA 产出、Windows 侧 `Data`/字体注入
   与 Sideloadly 安装文档。产物命名沿用
-  `ImoutoLife-<version>-ios-arm64-unsigned[-full].ipa`。
+  `ImoutoLife-<version>-ios-arm64-unsigned[-slim].ipa`。
 - **移动端存档导入/导出**：标题存档页新增横排“导入”“导出”按钮。导出为
   ZIP（`System.sav`、`SaveDataNN.sav`、`manifest.txt`）；导入同时接受 ZIP
   和单个 `.sav`，单个文件先选择系统/槽 1–4，再显示覆盖确认。导入前校验
@@ -25,19 +34,27 @@
   自动回退到应用内选择器，`user://` 仍通过 Files/iTunes 文件共享可见。
 
 ### 优化与修复（Fixed）
+- **鼠标边沿隔离**：将全局 `mouse_consumed` 改为按位消费，右键取消不再
+  连带清掉同帧未消费的左键决定；等待轮询只拿到当前接受的键位，避免并行
+  事件互相吞点击或重复触发。
+- **读档地图回退**：`220 SaveLoad` 找不到存档地图快照时回退安装
+  `SampleMapA` 并写诊断，修复“画面已恢复但没有地图事件运行”的软锁。
 - **iOS 标题退出项**：iOS 不允许应用自行退出，标题菜单现在只显示“开始游戏/
   读取存档”，隐藏第三张按钮与命中区，避免选择“退出游戏”后停在最后一帧；
   Windows/Android 仍保留三行菜单与原退出行为。
-- **0.1.1 双版本重打**：Windows 标准/slim setup+zip 与 Android 标准/slim
-  APK 已用本次修复源码重建并重新生成聚合校验和，命名与既有规范一致；
-  GitHub Release `v0.1.1` 的八个平台包与 `SHA256SUMS.txt` 已同步更新。
-- **iOS 双版本**：engine-only IPA、标准 full IPA 与 slim full IPA 已用
-  `fab1413` 重打；两个 full IPA 已上传 Release，包含 17 个发行 Data 文件与
-  `NotoSansCJKsc-Bold.otf`，slim 使用对应的 WebP 媒体树。
-- iOS 使用 64 MiB 解码纹理缓存上限，降低 3 GB 设备浏览大图时的后台终止风险。
-- iOS 优先使用注入的 `NotoSansCJKsc-Bold.otf`，缺失时回退 PingFang 等系统字体。
-- 修正 iOS Actions 模板检查为 Godot 4.7.2 实际产出的 `ios.zip`，并修正文档中的
-  `SHA256SUMS.txt` 校验文件名。
+- **移动端存档安全**：ZIP 导入先限制中央目录条目数、单文件/总解压量和
+  解压比，再逐个校验 `.sav`；媒体包 zstd 解码使用索引尺寸上限，避免异常
+  压缩数据导致内存失控。
+- **原子写入**：新增可覆盖目标的原子替换接口，Windows 使用
+  `MoveFileExW(MOVEFILE_REPLACE_EXISTING)`，存档/设置写入不再先删旧文件。
+- **iOS 运行稳定性**：文件选择器结果改为线程安全队列，由 Godot 主线程轮询；
+  使用 64 MiB 解码纹理缓存上限，并优先加载注入的
+  `NotoSansCJKsc-Bold.otf`。
+- **打包修复**：NSIS Setup 生成后自动恢复 Medium 完整性，避免
+  `Error writing temporary file`；模板构建脚本的 `--check` 不再因
+  `set -e` 静默退出。
+- 下载页、Windows/Android/iOS 预设和前端版本回退统一到 `0.1.2`；README
+  明确官方发行包已包含发行 `Data/` 与干净 `System.sav`。
 
 ---
 

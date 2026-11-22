@@ -116,7 +116,7 @@ ensure_source() {
             die "existing source is Godot $major.$minor.$patch, expected $GODOT_VERSION: $SRC"
         return
     fi
-    [ "$CHECK_ONLY" -eq 0 ] || return
+    [ "$CHECK_ONLY" -eq 0 ] || return 0
     local archive="$WORK/godot-${GODOT_VERSION}-stable.tar.gz"
     if [ ! -s "$archive" ]; then
         info "download Godot $GODOT_VERSION source"
@@ -132,7 +132,7 @@ ensure_scons() {
     if [ -x "$SCONS" ]; then
         return
     fi
-    [ "$CHECK_ONLY" -eq 0 ] || return
+    [ "$CHECK_ONLY" -eq 0 ] || return 0
     info "install SCons into $SCONS_PY"
     "$PYTHON" -m pip install --disable-pip-version-check --target "$SCONS_PY" scons -q
     [ -x "$SCONS" ] || die "SCons installation did not create $SCONS"

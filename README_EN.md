@@ -7,8 +7,8 @@
 <p align="center">
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Language-Rust%202021-orange.svg" alt="Language"></a>
   <a href="https://godotengine.org/"><img src="https://img.shields.io/badge/Frontend-Godot%204.7.2-blue.svg" alt="Frontend"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-brightgreen.svg" alt="Platform"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.1-blueviolet.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android%20%7C%20iOS-brightgreen.svg" alt="Platform"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.2-blueviolet.svg" alt="Version"></a>
 </p>
 
 A high-performance, modern cross-platform reimplementation of *Imouto! Life ~Monochrome~* (inusuku 2019, WOLF RPG Editor).
@@ -56,25 +56,26 @@ Powered by a **Rust bytecode VM core** combined with a **Godot 4 GDExtension hyb
 
 ### 1. Download Release Packages
 
-Head to the [Releases page](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) to grab the latest build (current version: `v0.1.1`):
+Head to the [Releases page](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) to grab the latest build (current version: `v0.1.2`):
 
 - **Windows**:
-  - `ImoutoLife-0.1.1-windows-amd64-setup.exe`: NSIS installer with desktop shortcuts and uninstaller integration.
-  - `ImoutoLife-0.1.1-windows-amd64.zip`: Portable package (extract and double-click `Imouto Life.exe`).
-  - `ImoutoLife-0.1.1-windows-amd64-setup-slim.exe` / `ImoutoLife-0.1.1-windows-amd64-slim.zip`: Media-reencoded slim builds with the same save format.
+  - `ImoutoLife-0.1.2-windows-amd64-setup.exe`: NSIS installer with desktop shortcuts and uninstaller integration.
+  - `ImoutoLife-0.1.2-windows-amd64.zip`: Portable package (extract and double-click `Imouto Life.exe`).
+  - `ImoutoLife-0.1.2-windows-amd64-setup-slim.exe` / `ImoutoLife-0.1.2-windows-amd64-slim.zip`: Media-reencoded slim builds with the same save format.
 - **Android**:
-  - `ImoutoLife-0.1.1-android-arm64.apk`: Sideload directly to your Android device.
-  - `ImoutoLife-0.1.1-android-arm64-slim.apk`: Slim-media build.
+  - `ImoutoLife-0.1.2-android-arm64.apk`: Sideload directly to your Android device.
+  - `ImoutoLife-0.1.2-android-arm64-slim.apk`: Slim-media build.
 - **iOS**:
-  - `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa`: Standard full build; re-sign with Sideloadly or your Apple ID.
-  - `ImoutoLife-0.1.1-ios-arm64-unsigned-slim.ipa`: Slim-media full build with the same signing flow.
+  - `ImoutoLife-0.1.2-ios-arm64-unsigned.ipa`: Standard full build; re-sign with Sideloadly or your Apple ID.
+  - `ImoutoLife-0.1.2-ios-arm64-unsigned-slim.ipa`: Slim-media full build with the same signing flow.
 - The release-root `SHA256SUMS.txt` covers all eight platform packages.
 
-### 2. Prepare Game Data
+### 2. Game Data
 
-> **Notice**: Under copyright compliance policies, distributed packages contain only clean runtimes without proprietary original game artwork or audio assets.
-
-Before launching, extract legally acquired original game assets (the `Data/` folder) into the game root directory.
+Official Windows, Android and iOS releases already include the required release
+`Data/`, media pack and clean `System.sav`, so they are ready to play after
+installation. Only source-built CLI debug packages require legally acquired
+unpacked game data in `work/Data` or beside the executable.
 
 ---
 

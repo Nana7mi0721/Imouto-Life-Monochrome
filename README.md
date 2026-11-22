@@ -7,8 +7,8 @@
 <p align="center">
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Language-Rust%202021-orange.svg" alt="Language"></a>
   <a href="https://godotengine.org/"><img src="https://img.shields.io/badge/Frontend-Godot%204.7.2-blue.svg" alt="Frontend"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-brightgreen.svg" alt="Platform"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.1-blueviolet.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android%20%7C%20iOS-brightgreen.svg" alt="Platform"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v0.1.2-blueviolet.svg" alt="Version"></a>
 </p>
 
 《妹！生活 ～単色～》（いぬすく 2019，WOLF RPG Editor，zh-CN 汉化 2.03）的高性能现代化跨平台重构工程。
@@ -56,25 +56,25 @@
 
 ### 1. 获取发行包
 
-请前往 [Releases 页面](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) 下载对应平台的最新正式版本（当前最新版本：`v0.1.1`）：
+请前往 [Releases 页面](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) 下载对应平台的最新正式版本（当前最新版本：`v0.1.2`）：
 
 - **Windows 用户**：
-  - `ImoutoLife-0.1.1-windows-amd64-setup.exe`：一键安装程序（包含桌面快捷方式与控制面板卸载集成）。
-  - `ImoutoLife-0.1.1-windows-amd64.zip`：便携压缩包（解压至任意目录双击 `Imouto Life.exe` 即可运行）。
-  - `ImoutoLife-0.1.1-windows-amd64-setup-slim.exe` / `ImoutoLife-0.1.1-windows-amd64-slim.zip`：媒体重编码的精简版，与标准版存档格式一致。
+  - `ImoutoLife-0.1.2-windows-amd64-setup.exe`：一键安装程序（包含桌面快捷方式与控制面板卸载集成）。
+  - `ImoutoLife-0.1.2-windows-amd64.zip`：便携压缩包（解压至任意目录双击 `Imouto Life.exe` 即可运行）。
+  - `ImoutoLife-0.1.2-windows-amd64-setup-slim.exe` / `ImoutoLife-0.1.2-windows-amd64-slim.zip`：媒体重编码的精简版，与标准版存档格式一致。
 - **Android 用户**：
-  - `ImoutoLife-0.1.1-android-arm64.apk`：直接安装至安卓设备。
-  - `ImoutoLife-0.1.1-android-arm64-slim.apk`：精简媒体版。
+  - `ImoutoLife-0.1.2-android-arm64.apk`：直接安装至安卓设备。
+  - `ImoutoLife-0.1.2-android-arm64-slim.apk`：精简媒体版。
 - **iOS 用户**：
-  - `ImoutoLife-0.1.1-ios-arm64-unsigned.ipa`：标准整包，需使用 Sideloadly 或自己的 Apple ID 重签名。
-  - `ImoutoLife-0.1.1-ios-arm64-unsigned-slim.ipa`：精简媒体整包，签名方式相同。
+  - `ImoutoLife-0.1.2-ios-arm64-unsigned.ipa`：标准整包，需使用 Sideloadly 或自己的 Apple ID 重签名。
+  - `ImoutoLife-0.1.2-ios-arm64-unsigned-slim.ipa`：精简媒体整包，签名方式相同。
 - Release 根目录的 `SHA256SUMS.txt` 覆盖当前全部八个平台包。
 
-### 2. 准备游戏数据
+### 2. 游戏数据
 
-> **重要说明**：根据版权与资产隔离原则，发行包为纯净运行时，不包含游戏原始美术与音频素材。
-
-首次启动前，请将合法获取的原版游戏解包数据（包含 `Data/` 目录）放置于可执行文件同级目录即可自动识别加载。
+Windows/Android/iOS 官方发行包已经包含运行所需的发行 `Data/`、媒体包与干净
+`System.sav`，下载安装后即可开始游戏。只有从源码构建 CLI 调试版时，才需要将
+合法获取的原版游戏解包数据放到 `work/Data` 或游戏目录同级位置。
 
 ---
 

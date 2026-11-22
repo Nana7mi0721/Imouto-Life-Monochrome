@@ -12,7 +12,7 @@ const LOGICAL_SIZE := Vector2(1024.0, 576.0)
 const APP_WINDOW_TITLE := "妹！生活 ～单色～ Godot"
 ## Manifest fallback when project.godot has no application/config/version.
 ## Keep this in sync with godot/export_presets.cfg.
-const APP_VERSION_FALLBACK := "0.1.1"
+const APP_VERSION_FALLBACK := "0.1.2"
 const WINDOW_BASE_SIZE := Vector2i(1024, 576)
 const TITLEBAR_ICON_SMALL_SIZES := [16, 20, 24, 32, 40, 48]
 ## F8 reports the measured render/physics rates and the active display tier.
