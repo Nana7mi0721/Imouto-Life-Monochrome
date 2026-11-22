@@ -646,3 +646,72 @@ GitHub Release `v0.1.1` 的六个 Windows/Android 资产、两个 iOS full IPA �
 `SHA256SUMS.txt` 已同步为本轮文件；聚合校验覆盖八个包，GitHub API 返回的
 `sha256:` 摘要与本地表逐项一致。
 
+### 8.10 0.1.2 三端构建与暂缓上传（2026-11-23）
+
+0.1.2 使用提交 `3ff1fe9` 构建，版本号为 Rust workspace / Windows 文件版本
+`0.1.2`、Android `versionName=0.1.2` / `versionCode=3`、iOS 短版本
+`0.1.2` / 构建号 `3`。Windows 与 Android 继续使用
+`work/out/godot-template/out/4.7.2-aggressive/` 下的定制模板。
+
+产物位置：
+
+```text
+work/out/dist/
+  godot/
+    ImoutoLife-0.1.2-windows-amd64-setup.exe
+    ImoutoLife-0.1.2-windows-amd64.zip
+    ImoutoLife-0.1.2-windows-amd64-setup-slim.exe
+    ImoutoLife-0.1.2-windows-amd64-slim.zip
+  android/0.1.2/ImoutoLife-0.1.2-android-arm64.apk
+  android-slim/0.1.2/ImoutoLife-0.1.2-android-arm64-slim.apk
+  ios/0.1.2/ImoutoLife-0.1.2-ios-arm64-unsigned-engine.ipa
+  ios/0.1.2/ImoutoLife-0.1.2-ios-arm64-unsigned.ipa
+  ios/0.1.2/ImoutoLife-0.1.2-ios-arm64-unsigned-slim.ipa
+  SHA256SUMS.txt
+```
+
+| 产物 | 字节数 | SHA-256 |
+|---|---:|---|
+| `ImoutoLife-0.1.2-windows-amd64-setup.exe` | 122,384,945 | `2ebbf6e37333e7559bf3fba4f23f1b22374e893f9941b2a9d397f64b0369549e` |
+| `ImoutoLife-0.1.2-windows-amd64.zip` | 128,697,052 | `c0cd65b8bdb5cb89b466ab531768e26baf947da73fe0e54612c768954c48d6b9` |
+| `ImoutoLife-0.1.2-windows-amd64-setup-slim.exe` | 93,920,768 | `17bee6e79a20fb0e508fb678ddb1ab934433159915ea20ad9f09395dbcf4dd7c` |
+| `ImoutoLife-0.1.2-windows-amd64-slim.zip` | 100,629,988 | `adf634bc35032100e72c0a1111d74b3a983567581027fceda12b101c1bb35440` |
+| `ImoutoLife-0.1.2-android-arm64.apk` | 127,736,137 | `bb41fb975de78f9c7510721995619f320685c129fe0c6aee142dc7ec5bbe7576` |
+| `ImoutoLife-0.1.2-android-arm64-slim.apk` | 99,670,345 | `e4b6819111d6740de37e75579a4dc7e32a46466a64cd8520a00fd0fe7d60c951` |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned-engine.ipa` | 32,423,667 | `63ab2e9d9bae9510382af0e125a07d5d91b013df534437c992df17966b78db61` |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned.ipa` | 153,423,257 | `49301e25d163934226c32c4cf6c153a05d839399b4c275b80b1f2465f0aad2cc` |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned-slim.ipa` | 125,364,969 | `7a0cf503c2d2510b7e4bbdc130d5bcf0d346b36c45df6b38b35f3b0115d98ff4` |
+
+iOS engine-only IPA 由 GitHub Actions `iOS Unsigned IPA` run `45043781849`
+（提交 `3ff1fe9`）产出；Windows 侧随后注入标准/slim Data 与
+`NotoSansCJKsc-Bold.otf`。三个 IPA 的 `Info.plist` 均为
+`CFBundleShortVersionString=0.1.2`、`CFBundleVersion=3`、Bundle ID
+`com.inusuku.imoutolife`、最低系统版本 `15.0`；两个 full IPA 的
+`Payload/ImoutoLife.app/Data/BasicData`、`Data/Save/System.sav`、媒体包和
+字体均存在。
+
+验证结果：
+
+- `work/out/dist/SHA256SUMS.txt` 的九个包全部通过 `sha256sum -c`；
+- 标准/slim Windows 成品分别执行
+  `Imouto Life.exe --headless --quit-after 180`，均 `exit=0`，
+  `wolf-gdext ... [build v0.1.2]`，加载包内 `Data/media.pak` 成功；
+- 两个 Android APK 均通过 `android_data.py verify-apk --require-so`，
+  包含 arm64 `libwolf_gdext.so`、36 个 assets 与 15 个 manifest 文件；
+  release 签名 v2/v3 通过，证书 SHA-256 仍为
+  `ea94042afd8ced39ddbd03137bfaeee4fdb74ae31220a1698fb368544a4dd653`；
+- 标准媒体包 SHA-256 为
+  `69cedce1b07e024f1856bbecd6a6a324eab316a3fd5646ffa8128152bc7e329c`，
+  slim 媒体包为
+  `36e7ab21c9b3826bf1807fb8cdebb6d3989c2b9e765bcf821e65ec4111b7edc9`；
+  Windows、Android、iOS 三端同名变体一致；
+- Windows ZIP 与 Android manifest 均只带干净 `Data/Save/System.sav`
+  （155,615 B，SHA-256 `aaf62fc54c1df1ee63f3e5338b05ec349476346ec1a42b532c8cba0e3b3d888d`），
+  不含本地 `SaveDataNN.sav`。
+
+按用户要求，本轮在 Android/iOS 包完成后停止：**没有创建 `v0.1.2` tag，
+没有创建或上传 GitHub Release，也没有上传任何平台包**。旧 `0.1.0` /
+`0.1.1` 包体、`release-assets/0.1.1/` 重复副本、`portable/`、`slim/`、
+`ios-actions/`、NSIS 临时区和 Android 媒体暂存已清理；定制模板、
+release keystore、iOS 字体、`work/Data`、`retail_saves/` 与 0.1.2 成品保留。
+

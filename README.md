@@ -58,6 +58,9 @@
 
 请前往 [Releases 页面](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) 下载对应平台的最新正式版本（当前最新版本：`v0.1.2`）：
 
+> 注：`v0.1.2` 三端包已本地构建并完成校验，但截至 2026-11-23 尚未上传
+> GitHub Release；下列 0.1.2 文件将在发布后可用。
+
 - **Windows 用户**：
   - `ImoutoLife-0.1.2-windows-amd64-setup.exe`：一键安装程序（包含桌面快捷方式与控制面板卸载集成）。
   - `ImoutoLife-0.1.2-windows-amd64.zip`：便携压缩包（解压至任意目录双击 `Imouto Life.exe` 即可运行）。

@@ -10,7 +10,8 @@
 - **0.1.2 发行包**：Windows 标准/slim 的 setup 与便携 ZIP、Android 标准/slim
   的 arm64 APK，以及 iOS 标准/slim 的未签名 IPA；命名统一为
   `ImoutoLife-<version>-<platform>-<arch>[-setup][-slim]`，聚合校验和由
-  Release 根目录 `SHA256SUMS.txt` 覆盖。
+  Release 根目录 `SHA256SUMS.txt` 覆盖。三端包已完成本地构建和校验；
+  截至 2026-11-23 尚未创建 tag 或上传 GitHub Release。
 - **正式版本号**：Rust workspace、Windows 版本资源与 iOS 短版本均为
   `0.1.2`；Android `versionName=0.1.2`、`versionCode=3`，继续使用 0.1.0
   起的同一 release 签名证书，可覆盖升级且不丢存档。

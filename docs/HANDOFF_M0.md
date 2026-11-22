@@ -261,7 +261,27 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 > **[HANDOFF_PROGRESS.md](HANDOFF_PROGRESS.md)**。本节只保留**当前状态摘要**；
 > 新会话判断“现在是什么状态”以本节 + 各专题文档为准，查历史细节再翻日志。
 
-### 11.1 当前状态（2026-11-21）
+### 11.1 当前状态（2026-11-23）
+
+* **2026-11-23 0.1.2 三端成品完成，暂缓上传（当前状态）**：提交
+  `3ff1fe9` 已构建 Windows 标准/slim 的 setup 与 ZIP、Android 标准/slim
+  arm64 APK、iOS engine-only 与注入 Data 的标准/slim IPA，共九个包。
+  Windows/Android 使用 4.7.2 aggressive 定制模板；Android
+  `versionName=0.1.2` / `versionCode=3`，iOS 短版本 `0.1.2` / build `3`。
+  聚合校验在 `work/out/dist/SHA256SUMS.txt`，九项 `sha256sum -c` 全过；
+  Windows 两套成品 headless 均 `exit=0`（`[build v0.1.2]`），两个 APK
+  通过 `verify-apk --require-so` 与 release 签名 v2/v3 校验，iOS
+  `Info.plist` 与 Data/字体/媒体包均已核对，三端标准与 slim 媒体包哈希
+  分别一致。
+
+  **按用户要求停在构建完成：没有创建 `v0.1.2` tag，没有创建或上传
+  GitHub Release，也没有上传任何平台包。** 旧 `0.1.0`/`0.1.1` 包体、
+  `release-assets/0.1.1/` 重复副本、`portable/`、`slim/`、`ios-actions/`
+  与 Android 媒体暂存已清理；定制模板
+  `work/out/godot-template/out/4.7.2-aggressive/`、release keystore、
+  iOS 字体、`work/Data`、`retail_saves/` 与 0.1.2 成品保留。详见
+  `docs/release/PACKAGING.md` §8.10 与
+  `docs/release/IOS_PRIVATE_BUILD.md` §11。
 
 * **2026-11-22 输入审计核实与两项修复（未重打包）**：对照
   `input_consumption_and_full_audit_3a89a8a.md` 逐条核对。真实问题两处已修：

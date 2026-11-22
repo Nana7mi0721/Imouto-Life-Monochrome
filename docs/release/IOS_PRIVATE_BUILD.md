@@ -240,14 +240,14 @@ App”下选择对应 Apple ID/开发者证书 → 信任。随后重新启动�
 macOS：
 
 ```bash
-cd work/out/dist/ios/0.1.1
+cd work/out/dist/ios/0.1.2
 shasum -a 256 -c SHA256SUMS.txt
 ```
 
 Windows 可对注入后的 IPA 计算并比对 SHA-256：
 
 ```powershell
-certutil -hashfile "work\out\dist\ios\0.1.1\ImoutoLife-0.1.1-ios-arm64-unsigned.ipa" SHA256
+certutil -hashfile "work\out\dist\ios\0.1.2\ImoutoLife-0.1.2-ios-arm64-unsigned.ipa" SHA256
 ```
 
 发布检查只需确认最终 IPA 文件名、SHA-256、注入后的 `Payload/*.app/Data/BasicData`
@@ -273,3 +273,26 @@ GitHub Release `v0.1.1`，Release 聚合 `SHA256SUMS.txt` 覆盖全部八个平�
 
 本轮 IPA 尚未由 Sideloadly 重新签名安装到 iPhone XR；重新签名安装后即可
 验证标题菜单与系统 Files 面板。
+
+## 11. 0.1.2 构建产物（2026-11-23，未上传）
+
+GitHub Actions `iOS Unsigned IPA` run `45043781849`（提交 `3ff1fe9`）成功产出
+engine-only IPA；随后在 Windows 侧注入标准/slim Data 与
+`NotoSansCJKsc-Bold.otf`：
+
+| 产物 | 大小 | SHA-256 |
+| --- | ---: | --- |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned-engine.ipa` | 32,423,667 B | `63ab2e9d9bae9510382af0e125a07d5d91b013df534437c992df17966b78db61` |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned.ipa` | 153,423,257 B | `49301e25d163934226c32c4cf6c153a05d839399b4c275b80b1f2465f0aad2cc` |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned-slim.ipa` | 125,364,969 B | `7a0cf503c2d2510b7e4bbdc130d5bcf0d346b36c45df6b38b35f3b0115d98ff4` |
+
+三个文件位于 `work/out/dist/ios/0.1.2/`，同目录 `SHA256SUMS.txt` 覆盖全部。
+`Info.plist` 已核对为 `CFBundleShortVersionString=0.1.2`、
+`CFBundleVersion=3`、Bundle ID `com.inusuku.imoutolife`、最低系统版本
+`15.0`。两个 full IPA 均包含 `Payload/ImoutoLife.app/Data/BasicData`、
+干净 `Data/Save/System.sav`、`Data/NotoSansCJKsc-Bold.otf` 和对应媒体包；
+标准/slim 的 `media.pak` 哈希分别与 Windows 标准/slim 成品一致。
+
+按用户要求，本轮**没有上传 `v0.1.2` 的任何 IPA，也没有创建 GitHub Release
+或 tag**。正式分发前仍需由 Sideloadly/开发者证书重新签名，并在真机验证
+标题页、系统 Files 导入/导出与存档保留。

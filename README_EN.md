@@ -58,6 +58,10 @@ Powered by a **Rust bytecode VM core** combined with a **Godot 4 GDExtension hyb
 
 Head to the [Releases page](https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases) to grab the latest build (current version: `v0.1.2`):
 
+> Note: the `v0.1.2` packages have been built and verified locally, but were
+> not uploaded to GitHub Releases as of 2026-11-23. The 0.1.2 files below
+> become available once the release is published.
+
 - **Windows**:
   - `ImoutoLife-0.1.2-windows-amd64-setup.exe`: NSIS installer with desktop shortcuts and uninstaller integration.
   - `ImoutoLife-0.1.2-windows-amd64.zip`: Portable package (extract and double-click `Imouto Life.exe`).

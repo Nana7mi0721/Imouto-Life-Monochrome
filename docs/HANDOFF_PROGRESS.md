@@ -2571,3 +2571,25 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   m3_title_mouse` 通过；离线全 workspace 测试 exit 0。真实 `work/Data` 下
   `m3_night_interaction_e2e` 的两条失败仍是已记录的 BAD 比例与 v66=100
   夹具漂移。
+
+* **2026-11-23 0.1.2 三端打包、校验与本地清理（未上传）**：
+  * `Cargo.toml`/`Cargo.lock`、Windows 预设、Android `versionName`/
+    `versionCode`、iOS 短版本/构建号、前端回退版本与 README/CHANGELOG
+    统一到 0.1.2；提交 `3ff1fe9` 已推送到 `origin/master`。
+  * Windows 标准/slim 四个包位于 `work/out/dist/godot/`；Android 标准/slim
+    位于 `work/out/dist/android*/0.1.2/`；iOS 三个 IPA 位于
+    `work/out/dist/ios/0.1.2/`。九个包汇总校验见
+    `work/out/dist/SHA256SUMS.txt`，`sha256sum -c` 全 OK。
+  * 校验：Windows 两套成品 headless `exit=0` 且
+    `wolf-gdext ... [build v0.1.2]`；两个 APK 通过
+    `android_data.py verify-apk --require-so`、v2/v3 release 签名；
+    iOS 三个包 `Info.plist` 为 0.1.2/build 3，full/slim 的
+    `Data/BasicData`、干净 `System.sav`、字体与媒体包均存在；标准/slim
+    媒体包 SHA-256 分别与 Windows/Android 同名变体一致。
+  * **停止点**：按用户要求，Android/iOS 包完成后不再推进；未创建
+    `v0.1.2` tag/Release，未上传任何平台包。
+  * 清理：删除旧 `0.1.0`/`0.1.1` 包体、`release-assets/0.1.1/` 重复副本、
+    `work/out/{portable,slim,ios-actions}`、两个 0.1.2 `.idsig`、旧根
+    Setup/ZIP 与 Android `media.pak` 暂存；`dist` 约 3.8 GB 降到 1.24 GB。
+    定制模板（Windows 52,120,576 B / Android 23,725,734 B）、release
+    keystore、iOS 字体、`work/Data`、`retail_saves/` 与 0.1.2 成品保留。
