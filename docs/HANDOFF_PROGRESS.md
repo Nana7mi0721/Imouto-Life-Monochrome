@@ -2539,3 +2539,15 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     现在 `cargo fmt --check` 与整仓 Clippy 均以 0 退出。工作区测试只剩
     已知的 6 个夹具失败（`m18` 透明图 hover + 缺 `SaveData01.sav` 的
     5 个用例），CI 无 `work/Data` 时会走 skip 分支。
+
+* **2026-11-22 NSIS Setup 的 Low 完整性修复（未重打包）**：实机运行
+  `0.1.1` Setup 时出现
+  `NSIS Error: Error writing temporary file. Make sure your temp folder is valid.`
+  根因是 `work/out` 及其祖先目录带有 Low Mandatory Level；在其中生成的
+  `Setup.exe` 继承 Low 标签，Windows 会以低完整性启动它，NSIS 无法写普通
+  `%TEMP%`。新增 `tools/package/normalize_windows_integrity.sh`，通过同卷
+  非 Low 目录复制后移回的方式恢复 Medium 完整性；`tools/package-godot.sh`
+  在 NSIS 完成后自动调用，普通构建为 no-op。已就地修复现有 `0.1.1` 的
+  五个 `*setup*.exe`，`icacls` 均不再显示 Low 标签，`SHA256SUMS.txt` 与
+  三个单包校验仍全部 OK。文档同步更新 `docs/release/PACKAGING.md` 与
+  `tools/README.md`；未重新生成安装包。

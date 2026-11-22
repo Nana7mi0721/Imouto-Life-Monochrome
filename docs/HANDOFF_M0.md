@@ -263,6 +263,15 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-21）
 
+* **2026-11-22 NSIS Setup Low 完整性修复（未重打包）**：`work/out` 继承的
+  Low Mandatory Level 会让 NSIS 安装器以低完整性启动，在写普通 `%TEMP%`
+  前失败并报 `Error writing temporary file`。新增
+  `tools/package/normalize_windows_integrity.sh`：在同一个卷上最近的非 Low
+  目录复制后移回，无需管理员权限即可把可执行文件恢复为 Medium 完整性；
+  `tools/package-godot.sh` 在 NSIS 完成后自动调用。现有 `0.1.1` 五个
+  `*setup*.exe` 已就地修复，`icacls` 均无 Low 标签，聚合与单包 SHA-256
+  全部保持 OK；本轮未重新打包。
+
 * **2026-11-21 `bedd7a1` 全量静态审查收口（当前状态，未重打包）**：
   iOS 文件选择器改为「UIKit 只写结果队列 + GDScript `_process` 轮询」，
   去掉跨线程 `Callable`；ZIP 导入先按中央目录限制条目/单文件/总量/解压比，

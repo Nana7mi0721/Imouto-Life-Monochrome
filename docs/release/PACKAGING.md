@@ -332,11 +332,26 @@ unexpected 失败，7 个媒体前缀目录还会被脚本显式检查必须不�
 缺失时真实打包会停止，`--no-setup` 可只生成便携包。编译时脚本把
 `TEMP`/`TMP` 指向 `work/out/nsis/temp`，避免本机临时目录权限导致
 `Internal compiler error #12345`。
-本机 `work/out` 还带有 Low Mandatory Level 完整性标签和禁止删除子项的 ACL。
-从该目录双击 `Setup.exe` 时，安装器会继承低完整性级别，无法写普通
-`%TEMP%`，表现为 `NSIS Error: Error writing temporary file` 或错误码 2。
-实机测试或交付前必须把 Setup/ZIP 复制到普通用户目录（例如
-`work/out/dist/release-assets/`）再运行。
+
+在带有 Low Mandatory Level 的工作区（例如 Codex/DSH 沙箱）中，新生成的
+`Setup.exe` 会继承 Low 完整性标签；Windows 随后会以低完整性启动它，导致
+NSIS 无法写普通 `%TEMP%`，表现为
+`NSIS Error: Error writing temporary file. Make sure your temp folder is valid.`
+或错误码 2。打包脚本在 NSIS 完成后会自动调用
+`tools/package/normalize_windows_integrity.sh`：检测到 Low 标签时，在同一个
+卷上最近的非 Low 目录中复制一份，再移回原路径，使文件保持 Medium 完整性，
+内容与 SHA-256 均不变。该修复不需要管理员权限。
+
+如果手工搬运旧包时使用了保留 ACL 的复制方式，可以用同一脚本单独修复：
+
+```bash
+bash tools/package/normalize_windows_integrity.sh \
+  work/out/dist/release-assets/0.1.1/ImoutoLife-0.1.1-windows-amd64-setup.exe
+```
+
+普通复制（资源管理器拖放、`Copy-Item` 等）到正常用户目录也会让目标文件
+继承该目录的 Medium 标签；不要用 `robocopy /COPYALL` 或 `cp -a` 从 Low
+工作区直接搬运可执行文件。
 
 `--dry-run` 只报告模板是否存在，并打印媒体包前缀、pack payload、明文 staging
 文件数/字节与最终 Data 文件数；它不构建、不导出、不打包、不复制数据。packer

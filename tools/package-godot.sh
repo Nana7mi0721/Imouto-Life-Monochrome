@@ -260,6 +260,7 @@ PRESET_TEMPLATE_TOOL="$REPO/tools/package/export_preset_template.py"
 ICON_FILE="$GODOT_PROJECT/icon_windows.png"
 NSIS_TEMPLATE="$REPO/tools/package/ImoutoLife.nsi.in"
 NSIS_RENDERER="$REPO/tools/package/render_nsis.py"
+NSIS_INTEGRITY_FIXER="$REPO/tools/package/normalize_windows_integrity.sh"
 SETUP_ICON="$REPO/tools/package/icon_windows.ico"
 KEYBOARD_GUIDE_SOURCE="$REPO/tools/package/KEYBOARD_GUIDE.txt"
 
@@ -847,6 +848,9 @@ if [ "$MAKE_SETUP" -eq 1 ]; then
     TEMP="$NSIS_TEMP_WIN" TMP="$NSIS_TEMP_WIN" \
         MSYS2_ARG_CONV_EXCL='*' "$MAKENSIS" /V2 "$NSI_WIN"
     [ -f "$SETUP_PATH" ] || die "NSIS did not create: $SETUP_PATH"
+    [ -f "$NSIS_INTEGRITY_FIXER" ] || \
+        die "NSIS integrity helper missing: $NSIS_INTEGRITY_FIXER"
+    bash "$NSIS_INTEGRITY_FIXER" "$SETUP_PATH"
     (
         cd "$ZIP_DIR"
         SETUP_BASE="$(basename "$SETUP_PATH")"
