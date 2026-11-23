@@ -2667,4 +2667,8 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
   * 保留：`work/out/godot-template/` 定制模板、`work/out/android/private/`
     release keystore、`work/out/ios/fonts/`、`work/out/retail_saves/`、
     `work/out/tools/nsis-3.11/`、`work/out/_archive/`、`work/Data/`
-    与全部 0.1.2 最终包。未创建 tag/Release，未上传任何包。
+    与全部 0.1.2 最终包。
+  * 已创建 GitHub pre-release `v0.1.2`（release id `455119795`，
+    `https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases/tag/v0.1.2`），
+    上传九包与根 `SHA256SUMS.txt`；API 返回的资产大小和 SHA-256 校验
+    全部与本地一致。`v0.1.0` 仍保持 latest 正式版。

@@ -760,7 +760,13 @@ Data 与 `NotoSansCJKsc-Bold.otf`。
 - Windows ZIP 与两个 IPA 的 `Data/Save` 均只含 `System.sav`
   （155,615 B，SHA-256 `aaf62fc54c1df1ee63f3e5338b05ec349476346ec1a42b532c8cba0e3b3d888d`）。
 
-本轮未创建 tag、未创建或上传 GitHub Release。清理只移除可重建构建缓存和
-一次性临时产物；`work/out/godot-template/`、release keystore、iOS 字体、
-`work/out/retail_saves/System.sav`、`work/Data` 与最终 0.1.2 包均保留。
+已创建 GitHub pre-release `v0.1.2`
+（`https://github.com/Nana7mi0721/Imouto-Life-Monochrome/releases/tag/v0.1.2`，
+release id `455119795`），上传九个包与根 `SHA256SUMS.txt`。GitHub API
+返回的十个资产大小与 SHA-256 摘要均与本地一致；release 标记
+`prerelease=true`、`draft=false`，`v0.1.0` 仍是 latest 正式版。
+
+清理只移除可重建构建缓存和一次性临时产物；`work/out/godot-template/`、
+release keystore、iOS 字体、`work/out/retail_saves/System.sav`、`work/Data`
+与最终 0.1.2 包均保留。
 
