@@ -2652,3 +2652,19 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     `m3_night_interaction` 2 条、`m3_night_interaction_e2e` 2 条仍是
     已在 `adac9c3` 基线复现的夹具漂移，与本轮改动无关。
   * **打包状态**：未重打任何平台包；现有 0.1.2 成品不包含本修复。
+
+* **2026-11-23 0.1.2 修复后重打与清理**：
+  * 从 `715dbd5` 重打 Windows 标准/slim（NSIS + ZIP）与 Android
+    标准/slim（release 签名）；iOS engine-only IPA 由 Actions
+    `45130178429` 从同一提交产出，再注入标准/slim Data 与字体。
+  * 九包已重算 `work/out/dist/SHA256SUMS.txt` 并通过 `sha256sum -c`；
+    Windows 标准/slim headless 均 exit 0（`[build v0.1.2]`），APK 通过
+    `verify-apk --require-so` 与 v2/v3 签名，三端同名媒体包 SHA-256 一致。
+  * 清理删除：`target/`（约 11 GB）、`work/out/portable/`、
+    `work/out/slim/`、`work/out/nsis/`、`work/out/ios-actions/`、
+    `work/out/android/media.pak`、验证日志、旧测试截图/备份与
+    Android `.idsig`；同步重写 Android `checksums.txt`。
+  * 保留：`work/out/godot-template/` 定制模板、`work/out/android/private/`
+    release keystore、`work/out/ios/fonts/`、`work/out/retail_saves/`、
+    `work/out/tools/nsis-3.11/`、`work/out/_archive/`、`work/Data/`
+    与全部 0.1.2 最终包。未创建 tag/Release，未上传任何包。

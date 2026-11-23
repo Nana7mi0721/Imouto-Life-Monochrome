@@ -716,7 +716,51 @@ iOS engine-only IPA 由 GitHub Actions `iOS Unsigned IPA` run `45043781849`
 release keystore、iOS 字体、`work/Data`、`retail_saves/` 与 0.1.2 成品保留。
 
 > **后续源码修复警告（2026-11-23）**：`regression_audit_and_progress_bar_fix_adac9c3.md`
-> 的格子进度条复发问题随后已在源码修复，但上述 0.1.2 成品仍由
-> `3ff1fe9` 构建，**不包含该修复**。正式上传前必须从当前 HEAD
-> 重新生成 Windows/Android/iOS 包并重算 `SHA256SUMS.txt`。
+> 的格子进度条复发问题随后已在源码修复；上述由 `3ff1fe9` 构建的成品已由
+> §8.11 的 `715dbd5` 重打产物取代。正式上传前只需使用 §8.11 的九个包。
+
+### 8.11 0.1.2 修复后重打与清理（2026-11-23）
+
+从提交 `715dbd5`（含浴室被发现时 `510..=511` 计时条即时清理）重打
+Windows/Android/iOS 全部 0.1.2 包。Windows 与 Android 继续使用
+`work/out/godot-template/out/4.7.2-aggressive/` 定制模板和原 release
+keystore；iOS engine-only IPA 由 GitHub Actions
+`iOS Unsigned IPA` run `45130178429` 产出，再在 Windows 侧注入标准/slim
+Data 与 `NotoSansCJKsc-Bold.otf`。
+
+| 产物 | 字节数 | SHA-256 |
+|---|---:|---|
+| `ImoutoLife-0.1.2-windows-amd64-setup.exe` | 122,370,789 | `1fffdce5bb16fe4e305a77dc3cc986df1f8fbd8083d3256098a5b41769f94e2a` |
+| `ImoutoLife-0.1.2-windows-amd64.zip` | 128,698,478 | `9bccabfd23286c6c57268f577af1023ca3086329e0ddd8c38a919885bd313cf9` |
+| `ImoutoLife-0.1.2-windows-amd64-setup-slim.exe` | 93,911,288 | `32d7a0bc94e062d0a32ffd4f4ee0490c3eae3935db5d1e3247985540194c5021` |
+| `ImoutoLife-0.1.2-windows-amd64-slim.zip` | 100,631,415 | `4ffb17c1df4b880166f1b21f7de12c79512ad70a70cdb755b2a6882fbaab0fb0` |
+| `ImoutoLife-0.1.2-android-arm64.apk` | 127,740,233 | `ec42747792c63850ac410f0ed6d69602a87854ecb353b2b0d46e93591d2f2a23` |
+| `ImoutoLife-0.1.2-android-arm64-slim.apk` | 99,674,441 | `b6dc4d1a38e67cf75ecb271651a95e5aaa1896638ffcfbe94a628b1afa6cebc6` |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned-engine.ipa` | 32,425,481 | `06408ae72b4369140693c5291236c87a9b6235990556a2c405b5b3a0944ad77f` |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned.ipa` | 153,425,071 | `b7a9e073a608e5d54185a4c04cc0773a030851f812054cd7da50a2a17aa3fdfe` |
+| `ImoutoLife-0.1.2-ios-arm64-unsigned-slim.ipa` | 125,366,783 | `f2d3224ec7f4b8d950881b3227a3e165ac3a44726aeb7afa82dbdece039114ce` |
+
+验证结果：
+
+- `work/out/dist/SHA256SUMS.txt` 九个包全部通过 `sha256sum -c`；
+- Windows 标准/slim 均 `--headless --quit-after 180` 返回 0，
+  日志显示 `wolf-gdext ... [build v0.1.2]`，包内 DLL 与
+  `godot/bin/wolf_gdext.dll` SHA-256 完全一致
+  （`7dc7c0280bc625e5975abc5510b5930a906534228736e8745e8843fdbb5280ef`）；
+- 两个 APK 均通过 `android_data.py verify-apk --require-so`，v2/v3
+  release 签名通过，证书 SHA-256 仍为
+  `ea94042afd8ced39ddbd03137bfaeee4fdb74ae31220a1698fb368544a4dd653`；
+  APK 内 `libwolf_gdext.so` 与构建产物一致
+  （`d01ab90da7dbaacd64789d36a7558aa5aa6ecdbef5143d045b5943263f2a1c90`）；
+- 三个 IPA 均为 0.1.2/build 3；full/slim 含 `Data/BasicData`、
+  干净 `Data/Save/System.sav`、`NotoSansCJKsc-Bold.otf` 与 `media.pak`；
+- 标准 `media.pak` 在 Windows/Android/iOS 三端均为
+  `69cedce1b07e024f1856bbecd6a6a324eab316a3fd5646ffa8128152bc7e329c`，
+  slim 均为 `36e7ab21c9b3826bf1807fb8cdebb6d3989c2b9e765bcf821e65ec4111b7edc9`；
+- Windows ZIP 与两个 IPA 的 `Data/Save` 均只含 `System.sav`
+  （155,615 B，SHA-256 `aaf62fc54c1df1ee63f3e5338b05ec349476346ec1a42b532c8cba0e3b3d888d`）。
+
+本轮未创建 tag、未创建或上传 GitHub Release。清理只移除可重建构建缓存和
+一次性临时产物；`work/out/godot-template/`、release keystore、iOS 字体、
+`work/out/retail_saves/System.sav`、`work/Data` 与最终 0.1.2 包均保留。
 

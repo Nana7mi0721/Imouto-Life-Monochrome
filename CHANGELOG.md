@@ -30,6 +30,10 @@
 ## [0.1.2] - 2026-11-22
 
 ### 发布（Release）
+- **0.1.2 包体重打（2026-11-23）**：Windows 标准/slim、Android 标准/slim
+  与 iOS engine/full/slim 全部从提交 `715dbd5` 重新构建，包含“浴室被发现时
+  计时条即时清理”修复。九个包的 `SHA256SUMS.txt` 已重算并通过
+  `sha256sum -c`；本轮未创建 tag、未上传 GitHub Release。
 - **0.1.2 发行包**：Windows 标准/slim 的 setup 与便携 ZIP、Android 标准/slim
   的 arm64 APK，以及 iOS 标准/slim 的未签名 IPA；命名统一为
   `ImoutoLife-<version>-<platform>-<arch>[-setup][-slim]`，聚合校验和由
