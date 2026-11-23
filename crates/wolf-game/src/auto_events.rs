@@ -112,6 +112,12 @@ pub struct AutoEvents {
     /// frame where the scene stops running. The scheduler is the only per-frame
     /// record of which common events are alive, so it keeps the flag.
     raid_scene_active: bool,
+    /// Bitmask of [`crate::raid_cleanup::RAID_GATE_VARS`] that were non-zero on
+    /// the previous pass. The teardown uses the falling edge of a single gate
+    /// to react while the owning scene is still running: `CE 249` clears
+    /// `v154` when the player is caught, but forgets the bath timers
+    /// `v155/v160` and their `510..=511` band until the scene returns home.
+    raid_gate_mask: u8,
     /// Whether the title menu is actually up. The title menu renderer (event 43) has a
     /// script condition (global v0 == 0) that can also hold in synthetic states where v0
     /// was never set; gating it here keeps the title buttons from painting over a scene.
@@ -153,6 +159,7 @@ impl AutoEvents {
             running: BTreeMap::new(),
             enabled: true,
             raid_scene_active: false,
+            raid_gate_mask: 0,
             title_menu_active: false,
         }
     }
@@ -219,6 +226,7 @@ impl AutoEvents {
         self.latched.clear();
         self.running.clear();
         self.raid_scene_active = false;
+        self.raid_gate_mask = 0;
         self.title_menu_active = false;
     }
 
@@ -234,6 +242,17 @@ impl AutoEvents {
     /// Records whether a raid scene common event is running.
     pub fn set_raid_scene_active(&mut self, active: bool) {
         self.raid_scene_active = active;
+    }
+
+    /// Bitmask of raid gate variables that were non-zero on the previous pass.
+    #[must_use]
+    pub fn raid_gate_mask(&self) -> u8 {
+        self.raid_gate_mask
+    }
+
+    /// Records the current non-zero bitmask of raid gate variables.
+    pub fn set_raid_gate_mask(&mut self, mask: u8) {
+        self.raid_gate_mask = mask;
     }
 
     /// Restarts one owned event from its first instruction.

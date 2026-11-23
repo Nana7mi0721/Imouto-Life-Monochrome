@@ -2745,8 +2745,7 @@ impl Game {
         self.auto_events.reset();
         self.engine_events_started = false;
         let _ = self.boot();
-        self.auto_events
-            .set_raid_scene_active(crate::raid_cleanup::raid_scene_running(&self.vm));
+        crate::raid_cleanup::reset_raid_hud_state(self);
     }
 
     /// Asks the game to go back to the title screen at the end of this frame.
@@ -5367,9 +5366,7 @@ impl Game {
                                         .or_insert(0);
                                 }
                             }
-                            self.auto_events.set_raid_scene_active(
-                                crate::raid_cleanup::raid_scene_running(&self.vm),
-                            );
+                            crate::raid_cleanup::reset_raid_hud_state(self);
                         }
                         Err(err) => {
                             self.diagnostics

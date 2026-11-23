@@ -15,10 +15,18 @@
 //! When a meter reaches its natural end some events erase their own cells, but
 //! interrupting the scene leaves the painted cells on screen indefinitely.
 //!
-//! The host therefore closes every meter and erases the three bands only on
-//! the falling edge of a scene that owns them. `SampleMapA` and `CE 303` already
-//! treat `500..=650` as disposable HUD space, so these narrow bands follow the
-//! game's own convention without touching unrelated slots such as `600`.
+//! The host therefore has two falling-edge layers:
+//!
+//! * **Alert gate** - `CE 249` clears `v154` at pc197 when the player is caught,
+//!   but that branch forgets `v155/v160` and the `510..=511` timer band until
+//!   the event returns to the bedroom. Catching `v154`'s falling edge closes
+//!   the timer events and erases the band on the next frame.
+//! * **Scene exit** - the fallback closes every meter and erases all three
+//!   bands when `CE 249/256/259/295/298` or the deep-night interface ends.
+//!
+//! `SampleMapA` and `CE 303` already treat `500..=650` as disposable HUD
+//! space, so these narrow bands follow the game's own convention without
+//! touching unrelated slots such as `600`.
 
 use crate::game::Game;
 use wolf_vm::exec::{PictureAction, PictureCmd};
@@ -57,6 +65,8 @@ pub const RAID_BANDS: &[(i32, i32)] = &[(500, 503), (510, 511), (520, 521)];
 /// * `178` -> `2000178`, the start condition of `CE 299` (素股タイマー).
 pub const RAID_GATE_VARS: &[usize] = &[90, 91, 92, 154, 155, 160, 170, 178];
 
+const BIT_V154: u8 = 1 << 3;
+
 /// Whether a scene that owns the HUD meters is alive right now.
 #[must_use]
 pub fn raid_scene_running(vm: &Vm) -> bool {
@@ -67,24 +77,76 @@ pub fn raid_scene_running(vm: &Vm) -> bool {
         })
 }
 
-/// Tears the HUD meters down when their owning scene ends.
+/// Computes the 8-bit non-zero mask for [`RAID_GATE_VARS`].
+#[must_use]
+pub fn current_gate_mask(vm: &Vm) -> u8 {
+    let mut mask = 0u8;
+    for (bit, &var_index) in RAID_GATE_VARS.iter().enumerate() {
+        if vm.vars.get(var_index) != 0 {
+            mask |= 1u8 << bit;
+        }
+    }
+    mask
+}
+
+/// Synchronizes both edge-tracking states after a save load.
 ///
-/// The trigger is the *edge* of the scene, not its level: the meters
-/// outlive the scene on purpose (they are parallel events), so the cleanup
-/// has to run exactly once, on the frame where the scene stops.
+/// Without this, the first pass after a load compares against the previous
+/// session's mask and can tear down a bar that belongs to the loaded save.
+pub fn reset_raid_hud_state(game: &mut Game) {
+    let running = raid_scene_running(&game.vm);
+    let mask = current_gate_mask(&game.vm);
+    game.auto_events.set_raid_scene_active(running);
+    game.auto_events.set_raid_gate_mask(mask);
+}
+
+/// Tears the HUD meters down on gate drops and when their owning scene ends.
+///
+/// The immediate layer reacts to the alert gate (`v154`) falling to zero while
+/// the scene is still alive. The fallback layer reacts to the falling edge of
+/// the scene itself, because the meter events are parallel events that outlive
+/// their owner on purpose.
 ///
 /// Returns true when something was actually cleaned up.
 pub fn sync_raid_hud(game: &mut Game) -> bool {
     if std::env::var("WOLF_RAID_OFF").is_ok() {
         return false;
     }
+
+    let mut changed = false;
+
+    // Immediate layer: the alert gate drops while the scene may still run.
+    let previous_mask = game.auto_events.raid_gate_mask();
+    let current_mask = current_gate_mask(&game.vm);
+    let dropped = previous_mask & !current_mask;
+    if dropped & BIT_V154 != 0 {
+        // `CE 249` pc197 clears the alert meter but not the bath timers.
+        // pc561/563 and pc834/836 clear the pair together, so mirroring that
+        // behaviour on the alert drop is safe.
+        for &var_index in &[155usize, 160usize] {
+            if game.vm.vars.get(var_index) != 0 {
+                game.vm.vars.set(var_index, 0);
+                changed = true;
+            }
+        }
+        changed |= erase_if_present(game, 500, 502);
+        changed |= erase_if_present(game, 510, 511);
+        changed |= erase_if_present(game, 520, 521);
+    }
+
+    // Fallback layer: the scene itself ends.
     let running = raid_scene_running(&game.vm);
     let was_running = game.auto_events.raid_scene_active();
     game.auto_events.set_raid_scene_active(running);
-    if !was_running || running {
-        return false;
+    if was_running && !running {
+        changed |= clear_raid_hud(game);
     }
-    clear_raid_hud(game)
+
+    // Record the post-cleanup mask so the linked clears above cannot fire
+    // again on the next frame.
+    let final_mask = current_gate_mask(&game.vm);
+    game.auto_events.set_raid_gate_mask(final_mask);
+    changed
 }
 
 /// Erases the HUD bars and closes the meters that paint them.
@@ -99,12 +161,18 @@ pub fn clear_raid_hud(game: &mut Game) -> bool {
         }
     }
     for &(start, end) in RAID_BANDS {
-        if (start..=end).any(|slot| game.screen.get(slot).is_some()) {
-            game.screen.apply(&erase_band(start, end));
-            changed = true;
-        }
+        changed |= erase_if_present(game, start, end);
     }
     changed
+}
+
+fn erase_if_present(game: &mut Game, start: i32, end: i32) -> bool {
+    if (start..=end).any(|slot| game.screen.get(slot).is_some()) {
+        game.screen.apply(&erase_band(start, end));
+        true
+    } else {
+        false
+    }
 }
 
 /// The retail erase of one band, `150 [16777218, start, 0, 0, 0, end]`.

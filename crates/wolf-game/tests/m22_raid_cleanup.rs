@@ -364,3 +364,125 @@ fn the_meter_gate_variables_match_the_retail_headers() {
         );
     }
 }
+
+/// Getting caught in the bath clears `v154` while `CE 249` is still running.
+///
+/// The retail pc197 branch also forgets `v155/v160` and the `510..=511`
+/// timer band; the host must close the timers and erase that band on the
+/// gate's falling edge instead of waiting for the scene to return home.
+#[test]
+fn bath_alert_drop_clears_bath_timer_immediately_while_ce249_still_runs() {
+    let Some(mut game) = open_loaded() else {
+        return;
+    };
+    let Some(map) = sample_map() else {
+        return;
+    };
+    game.start_pages(&map, None);
+
+    let scene = game.vm.start_event(249).expect("CE 249 must start");
+    game.vm.vars.set(154, 5);
+    game.vm.vars.set(155, 1);
+    game.screen.insert(wolf_game::Picture::new(510));
+    game.screen.insert(wolf_game::Picture::new(511));
+    wolf_game::raid_cleanup::reset_raid_hud_state(&mut game);
+
+    game.vm.vars.set(154, 0);
+    assert!(
+        wolf_game::raid_cleanup::sync_raid_hud(&mut game),
+        "dropping v154 must trigger immediate bath-timer teardown"
+    );
+    assert!(
+        wolf_game::raid_cleanup::raid_scene_running(&game.vm),
+        "the teardown must run while CE 249 is still alive"
+    );
+    assert_eq!(game.vm.vars.get(155), 0);
+    assert_eq!(game.vm.vars.get(160), 0);
+    assert!(game.screen.get(510).is_none());
+    assert!(game.screen.get(511).is_none());
+
+    game.vm.stop_instance(scene);
+}
+
+/// `CE 279` clears its own `v90` when the one-shot execution-bar animation
+/// finishes. The painted cells are meant to stay for the owning scene, so the
+/// immediate layer must not treat every gate drop as "erase now".
+#[test]
+fn execution_bar_survives_its_own_v90_clear() {
+    let Some(mut game) = open_loaded() else {
+        return;
+    };
+    game.screen.insert(wolf_game::Picture::new(500));
+    game.screen.insert(wolf_game::Picture::new(501));
+    game.vm.vars.set(90, 1);
+    wolf_game::raid_cleanup::reset_raid_hud_state(&mut game);
+
+    game.vm.vars.set(90, 0);
+    assert!(
+        !wolf_game::raid_cleanup::sync_raid_hud(&mut game),
+        "a self-clearing execution bar must not be torn down"
+    );
+    assert!(game.screen.get(500).is_some());
+    assert!(game.screen.get(501).is_some());
+}
+
+/// Left-only timer bars (502/503 without slot 500) must still be erased.
+#[test]
+fn left_only_bar_without_slot_500_is_still_erased() {
+    let Some(mut game) = open_loaded() else {
+        return;
+    };
+    game.screen.insert(wolf_game::Picture::new(502));
+    game.screen.insert(wolf_game::Picture::new(503));
+    game.vm.vars.set(92, 1);
+    game.auto_events.set_raid_scene_active(true);
+
+    assert!(wolf_game::raid_cleanup::sync_raid_hud(&mut game));
+    assert_eq!(game.vm.vars.get(92), 0);
+    assert!(game.screen.get(502).is_none());
+    assert!(game.screen.get(503).is_none());
+}
+
+/// Exiting night prank (`v100: 1 -> 0`) tears down cut-in bars even though
+/// none of `CE 249/256/259` ever ran.
+#[test]
+fn night_prank_exit_clears_cut_in_timers() {
+    let Some(mut game) = open_loaded() else {
+        return;
+    };
+    game.vm.vars.set(100, 1);
+    game.vm.vars.set(91, 1);
+    game.vm.vars.set(92, 1);
+    game.screen.insert(wolf_game::Picture::new(500));
+    game.screen.insert(wolf_game::Picture::new(502));
+    wolf_game::raid_cleanup::reset_raid_hud_state(&mut game);
+
+    game.vm.vars.set(100, 0);
+    assert!(wolf_game::raid_cleanup::sync_raid_hud(&mut game));
+    assert_eq!(game.vm.vars.get(91), 0);
+    assert_eq!(game.vm.vars.get(92), 0);
+    assert!(game.screen.get(500).is_none());
+    assert!(game.screen.get(502).is_none());
+}
+
+/// Interrupting toilet (`CE 295`) or sumata (`CE 298`) clears its timer gate
+/// and the `510..=511` band.
+#[test]
+fn toilet_and_sumata_exit_clears_510_511() {
+    let Some(mut game) = open_loaded() else {
+        return;
+    };
+    for &(event_id, gate_var) in &[(295u32, 170usize), (298u32, 178usize)] {
+        let scene = game.vm.start_event(event_id).expect("scene must start");
+        game.vm.vars.set(gate_var, 1);
+        game.screen.insert(wolf_game::Picture::new(510));
+        game.screen.insert(wolf_game::Picture::new(511));
+        wolf_game::raid_cleanup::reset_raid_hud_state(&mut game);
+
+        game.vm.stop_instance(scene);
+        assert!(wolf_game::raid_cleanup::sync_raid_hud(&mut game));
+        assert_eq!(game.vm.vars.get(gate_var), 0);
+        assert!(game.screen.get(510).is_none());
+        assert!(game.screen.get(511).is_none());
+    }
+}
