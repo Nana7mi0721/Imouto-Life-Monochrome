@@ -2593,3 +2593,37 @@ M0–M7 与 C 任务每一步的改动、验证数字与踩过的坑。它只记
     Setup/ZIP 与 Android `media.pak` 暂存；`dist` 约 3.8 GB 降到 1.24 GB。
     定制模板（Windows 52,120,576 B / Android 23,725,734 B）、release
     keystore、iOS 字体、`work/Data`、`retail_saves/` 与 0.1.2 成品保留。
+
+* **2026-11-23 格子进度条残留复发修复（0.1.2 包待重打）**：
+  * 核实 `docs/reviews/regression_audit_and_progress_bar_fix_adac9c3.md`。
+    真实 `CommonEvent.dat` 事件头确认：`273/274/277/279/281/282/294/299`
+    的闸门分别为 `v160/v155/v154/v90/v91/v92/v170/v178`。
+  * `raid_cleanup` 场景扩到 `249/256/259/295/298`，夜间交互再加入
+    `v100 != 0`；擦除精确分段 `500..=503`、`510..=511`、`520..=521`，
+    并逐个槽位判断，修复“仅 slot 500 存在才擦”的漏清理。
+  * `220 SaveLoad` 成功与 `reset_to_title()` 重新同步
+    `auto_events.raid_scene_active`，防止读档/回标题后旧沿误触发。
+  * `m22_raid_cleanup` 新增 4 条（总 9 条）并全绿；`m16_runtime_state`
+    9、`m4_load_resume` 10、`m25_cursor_follow` 10、
+    `public_release_input_guards` 5、整仓 Clippy 全通过。
+  * 既有失败：`wolf-game --lib` 377/383、`m3_night_interaction` 4/6、
+    `m3_night_interaction_e2e` 5/7、`m17_ui_regressions` 22/23；
+    已在 `adac9c3` 基线逐条复现，属于已记录的数据库/事件夹具漂移，
+    本轮无新增失败。
+  * **打包状态**：现有 0.1.2 成品来自 `3ff1fe9`，不含本修复；
+    未重打包、未上传，正式发布前需从当前源码重建全部平台包。
+
+* **2026-11-23 开局随机称号乱码修复**：
+  * 实机截图 `池面 ³ç 哥哥（学生）` 追到 `DataBase.dat` type 25
+    「ランダム肩書」row 1（肩書2）column 9。该格在发行数据里就是有效
+    UTF-8 `³ç `，并非 CP932/GBK 解码错误；脚本 `ev0` 把它读入 `s[0]`
+    后写进顶栏，所以解码器无从识别。
+  * 在 `Databases::load_with_overlays()` 的数据库加载收尾加入已知损坏格
+    修复：`³ç` → `帅哥`，并保留原尾随空格；索引全部做存在性保护，
+    Mod 或已修正数据不会被覆盖。
+  * `apply_saved_database()` 同步修复旧存档
+    `CData 0:12:0/1` 中已保存的同名乱码，读档后顶栏也能恢复。
+  * 新增 `crates/wolf-game/tests/m28_database_text_repair.rs`（真实
+    `work/Data`，无数据时 skip）与两条 `db.rs` 单元测试。
+  * 验证：`cargo fmt --all -- --check`、两条单元测试、`m28` 1/1 均通过；
+    仍需在提交前复跑整仓 Clippy。现有一切 0.1.2 包不包含本修复。

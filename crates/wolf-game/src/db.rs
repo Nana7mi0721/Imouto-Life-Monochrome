@@ -64,6 +64,16 @@ pub const WINDOW_SKIN_FILE: &str = "SystemFile/WindowBase.png";
 pub const DEFAULT_SCREEN: (u32, u32) = (1024, 576);
 /// The engine's virtual screen, in units of one coordinate step.
 pub const SCREEN_STEPS: (u32, u32) = (32, 24);
+/// `DataBase` type holding the random title words: ランダム肩書.
+pub const RANDOM_TITLE_TYPE: i32 = 25;
+/// Row holding the second random title word (肩書2).
+pub const RANDOM_TITLE_SECOND_ROW: i32 = 1;
+/// Column of the fan translation's damaged "帅哥" cell.
+pub const RANDOM_TITLE_HANDSOME_COLUMN: i32 = 9;
+/// The bytes the shipped zh-CN `DataBase.dat` carries in that cell.
+pub const CORRUPT_RANDOM_TITLE_HANDSOME: &str = "\u{00B3}\u{00E7}";
+/// The title the opening question was translated to produce.
+pub const RANDOM_TITLE_HANDSOME: &str = "帅哥";
 
 /// Row id a `250` **read** uses to ask for the current row count of a table.
 ///
@@ -255,6 +265,7 @@ impl Databases {
             table.apply_project_names(&bytes);
         }
         databases.apply_engine_defaults(screen);
+        repair_shipped_database_corruption(&mut databases);
         // Record patches run last so a mod can override even an engine-owned cell.
         if let Some(table) = databases.data.as_mut() {
             if let Err(error) =
@@ -671,6 +682,13 @@ impl Databases {
                 }
             }
         }
+        // A save made before the table was repaired can hold the same damaged
+        // title in CData 0:12:0/1, which is what the top bar reads after a load.
+        for column in [0, 1] {
+            if let Some(text) = self.texts.get_mut(&(Container::CData, 0, 12, column)) {
+                repair_random_title_text(text);
+            }
+        }
     }
 
     /// Builds the complete save-file variable database from the static `CDataBase`.
@@ -928,6 +946,55 @@ impl Databases {
     }
 }
 
+/// Repairs the one known damaged cell in the shipped fan-translation `DataBase.dat`.
+///
+/// The random-title table's second row (肩書2) column 9 carries the valid UTF-8
+/// bytes for `³ç` where the opening answer flow expects 「帅哥」. Because those
+/// bytes decode cleanly as UTF-8, [`wolf_format::bytes::decode_wolf_str`] cannot
+/// recognise them as mojibake. New-game script `ev0` reads this cell verbatim into
+/// the top-bar title, so the bad bytes reach the screen unless they are repaired
+/// when the table is loaded. Every index is guarded: a mod that ships a different
+/// schema, or a corrected table, is left untouched.
+fn repair_shipped_database_corruption(databases: &mut Databases) {
+    let Ok(type_index) = usize::try_from(RANDOM_TITLE_TYPE) else {
+        return;
+    };
+    let Ok(row_index) = usize::try_from(RANDOM_TITLE_SECOND_ROW) else {
+        return;
+    };
+    let Ok(column) = usize::try_from(RANDOM_TITLE_HANDSOME_COLUMN) else {
+        return;
+    };
+    let Some(table) = databases.data.as_mut() else {
+        return;
+    };
+    let Some(row) = table
+        .types
+        .get_mut(type_index)
+        .and_then(|table| table.rows.get_mut(row_index))
+    else {
+        return;
+    };
+    let Some(cell) = row.strings.get_mut(column) else {
+        return;
+    };
+    repair_random_title_text(cell);
+}
+
+/// Replaces the known mojibake spelling of the random title 「帅哥」 in place.
+fn repair_random_title_text(text: &mut String) -> bool {
+    if text.trim() != CORRUPT_RANDOM_TITLE_HANDSOME {
+        return false;
+    }
+    let trailing_space = text.ends_with(' ');
+    *text = if trailing_space {
+        format!("{RANDOM_TITLE_HANDSOME} ")
+    } else {
+        RANDOM_TITLE_HANDSOME.to_owned()
+    };
+    true
+}
+
 /// Normalises an editor label for comparison.
 ///
 /// The .project companions mix U+2014 and U+2015 dashes and full-width spaces;
@@ -1004,6 +1071,32 @@ mod tests {
             eprintln!("skipping: no game data at {}", root.display());
             None
         }
+    }
+
+    #[test]
+    fn the_known_random_title_mojibake_is_repaired() {
+        let mut damaged = "³ç ".to_owned();
+        assert!(repair_random_title_text(&mut damaged));
+        assert_eq!(damaged, "帅哥 ");
+
+        let mut correct = "帅哥 ".to_owned();
+        assert!(!repair_random_title_text(&mut correct));
+        assert_eq!(correct, "帅哥 ");
+    }
+
+    #[test]
+    fn a_loaded_save_title_is_repaired_after_the_database_copy() {
+        let mut databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
+        databases.set_text(Container::CData, 0, 12, 0, "³ç ");
+        databases.set_text(Container::CData, 0, 12, 1, "³ç");
+        let empty = wolf_save::vardb::VariableDatabase {
+            unknown: 0,
+            type_count: 0,
+            types: Vec::new(),
+        };
+        databases.apply_saved_database(&empty);
+        assert_eq!(databases.text(Container::CData, 0, 12, 0), Some("帅哥 "));
+        assert_eq!(databases.text(Container::CData, 0, 12, 1), Some("帅哥"));
     }
 
     #[test]

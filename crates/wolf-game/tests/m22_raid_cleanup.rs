@@ -231,3 +231,136 @@ fn the_frame_loop_clears_the_band_when_the_raid_scene_ends() {
         );
     }
 }
+
+/// A partial left-hand bar must be erased even when slot 500 never existed.
+#[test]
+fn the_teardown_erases_a_partial_left_hand_bar() {
+    let Some(mut game) = open_loaded() else {
+        return;
+    };
+    game.screen.insert(wolf_game::Picture::new(502));
+    game.screen.insert(wolf_game::Picture::new(503));
+    game.auto_events.set_raid_scene_active(true);
+
+    assert!(
+        wolf_game::raid_cleanup::sync_raid_hud(&mut game),
+        "the partial band must trigger the teardown"
+    );
+    assert!(
+        game.screen.get(502).is_none() && game.screen.get(503).is_none(),
+        "both left-hand cells must be erased without requiring slot 500"
+    );
+}
+
+/// The night interaction owns the same meters but has no CE249/256/259 caller.
+#[test]
+fn the_night_interaction_falling_edge_clears_the_raid_band() {
+    let Some(mut game) = game_with_raid_bar() else {
+        return;
+    };
+    assert!(
+        game.screen.get(500).is_some(),
+        "precondition: the right-hand bar is up"
+    );
+
+    game.vm.vars.set(100, 1);
+    assert!(
+        !wolf_game::raid_cleanup::sync_raid_hud(&mut game),
+        "the band must stay while the night interface is active"
+    );
+    assert!(game.screen.get(500).is_some());
+
+    game.vm.vars.set(100, 0);
+    assert!(
+        wolf_game::raid_cleanup::sync_raid_hud(&mut game),
+        "leaving the night interface must tear the meters down"
+    );
+    for number in 500..=503 {
+        assert!(
+            game.screen.get(number).is_none(),
+            "night-exit picture slot {number} must be erased"
+        );
+    }
+    assert_eq!(game.vm.vars.get(91), 0);
+    assert_eq!(game.vm.vars.get(92), 0);
+}
+
+/// The toilet and 素股 scenes own the 510/511 band and their own gate variables.
+#[test]
+fn the_extra_timer_bands_and_scene_owners_are_cleaned_up() {
+    let Some(mut game) = open_loaded() else {
+        return;
+    };
+    game.vm.vars.set(100, 0);
+    for event in [295, 298] {
+        let scene = game
+            .vm
+            .start_event(event)
+            .unwrap_or_else(|| panic!("scene {event} must start"));
+        assert!(
+            wolf_game::raid_cleanup::raid_scene_running(&game.vm),
+            "scene {event} must count as a meter owner"
+        );
+        game.vm.stop_instance(scene);
+    }
+
+    game.vm.vars.set(155, 1);
+    game.vm.vars.set(160, 1);
+    game.vm.vars.set(170, 1);
+    game.vm.vars.set(178, 1);
+    for number in [510, 511, 520, 521, 600] {
+        game.screen.insert(wolf_game::Picture::new(number));
+    }
+    game.auto_events.set_raid_scene_active(true);
+    assert!(
+        wolf_game::raid_cleanup::sync_raid_hud(&mut game),
+        "the extra bands must trigger the teardown"
+    );
+    for number in [510, 511, 520, 521] {
+        assert!(
+            game.screen.get(number).is_none(),
+            "timer picture slot {number} must be erased"
+        );
+    }
+    assert!(
+        game.screen.get(600).is_some(),
+        "the teardown must not touch the unrelated slot 600"
+    );
+    for index in [155, 160, 170, 178] {
+        assert_eq!(
+            game.vm.vars.get(index),
+            0,
+            "meter gate variable {index} must be cleared"
+        );
+    }
+}
+
+/// Keep the host constants tied to the immutable CommonEvent headers.
+#[test]
+fn the_meter_gate_variables_match_the_retail_headers() {
+    let Some(game) = open_loaded() else {
+        return;
+    };
+    for (event, variable, value, operator) in [
+        (273, 2_000_160, 1, 1),
+        (274, 2_000_155, 1, 1),
+        (277, 2_000_154, 1, 1),
+        (279, 2_000_090, 1, 2),
+        (281, 2_000_091, 1, 1),
+        (282, 2_000_092, 1, 1),
+        (294, 2_000_170, 1, 1),
+        (299, 2_000_178, 1, 1),
+    ] {
+        let header = game
+            .auto_events
+            .events()
+            .iter()
+            .find(|header| header.id == event)
+            .unwrap_or_else(|| panic!("event {event} must be scheduled"));
+        assert_eq!(
+            (header.variable, header.value, header.operator),
+            (variable, value, operator),
+            "retail header drifted for event {event}"
+        );
+    }
+}

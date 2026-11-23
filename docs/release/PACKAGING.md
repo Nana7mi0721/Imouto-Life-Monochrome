@@ -715,3 +715,8 @@ iOS engine-only IPA 由 GitHub Actions `iOS Unsigned IPA` run `45043781849`
 `ios-actions/`、NSIS 临时区和 Android 媒体暂存已清理；定制模板、
 release keystore、iOS 字体、`work/Data`、`retail_saves/` 与 0.1.2 成品保留。
 
+> **后续源码修复警告（2026-11-23）**：`regression_audit_and_progress_bar_fix_adac9c3.md`
+> 的格子进度条复发问题随后已在源码修复，但上述 0.1.2 成品仍由
+> `3ff1fe9` 构建，**不包含该修复**。正式上传前必须从当前 HEAD
+> 重新生成 Windows/Android/iOS 包并重算 `SHA256SUMS.txt`。
+

@@ -263,6 +263,20 @@ WOLF_DATA_ROOT="$PWD/work/Data" ./target/debug/wolf-cli.exe verify | tail -20
 
 ### 11.1 当前状态（2026-11-23）
 
+* **2026-11-23 格子进度条残留复发修复（0.1.2 包待重打）**：核实
+  `regression_audit_and_progress_bar_fix_adac9c3.md` §1.2 的四处缺口属实。
+  `raid_cleanup` 现监听浴室/日夜菜单/厕所/素股场景
+  `CE249/256/259/295/298`，并把夜间交互 `v100 != 0` 纳入生命周期；
+  闸门扩为 `v90/91/92/154/155/160/170/178`；擦除精确分段为
+  `500..=503`、`510..=511`、`520..=521`，修掉原先“没有 slot 500
+  就不擦”的守卫；`220 SaveLoad` 成功分支与回标题都会重新同步场景沿。
+  验证：`cargo fmt`、整仓 Clippy、`m22_raid_cleanup` 9/9、
+  `m16_runtime_state` 9/9、`m4_load_resume` 10/10、
+  `m25_cursor_follow` 10/10、`public_release_input_guards` 5/5。
+  `wolf-game --lib` 与 `m3_night_interaction*` 的失败已在 `adac9c3`
+  基线复现，仍是既有数据库/事件夹具漂移，无新增回归。
+  **现有 0.1.2 成品包（`3ff1fe9`）不包含本修复，上传前必须重打。**
+
 * **2026-11-23 0.1.2 三端成品完成，暂缓上传（当前状态）**：提交
   `3ff1fe9` 已构建 Windows 标准/slim 的 setup 与 ZIP、Android 标准/slim
   arm64 APK、iOS engine-only 与注入 Data 的标准/slim IPA，共九个包。
